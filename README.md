@@ -1,0 +1,27 @@
+# Setwise app
+
+React PWA prototype for the Setwise BSC Testnet pool.
+
+## Local setup
+
+Requirements: Node.js 22.12+ (Node.js 24 is used in the current workspace) and npm.
+
+```sh
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Create a project in the [Reown Dashboard](https://dashboard.reown.com) and set `VITE_REOWN_PROJECT_ID` in `.env.local`. Leave `VITE_APP_URL` blank during local or Cursor-forwarded development so the app derives the browser-visible origin from `window.location.origin`; set it to the exact public HTTPS origin when deploying. That public origin must match the domain registered with Reown. Without a project ID, the app still builds and renders a safe wallet-setup message, but connection is intentionally disabled.
+
+The prototype enables only BSC Testnet (chain ID `97`) and external wallets. AppKit email/social authentication, built-in swaps, on-ramp, analytics, and unsupported networks are disabled.
+
+## Checks
+
+```sh
+npm run lint
+npm test
+npm run build
+```
+
+The implementation backlog and acceptance criteria are in [`TASKS.md`](./TASKS.md).
