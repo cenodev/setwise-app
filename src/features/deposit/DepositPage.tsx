@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import type { Address, Hash } from "viem";
 import { isAddressEqual } from "viem";
 import { useAccount, usePublicClient, useSendTransaction, useWriteContract } from "wagmi";
@@ -641,7 +642,7 @@ export function DepositPage() {
         {poolStateQuery.data?.trading.paused && <div className="warning-panel">Trading is paused. Both deposit modes are unavailable.</div>}
         {!online && <div className="warning-panel">Offline — reconnect to price or submit a deposit.</div>}
         {shortfalls.length > 0 && (
-          <div className="warning-panel" role="alert"><strong>Wallet balance shortfall</strong>{shortfalls.map((item) => <span key={item}>{item}</span>)}</div>
+          <div className="warning-panel" role="alert"><strong>Wallet balance shortfall</strong>{shortfalls.map((item) => <span key={item}>{item}</span>)}<Link to="/faucet">Claim mock assets from the faucet</Link></div>
         )}
         {quoteError && <div className="error-panel" role="alert">{quoteError}</div>}
 

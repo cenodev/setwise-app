@@ -1,5 +1,6 @@
 import { useAppKit } from "@reown/appkit/react";
 import type { PropsWithChildren } from "react";
+import { Link } from "react-router-dom";
 import { useAccount, useSwitchChain } from "wagmi";
 
 import { requiredChainId } from "../../config/chains";
@@ -27,6 +28,7 @@ export function WalletGate({ children }: PropsWithChildren) {
           Copy <code>.env.example</code> to <code>.env.local</code>, set
           <code> VITE_REOWN_PROJECT_ID</code>, and restart the development server.
         </p>
+        <p className="gate-help">After wallet setup, use the <Link to="/faucet">testnet asset faucet</Link> to fund a new wallet.</p>
       </section>
     );
   }
@@ -37,6 +39,7 @@ export function WalletGate({ children }: PropsWithChildren) {
         <p className="eyebrow">External wallet</p>
         <h2 id="wallet-connect-title">Connect your wallet to continue</h2>
         <p>Setwise will never ask for your seed phrase or private key.</p>
+        <p className="gate-help">You can claim mock portfolio assets from the <Link to="/faucet">Setwise faucet</Link> after connecting.</p>
         <ConnectAction />
       </section>
     );

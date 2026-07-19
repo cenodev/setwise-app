@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { ActivityPage } from "../pages/ActivityPage";
 import { DepositPage } from "../features/deposit/DepositPage";
+import { FaucetPage } from "../features/faucet/FaucetPage";
 import { WalletGate } from "../features/wallet/WalletGate";
 import { OperationPage } from "../pages/OperationPage";
 import { AppShell } from "./AppShell";
@@ -27,6 +28,16 @@ export function App() {
         } />
         <Route path="/withdraw" element={<OperationPage operation="withdraw" />} />
         <Route path="/activity" element={<ActivityPage />} />
+        <Route path="/faucet" element={
+          <div className="screen faucet-screen">
+            <header className="screen-header">
+              <p className="eyebrow">BSC Testnet</p>
+              <h1>Get mock assets</h1>
+              <p>Claim mUSDT and every configured mock bStock in one rate-limited transaction.</p>
+            </header>
+            <WalletGate><FaucetPage /></WalletGate>
+          </div>
+        } />
         <Route path="*" element={<Navigate to="/swap" replace />} />
       </Routes>
     </AppShell>

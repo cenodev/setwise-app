@@ -325,6 +325,16 @@ code {
   line-height: 1.5;
 }
 .error-panel { border-color: rgb(255 119 136 / 35%); background: rgb(255 119 136 / 9%); color: #ffb7c0; }
+.success-panel {
+  padding: .75rem;
+  border: 1px solid rgb(93 213 167 / 35%);
+  border-radius: .7rem;
+  background: rgb(93 213 167 / 9%);
+  color: #a9efd3;
+  font-size: .8rem;
+  line-height: 1.5;
+}
+.warning-panel a, .gate-help a { color: var(--info); }
 .approval-list { display: grid; gap: .5rem; padding: .8rem; border: 1px solid var(--border-subtle); border-radius: .75rem; }
 .approval-list h3 { margin: 0; font-size: .9rem; }
 .approval-row { display: grid; grid-template-columns: 1fr auto auto; gap: .6rem; color: var(--text-secondary); font-size: .78rem; }
@@ -360,6 +370,40 @@ code {
 .locked-card { display: grid; gap: .9rem; }
 .locked-card h2 { margin: .25rem 0 0; font-size: 1.15rem; overflow-wrap: anywhere; }
 
+.faucet-layout { display: grid; gap: 1rem; }
+.faucet-card {
+  min-width: 0;
+  padding: 1.1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  background: linear-gradient(145deg, rgb(25 33 54 / 94%), rgb(17 23 38 / 94%));
+}
+.faucet-claim-card { display: grid; gap: 1rem; }
+.faucet-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+.faucet-summary div { display: grid; gap: .2rem; padding: .8rem; border-radius: .75rem; background: rgb(124 140 255 / 9%); }
+.faucet-summary span { color: var(--text-tertiary); font-size: .72rem; }
+.faucet-summary strong { font-size: 1rem; }
+.faucet-assets { display: grid; gap: .6rem; }
+.faucet-asset { display: grid; gap: .55rem; padding: .8rem; border: 1px solid var(--border-subtle); border-radius: .75rem; background: rgb(9 13 24 / 30%); }
+.faucet-asset-heading { display: flex; align-items: start; justify-content: space-between; gap: .75rem; }
+.faucet-asset-heading div { display: grid; gap: .18rem; min-width: 0; }
+.faucet-asset-heading span { overflow: hidden; color: var(--text-tertiary); font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+.faucet-asset-heading > strong { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9rem; }
+.faucet-asset-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .4rem; color: var(--text-tertiary); font-size: .69rem; }
+.inventory-ok { color: var(--success); }
+.inventory-low { color: var(--critical); }
+.token-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
+.token-actions code { flex: 1; color: var(--text-secondary); font-size: .7rem; }
+.token-actions button { padding: .25rem .45rem; border: 1px solid var(--border-subtle); border-radius: .45rem; background: var(--bg-surface-raised); color: var(--text-secondary); font-size: .68rem; cursor: pointer; }
+.cooldown-card { display: grid; gap: .2rem; padding: .8rem; border: 1px solid rgb(242 189 91 / 35%); border-radius: .75rem; background: rgb(242 189 91 / 8%); }
+.cooldown-card span { color: var(--text-tertiary); font-size: .72rem; }
+.cooldown-card strong { color: #ffdc99; font-size: .85rem; }
+.transaction-link, .secondary-link { color: var(--info); }
+.bnb-card { display: grid; align-content: start; gap: .8rem; }
+.bnb-card h2 { margin: 0; font-size: 1.1rem; }
+.bnb-card p { margin: 0; color: var(--text-secondary); font-size: .8rem; line-height: 1.55; }
+.secondary-link { display: inline-flex; min-height: 2.75rem; align-items: center; justify-content: center; padding: .6rem 1rem; border: 1px solid rgb(124 140 255 / 50%); border-radius: .75rem; background: rgb(124 140 255 / 10%); font-weight: 750; text-align: center; text-decoration: none; }
+.faucet-disclosure { grid-column: 1 / -1; }
 
 .sr-only {
   position: absolute;
@@ -394,10 +438,13 @@ code {
   .app-main { width: min(100%, 64rem); padding: 3rem 1.5rem 4rem; }
   .screen { max-width: 32rem; margin-inline: auto; }
   .screen.deposit-screen { max-width: none; }
+  .screen.faucet-screen { max-width: none; }
   .deposit-layout { grid-template-columns: minmax(0, 1.45fr) minmax(17rem, .75fr); align-items: start; }
   .deposit-form { grid-row: span 2; }
   .quote-card { position: sticky; top: 7.5rem; }
   .locked-card { grid-column: 2; }
+  .faucet-layout { grid-template-columns: minmax(0, 1.45fr) minmax(17rem, .75fr); align-items: start; }
+  .faucet-claim-card { grid-row: span 2; }
 }
 
 @media (prefers-reduced-motion: reduce) {
