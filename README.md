@@ -16,6 +16,9 @@ Create a project in the [Reown Dashboard](https://dashboard.reown.com) and set `
 
 The prototype enables only BSC Testnet (chain ID `97`) and external wallets. AppKit email/social authentication, built-in swaps, on-ramp, analytics, and unsupported networks are disabled.
 
+The app uses the deployed Setwise RFQ API by default. Set `VITE_RFQ_API_URL` only when intentionally testing another deployment.
+
+
 ## Checks
 
 ```sh

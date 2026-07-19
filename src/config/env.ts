@@ -1,6 +1,8 @@
 export type PublicRuntimeConfig = {
   appUrl: string;
   bscTestnetRpcUrl: string;
+  explorerUrl: string;
+  poolId: string;
   reownProjectId: string | null;
   rfqApiUrl: string;
   walletConfigured: boolean;
@@ -9,6 +11,8 @@ export type PublicRuntimeConfig = {
 type PublicEnv = Partial<Record<
   | "VITE_APP_URL"
   | "VITE_BSC_TESTNET_RPC_URL"
+  | "VITE_BSC_TESTNET_EXPLORER_URL"
+  | "VITE_POOL_ID"
   | "VITE_REOWN_PROJECT_ID"
   | "VITE_RFQ_API_URL",
   string
@@ -33,8 +37,16 @@ export function resolveRuntimeConfig(
       env.VITE_BSC_TESTNET_RPC_URL,
       DEFAULT_BSC_TESTNET_RPC_URL,
     ),
+    explorerUrl: normalizeUrl(
+      env.VITE_BSC_TESTNET_EXPLORER_URL,
+      "https://testnet.bscscan.com",
+    ),
+    poolId: env.VITE_POOL_ID?.trim() || "bstock-ai-bsc-testnet",
     reownProjectId,
-    rfqApiUrl: normalizeUrl(env.VITE_RFQ_API_URL, "http://localhost:8787"),
+    rfqApiUrl: normalizeUrl(
+      env.VITE_RFQ_API_URL,
+      "https://setwise-rfq-api.datadex.workers.dev",
+    ),
     walletConfigured: reownProjectId !== null,
   };
 }

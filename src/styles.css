@@ -202,10 +202,164 @@ code {
 }
 .primary-button:hover { background: var(--accent-hover); }
 .primary-button:disabled { opacity: .6; cursor: wait; }
+.secondary-button {
+  min-height: 2.75rem;
+  padding: .6rem 1rem;
+  border: 1px solid rgb(124 140 255 / 50%);
+  border-radius: .75rem;
+  background: rgb(124 140 255 / 10%);
+  color: var(--text-primary);
+  font-weight: 750;
+  cursor: pointer;
+}
+.secondary-button:disabled { opacity: .5; cursor: not-allowed; }
 .disclosure { font-size: .8rem; }
 .disclosure strong { color: var(--warning); }
 .empty-card { display: grid; justify-items: center; padding-block: 3rem; text-align: center; }
 .empty-mark { display: grid; width: 3.5rem; height: 3.5rem; place-items: center; border-radius: 1rem; background: var(--bg-surface-raised); color: var(--accent); font-size: 1.5rem; font-weight: 900; }
+
+.deposit-layout { display: grid; gap: 1rem; }
+.deposit-card {
+  min-width: 0;
+  padding: 1.1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  background: linear-gradient(145deg, rgb(25 33 54 / 94%), rgb(17 23 38 / 94%));
+}
+.deposit-form { display: grid; gap: 1rem; }
+.mode-tabs, .lock-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .25rem;
+  padding: .25rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: .8rem;
+  background: rgb(9 13 24 / 58%);
+}
+.lock-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mode-tabs button, .lock-options button {
+  min-height: 2.55rem;
+  border: 0;
+  border-radius: .6rem;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: .83rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.mode-tabs button.is-active, .lock-options button.is-active { background: var(--bg-surface-raised); color: var(--text-primary); }
+.mode-tabs button:disabled, .lock-options button:disabled { opacity: .38; cursor: not-allowed; }
+.field-group { display: grid; gap: .55rem; }
+.field-label { color: var(--text-secondary); font-size: .78rem; font-weight: 750; }
+.notice, .asset-caveat, .target-fill p, .approval-list p, .quote-note {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.notice { padding: .7rem; border-radius: .65rem; background: rgb(114 183 255 / 10%); color: #b9dcff; }
+.asset-input-card, .target-fill {
+  display: grid;
+  gap: .65rem;
+  padding: 1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: .85rem;
+  background: rgb(9 13 24 / 35%);
+}
+.asset-input-card select, .portfolio-row input, .amount-control input {
+  min-width: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: .7rem;
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
+.asset-input-card select { min-height: 3rem; padding: .65rem .75rem; }
+.amount-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.amount-heading span { color: var(--text-tertiary); font-size: .74rem; }
+.amount-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; }
+.amount-control input {
+  width: 100%;
+  min-height: 3.4rem;
+  padding: .6rem .8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.amount-control button {
+  min-height: 3rem;
+  padding-inline: .85rem;
+  border: 1px solid rgb(124 140 255 / 42%);
+  border-radius: .7rem;
+  background: rgb(124 140 255 / 12%);
+  color: var(--accent-hover);
+  font-weight: 800;
+  cursor: pointer;
+}
+.amount-control--compact input { font-size: 1rem; }
+.portfolio-fields { display: grid; gap: .65rem; }
+.portfolio-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 42%);
+  align-items: center;
+  gap: .65rem;
+  padding: .75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: .75rem;
+  background: rgb(9 13 24 / 28%);
+}
+.portfolio-row div { display: grid; gap: .2rem; min-width: 0; }
+.portfolio-row div span { overflow: hidden; color: var(--text-tertiary); font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+.portfolio-row input { width: 100%; min-height: 2.8rem; padding: .55rem .7rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
+.portfolio-row .field-error { grid-column: 1 / -1; }
+.field-error { margin: 0; color: #ffadb7; font-size: .76rem; }
+.warning-panel, .error-panel {
+  display: grid;
+  gap: .25rem;
+  padding: .75rem;
+  border: 1px solid rgb(242 189 91 / 35%);
+  border-radius: .7rem;
+  background: rgb(242 189 91 / 9%);
+  color: #ffdc99;
+  font-size: .8rem;
+  line-height: 1.5;
+}
+.error-panel { border-color: rgb(255 119 136 / 35%); background: rgb(255 119 136 / 9%); color: #ffb7c0; }
+.approval-list { display: grid; gap: .5rem; padding: .8rem; border: 1px solid var(--border-subtle); border-radius: .75rem; }
+.approval-list h3 { margin: 0; font-size: .9rem; }
+.approval-row { display: grid; grid-template-columns: 1fr auto auto; gap: .6rem; color: var(--text-secondary); font-size: .78rem; }
+.approval-row a, .transaction-link a, .locked-card a { color: var(--info); }
+.firm-countdown {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  border: 1px solid rgb(124 140 255 / 42%);
+  border-radius: .75rem;
+  background: rgb(124 140 255 / 10%);
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .82rem;
+}
+.firm-countdown.is-warning { border-color: rgb(242 189 91 / 50%); color: var(--warning); }
+.deposit-action { margin: 0; }
+.transaction-link { margin: 0; color: var(--text-secondary); font-size: .78rem; }
+.quote-card { display: grid; align-content: start; gap: .9rem; }
+.quote-title { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.quote-title h2 { margin: 0; font-size: 1rem; }
+.quote-title span { color: var(--info); font-size: .72rem; }
+.quote-share { display: grid; gap: .3rem; padding: .9rem; border-radius: .75rem; background: rgb(124 140 255 / 10%); }
+.quote-share span { color: var(--text-secondary); font-size: .75rem; }
+.quote-share strong { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.quote-details { display: grid; gap: .6rem; margin: 0; }
+.quote-details div { display: grid; grid-template-columns: minmax(6rem, .7fr) minmax(0, 1.3fr); gap: .6rem; }
+.quote-details dt { color: var(--text-tertiary); font-size: .77rem; }
+.quote-details dd { margin: 0; color: var(--text-secondary); font-size: .77rem; text-align: right; overflow-wrap: anywhere; }
+.quote-details .is-warning dd { color: var(--warning); }
+.locked-card { display: grid; gap: .9rem; }
+.locked-card h2 { margin: .25rem 0 0; font-size: 1.15rem; overflow-wrap: anywhere; }
+
 
 .sr-only {
   position: absolute;
@@ -239,6 +393,11 @@ code {
   .mobile-nav { display: none; }
   .app-main { width: min(100%, 64rem); padding: 3rem 1.5rem 4rem; }
   .screen { max-width: 32rem; margin-inline: auto; }
+  .screen.deposit-screen { max-width: none; }
+  .deposit-layout { grid-template-columns: minmax(0, 1.45fr) minmax(17rem, .75fr); align-items: start; }
+  .deposit-form { grid-row: span 2; }
+  .quote-card { position: sticky; top: 7.5rem; }
+  .locked-card { grid-column: 2; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -7,7 +7,7 @@ describe("resolveRuntimeConfig", () => {
     expect(config.appUrl).toBe("http://localhost:4173");
     expect(config.walletConfigured).toBe(false);
     expect(config.reownProjectId).toBeNull();
-    expect(config.rfqApiUrl).toBe("http://localhost:8787");
+    expect(config.rfqApiUrl).toBe("https://setwise-rfq-api.datadex.workers.dev");
   });
 
   it("recognizes a configured Reown project", () => {

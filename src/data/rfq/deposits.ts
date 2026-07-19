@@ -1,0 +1,192 @@
+import { z } from "zod";
+import type { Address, Hex } from "viem";
+
+import { runtimeConfig } from "../../config/env";
+
+const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/).transform((value) => value as Address);
+const hexSchema = z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/).transform((value) => value as Hex);
+const atomicSchema = z.string().regex(/^\d+$/);
+const decimalSchema = z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/);
+
+const amountSchema = z.object({
+  asset: z.string().min(1),
+  amount: decimalSchema,
+  atomicAmount: atomicSchema,
+  decimals: z.number().int().min(0),
+});
+
+const assetSchema = z.object({
+  id: z.string().min(1),
+  symbol: z.string().min(1),
+  name: z.string().optional(),
+  address: addressSchema,
+  decimals: z.number().int().min(0),
+  weight: z.number().int().min(0),
+  index: z.number().int().min(0),
+  underlying: z.object({ symbol: z.string() }).passthrough().optional(),
+  tokenStandard: z.string().optional(),
+}).passthrough();
+
+export const poolSchema = z.object({
+  id: z.string().min(1),
+  chain: z.object({ id: z.number().int(), name: z.string().nullable() }),
+  contract: z.object({ address: addressSchema }).passthrough(),
+  lpToken: z.object({ symbol: z.string(), decimals: z.number().int(), address: addressSchema }),
+  quotePolicy: z.object({ allowedLockDays: z.array(z.number().int().min(0)) }).passthrough(),
+  assets: z.array(assetSchema).min(1),
+}).passthrough();
+
+export const poolStateSchema = z.object({
+  poolId: z.string(),
+  chainId: z.number().int(),
+  poolAddress: addressSchema,
+  trading: z.object({ paused: z.boolean(), deposits: z.enum(["available", "paused"]) }).passthrough(),
+  assets: z.array(z.object({
+    asset: z.string(),
+    index: z.number().int(),
+    market: z.object({ bidUsd: decimalSchema, askUsd: decimalSchema }).passthrough(),
+  }).passthrough()),
+}).passthrough();
+
+export const depositQuoteSchema = z.object({
+  indicativeQuoteId: z.string(),
+  quoteType: z.literal("indicative"),
+  operation: z.literal("deposit"),
+  pricedAt: z.string().datetime(),
+  validUntil: z.string().datetime(),
+  lockDays: z.number().int(),
+  stateSnapshot: z.object({
+    chainId: z.number().int(),
+    poolAddress: addressSchema,
+    tradingPaused: z.boolean(),
+  }).passthrough(),
+  marketSnapshot: z.array(z.object({
+    asset: z.string(),
+    bidUsd: decimalSchema,
+    askUsd: decimalSchema,
+  }).passthrough()),
+  deposits: z.array(amountSchema),
+  orderedAtomicAmounts: z.array(atomicSchema),
+  output: amountSchema,
+  warnings: z.array(z.object({ code: z.string(), message: z.string() }).passthrough()),
+}).passthrough();
+
+const approvalRequirementSchema = z.object({
+  token: addressSchema,
+  spender: addressSchema,
+  minimumAtomicAmount: atomicSchema,
+});
+
+export const firmDepositQuoteSchema = z.object({
+  firmQuoteId: z.string(),
+  quoteType: z.literal("firm"),
+  status: z.literal("executable"),
+  operation: z.literal("deposit"),
+  mode: z.enum(["portfolio", "single-asset"]),
+  mustSubmitBy: z.string().datetime(),
+  investor: addressSchema,
+  lockDays: z.number().int(),
+  orderedAtomicAmounts: z.array(atomicSchema),
+  shares: amountSchema,
+  transaction: z.object({
+    chainId: z.number().int(),
+    to: addressSchema,
+    data: hexSchema,
+    value: atomicSchema,
+    method: z.enum(["depositPortfolio", "depositSingleAsset"]),
+  }),
+  requirements: z.object({
+    sender: addressSchema,
+    approvals: z.array(approvalRequirementSchema),
+  }),
+}).passthrough();
+
+export type Pool = z.infer<typeof poolSchema>;
+export type PoolAsset = Pool["assets"][number];
+export type PoolState = z.infer<typeof poolStateSchema>;
+export type DepositQuote = z.infer<typeof depositQuoteSchema>;
+export type FirmDepositQuote = z.infer<typeof firmDepositQuoteSchema>;
+
+export type DepositAmount = { asset: string; amount: string };
+export type DepositMode = "single-asset" | "portfolio";
+
+export class RfqApiError extends Error {
+  constructor(public readonly code: string, message: string, public readonly status: number) {
+    super(message);
+    this.name = "RfqApiError";
+  }
+}
+
+async function requestJson<T>(
+  path: string,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+  init?: RequestInit,
+): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${runtimeConfig.rfqApiUrl}${path}`, {
+      ...init,
+      headers: { "content-type": "application/json", ...init?.headers },
+      cache: "no-store",
+    });
+  } catch (error) {
+    throw new RfqApiError("NETWORK_ERROR", error instanceof Error ? error.message : "RFQ API is unavailable", 0);
+  }
+
+  const json: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const parsed = z.object({ error: z.object({ code: z.string(), message: z.string() }) }).safeParse(json);
+    throw new RfqApiError(
+      parsed.success ? parsed.data.error.code : "HTTP_ERROR",
+      parsed.success ? parsed.data.error.message : `RFQ API returned ${response.status}`,
+      response.status,
+    );
+  }
+  const parsed = schema.safeParse(json);
+  if (!parsed.success) {
+    throw new RfqApiError("INVALID_RESPONSE", "RFQ API returned an unexpected response", response.status);
+  }
+  return parsed.data;
+}
+
+export async function getPool(poolId: string, signal?: AbortSignal): Promise<Pool> {
+  const response = await requestJson(`/v1/pools/${encodeURIComponent(poolId)}`,
+    z.object({ pool: poolSchema }), { signal });
+  return response.pool;
+}
+
+export function getPoolState(poolId: string, signal?: AbortSignal): Promise<PoolState> {
+  return requestJson(`/v1/pools/${encodeURIComponent(poolId)}/state`, poolStateSchema, { signal });
+}
+
+export function requestDepositQuote(
+  amounts: DepositAmount[],
+  lockDays: number,
+  signal?: AbortSignal,
+): Promise<DepositQuote> {
+  return requestJson("/v1/quotes/deposits", depositQuoteSchema, {
+    method: "POST",
+    body: JSON.stringify({ poolId: runtimeConfig.poolId, amounts, lockDays }),
+    signal,
+  });
+}
+
+export function requestFirmDepositQuote(input: {
+  amounts: DepositAmount[];
+  investor: Address;
+  lockDays: number;
+  mode: DepositMode;
+  idempotencyKey: string;
+}): Promise<FirmDepositQuote> {
+  return requestJson("/v1/firm-quotes/deposits", firmDepositQuoteSchema, {
+    method: "POST",
+    headers: { "Idempotency-Key": input.idempotencyKey },
+    body: JSON.stringify({
+      poolId: runtimeConfig.poolId,
+      investor: input.investor,
+      mode: input.mode,
+      lockDays: input.lockDays,
+      amounts: input.amounts,
+    }),
+  });
+}
