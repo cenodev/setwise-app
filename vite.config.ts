@@ -30,6 +30,8 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: "/index.html",
+        // RFQ and firm-quote POSTs are intentionally unmatched, so Workbox never
+        // stores indicative responses or executable transaction calldata.
         runtimeCaching: []
       }
     })

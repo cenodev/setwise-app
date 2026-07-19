@@ -134,6 +134,7 @@ describe("swap RFQ client", () => {
     await requestFirmSwapQuote({ idempotencyKey: "swap:test", inputAmount: "10", inputAsset: "USDT", inputNative: false, outputAsset: "TOKEN", outputNative: false, payer, recipient: payer });
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.cache).toBe("no-store");
     expect(new Headers(init.headers).get("Idempotency-Key")).toBe("swap:test");
     if (typeof init.body !== "string") throw new Error("Expected a JSON request body");
     expect(JSON.parse(init.body)).toMatchObject({ inputNative: false, outputNative: false, payer, recipient: payer });

@@ -89,7 +89,7 @@ export function validateFirmSwap(input: {
     outputAsset, outputNative, poolAddress, poolId,
   } = input;
   const expectedInput = BigInt(indicative.input.atomicAmount);
-  const expectedOutput = BigInt(indicative.output.atomicAmount);
+  const firmOutput = BigInt(firm.output.atomicAmount);
   const message = firm.authorization.typedData.message;
 
   if (firm.transaction.chainId !== chainId || firm.stateSnapshot.chainId !== chainId
@@ -113,9 +113,9 @@ export function validateFirmSwap(input: {
     throw new Error("Firm quote pair does not match the reviewed swap");
   }
   if (firm.input.atomicAmount !== indicative.input.atomicAmount
-    || firm.output.atomicAmount !== indicative.output.atomicAmount
     || BigInt(message.inputAmount) !== expectedInput
-    || BigInt(message.outputAmount) !== expectedOutput) {
+    || firmOutput <= 0n
+    || BigInt(message.outputAmount) !== firmOutput) {
     throw new Error("Firm quote amounts do not match the reviewed swap");
   }
   if (balance < expectedInput) throw new Error(`Insufficient ${inputNative ? "BNB" : inputAsset.symbol} balance`);
