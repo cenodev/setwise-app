@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ActivityPage } from "../pages/ActivityPage";
 import { DepositPage } from "../features/deposit/DepositPage";
 import { FaucetPage } from "../features/faucet/FaucetPage";
+import { WithdrawPage } from "../features/withdraw/WithdrawPage";
 import { WalletGate } from "../features/wallet/WalletGate";
 import { OperationPage } from "../pages/OperationPage";
 import { AppShell } from "./AppShell";
@@ -26,7 +27,19 @@ export function App() {
             </aside>
           </div>
         } />
-        <Route path="/withdraw" element={<OperationPage operation="withdraw" />} />
+        <Route path="/withdraw" element={
+          <div className="screen withdraw-screen">
+            <header className="screen-header">
+              <p className="eyebrow">Portfolio</p>
+              <h1>Withdraw assets</h1>
+              <p>Burn unlocked Setwise shares for every pool asset or one selected asset.</p>
+            </header>
+            <WalletGate><WithdrawPage /></WalletGate>
+            <aside className="disclosure" role="note">
+              <strong>Testnet only.</strong> Contracts are unaudited, tokenized assets carry issuer and market risk, and this is not investment advice.
+            </aside>
+          </div>
+        } />
         <Route path="/activity" element={<ActivityPage />} />
         <Route path="/faucet" element={
           <div className="screen faucet-screen">
