@@ -5,6 +5,7 @@ describe("resolveRuntimeConfig", () => {
     const config = resolveRuntimeConfig({}, "http://localhost:4173");
 
     expect(config.appUrl).toBe("http://localhost:4173");
+    expect(config.poolId).toBe("bstock-ai-no-bnb-bsc-testnet");
     expect(config.walletConfigured).toBe(false);
     expect(config.reownProjectId).toBeNull();
     expect(config.rfqApiUrl).toBe("https://setwise-rfq-api.datadex.workers.dev");

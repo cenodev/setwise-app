@@ -41,7 +41,7 @@ export function resolveRuntimeConfig(
       env.VITE_BSC_TESTNET_EXPLORER_URL,
       "https://testnet.bscscan.com",
     ),
-    poolId: env.VITE_POOL_ID?.trim() || "bstock-ai-bsc-testnet",
+    poolId: env.VITE_POOL_ID?.trim() || "bstock-ai-no-bnb-bsc-testnet",
     reownProjectId,
     rfqApiUrl: normalizeUrl(
       env.VITE_RFQ_API_URL,
