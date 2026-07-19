@@ -3,9 +3,9 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ActivityPage } from "../pages/ActivityPage";
 import { DepositPage } from "../features/deposit/DepositPage";
 import { FaucetPage } from "../features/faucet/FaucetPage";
+import { SwapPage } from "../features/swap/SwapPage";
 import { WithdrawPage } from "../features/withdraw/WithdrawPage";
 import { WalletGate } from "../features/wallet/WalletGate";
-import { OperationPage } from "../pages/OperationPage";
 import { AppShell } from "./AppShell";
 
 export function App() {
@@ -13,7 +13,19 @@ export function App() {
     <AppShell>
       <Routes>
         <Route path="/" element={<Navigate to="/swap" replace />} />
-        <Route path="/swap" element={<OperationPage operation="swap" />} />
+        <Route path="/swap" element={
+          <div className="screen swap-screen">
+            <header className="screen-header">
+              <p className="eyebrow">Trade</p>
+              <h1>Swap assets</h1>
+              <p>Exchange supported pool assets using an exact-input quote on BSC Testnet.</p>
+            </header>
+            <WalletGate><SwapPage /></WalletGate>
+            <aside className="disclosure" role="note">
+              <strong>Testnet only.</strong> Contracts are unaudited, tokenized assets carry issuer and market risk, and this is not investment advice.
+            </aside>
+          </div>
+        } />
         <Route path="/deposit" element={
           <div className="screen deposit-screen">
             <header className="screen-header">
