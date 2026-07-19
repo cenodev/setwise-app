@@ -1,9 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Address, Hash } from "viem";
 import { isAddressEqual } from "viem";
-import { useAccount, usePublicClient, useSendTransaction, useWriteContract } from "wagmi";
+import {
+  useAccount,
+  useCapabilities,
+  usePublicClient,
+  useSendCalls,
+  useSendTransaction,
+  useWaitForCallsStatus,
+  useWriteContract,
+} from "wagmi";
 
 import { requiredChainId } from "../../config/chains";
 import { runtimeConfig } from "../../config/env";
@@ -28,7 +36,14 @@ import {
   formatTokenAmount,
 } from "../../lib/decimal";
 import { truncateAddress } from "../../lib/format";
-import { allowedLockSelection, orderAssetsByContract, planApprovals } from "./model";
+import {
+  allowedLockSelection,
+  buildAtomicDepositCalls,
+  classifyAtomicSendError,
+  orderAssetsByContract,
+  planApprovals,
+  supportsAtomicBatch,
+} from "./model";
 
 type ChainAssetState = { allowance: bigint; balance: bigint };
 type ChainDepositState = {
@@ -39,7 +54,7 @@ type ChainDepositState = {
   shareBalance: bigint;
 };
 
-type ApprovalStage = "needed" | "wallet" | "confirming" | "confirmed" | "failed";
+type ApprovalStage = "needed" | "batched" | "wallet" | "confirming" | "confirmed" | "failed";
 type ApprovalView = { stage: ApprovalStage; hash?: Hash };
 type TransactionStage =
   | "editing"
@@ -49,6 +64,7 @@ type TransactionStage =
   | "confirming"
   | "success"
   | "expired"
+  | "status-error"
   | "error";
 
 type TransactionView = {
@@ -166,6 +182,7 @@ function validateFirmQuote(
   if (firm.requirements.approvals.length !== expectedApprovals.length) {
     throw new Error("Firm quote approval requirements do not match the deposit");
   }
+  const seenApprovalTokens = new Set<string>();
   for (const requirement of firm.requirements.approvals) {
     if (!addressesMatch(requirement.spender, poolAddress)) throw new Error("Firm quote has an unexpected spender");
     const asset = assets.find((candidate) => addressesMatch(candidate.address, requirement.token));
@@ -173,25 +190,37 @@ function validateFirmQuote(
     if (!expected || expected.atomicAmount !== requirement.minimumAtomicAmount) {
       throw new Error("Firm quote has unexpected approval requirements");
     }
+    const tokenKey = requirement.token.toLowerCase();
+    if (seenApprovalTokens.has(tokenKey)) throw new Error("Firm quote has duplicate approval requirements");
+    seenApprovalTokens.add(tokenKey);
   }
 }
 
-function transactionLabel(stage: TransactionStage, approvals: number) {
+function transactionLabel(stage: TransactionStage, approvals: number, atomic: boolean) {
   switch (stage) {
     case "allowance-check": return "Checking allowances…";
     case "firm-quote": return "Getting executable quote…";
-    case "wallet": return "Confirm deposit in wallet…";
-    case "confirming": return "Confirming deposit…";
+    case "wallet": return atomic ? "Confirm atomic deposit in wallet…" : "Confirm deposit in wallet…";
+    case "confirming": return atomic ? "Confirming atomic deposit…" : "Confirming deposit…";
     case "success": return "New deposit";
     case "expired": return "Refresh quote";
+    case "status-error": return "Retry batch status";
     case "error": return "Try deposit again";
-    default: return approvals > 0 ? `Approve ${approvals} token${approvals === 1 ? "" : "s"} & deposit` : "Confirm deposit";
+    default: return approvals > 0
+      ? atomic ? "Approve assets & deposit" : `Approve ${approvals} token${approvals === 1 ? "" : "s"} & deposit`
+      : "Confirm deposit";
   }
 }
 
 export function DepositPage() {
-  const { address } = useAccount();
+  const { address, connector } = useAccount();
   const publicClient = usePublicClient({ chainId: requiredChainId });
+  const capabilityQuery = useCapabilities({
+    account: address,
+    chainId: requiredChainId,
+    query: { enabled: Boolean(address), retry: false },
+  });
+  const { sendCallsAsync } = useSendCalls();
   const { sendTransactionAsync } = useSendTransaction();
   const { writeContractAsync } = useWriteContract();
   const online = useOnlineStatus();
@@ -210,6 +239,15 @@ export function DepositPage() {
   const [firmQuote, setFirmQuote] = useState<FirmDepositQuote | null>(null);
   const [transaction, setTransaction] = useState<TransactionView>({ stage: "editing" });
   const [claimTransaction, setClaimTransaction] = useState<TransactionView>({ stage: "editing" });
+  const [batchId, setBatchId] = useState<string>();
+  const [atomicFallbackConnection, setAtomicFallbackConnection] = useState<string | null>(null);
+  const connectionKey = address ? `${address.toLowerCase()}:${connector?.uid ?? connector?.id ?? "wallet"}` : "";
+  const batchStatus = useWaitForCallsStatus({
+    id: batchId,
+    throwOnFailure: false,
+    timeout: 120_000,
+    query: { enabled: Boolean(batchId), retry: false },
+  });
 
   const poolQuery = useQuery({
     queryKey: ["pool", runtimeConfig.poolId],
@@ -379,23 +417,83 @@ export function DepositPage() {
   }, [assets, chainQuery.data, quote]);
   const approvals = planApprovals(approvalInputs);
 
+  const atomicAvailable = atomicFallbackConnection !== connectionKey && supportsAtomicBatch(capabilityQuery.data);
+  const atomicExperience = mode === "portfolio" && approvals.length > 0 && atomicAvailable;
+  const capabilitySettled = mode !== "portfolio" || capabilityQuery.isFetched || capabilityQuery.isError;
   const quoteFresh = Boolean(quote && Date.parse(quote.validUntil) > now);
   const quoteMatchesInput = quoteRequestKey === currentRequestKey;
-  const busy = !["editing", "success", "error", "expired"].includes(transaction.stage);
+  const busy = !["editing", "success", "error", "expired", "status-error"].includes(transaction.stage);
   const canExecute = Boolean(
     quote && quoteFresh && quoteMatchesInput && !quoteLoading && online && !poolStateQuery.data?.trading.paused
-    && shortfalls.length === 0 && address && publicClient && !busy,
+    && shortfalls.length === 0 && address && publicClient && capabilitySettled && !busy,
   );
 
-  async function refreshAfterReceipt() {
-    await Promise.all([chainQuery.refetch(), poolStateQuery.refetch()]);
-  }
+  const refetchChain = chainQuery.refetch;
+  const refetchPoolState = poolStateQuery.refetch;
+  const refreshAfterReceipt = useCallback(async () => {
+    await Promise.all([refetchChain(), refetchPoolState()]);
+  }, [refetchChain, refetchPoolState]);
+
+  useEffect(() => {
+    if (!batchId || !["confirming", "status-error"].includes(transaction.stage) || batchStatus.isFetching) return;
+    const timer = window.setTimeout(() => {
+      if (batchStatus.error) {
+        setTransaction({
+          stage: "status-error",
+          error: "Could not confirm the atomic batch status. Check the wallet or explorer before retrying status; sequential fallback is disabled for this submitted batch.",
+        });
+        return;
+      }
+      const status = batchStatus.data;
+      if (!status) return;
+      const receipt = status.receipts?.at(-1);
+      const hash = receipt?.transactionHash;
+      if (!status.atomic) {
+        setBatchId(undefined);
+        setTransaction({
+          stage: "error",
+          hash,
+          error: "The wallet reported a non-atomic result for a batch that required atomic execution. Review the transaction before retrying.",
+        });
+        return;
+      }
+      if (status.status === "failure") {
+        setBatchId(undefined);
+        setTransaction({
+          stage: "error",
+          hash,
+          error: "Atomic approval-and-deposit batch reverted. No approval or deposit was applied.",
+        });
+        setApprovalViews((current) => Object.fromEntries(
+          Object.keys(current).map((assetId) => [assetId, { stage: "failed" as const }]),
+        ));
+        return;
+      }
+      if (status.status !== "success") return;
+      if (status.chainId !== requiredChainId || !receipt || receipt.status !== "success" || !hash) {
+        setBatchId(undefined);
+        setTransaction({
+          stage: "error",
+          hash,
+          error: "The completed atomic batch returned an invalid chain receipt. Review the wallet or explorer before retrying.",
+        });
+        return;
+      }
+      setBatchId(undefined);
+      setApprovalViews((current) => Object.fromEntries(
+        Object.keys(current).map((assetId) => [assetId, { stage: "confirmed" as const }]),
+      ));
+      setTransaction({ stage: "success", hash });
+      void refreshAfterReceipt();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [batchId, batchStatus.data, batchStatus.error, batchStatus.isFetching, refreshAfterReceipt, transaction.stage]);
 
   async function executeDeposit() {
     if (!canExecute || !quote || !address || !publicClient || !poolQuery.data) return;
     setTransaction({ stage: "allowance-check" });
     setFirmQuote(null);
-    setApprovalViews(Object.fromEntries(approvals.map((approval) => [approval.assetId, { stage: "needed" }])));
+    setBatchId(undefined);
     try {
       const latest = await chainQuery.refetch();
       if (!latest.data) throw new Error("Could not refresh wallet allowances");
@@ -404,6 +502,74 @@ export function DepositPage() {
         allowance: latest.data?.assets[input.assetId]?.allowance ?? 0n,
       }));
       const requiredApprovals = planApprovals(latestInputs);
+
+      let useAtomicBatch = false;
+      if (mode === "portfolio" && requiredApprovals.length > 0 && atomicFallbackConnection !== connectionKey) {
+        const latestCapabilities = await capabilityQuery.refetch();
+        useAtomicBatch = supportsAtomicBatch(latestCapabilities.data);
+      }
+
+      if (useAtomicBatch) {
+        setTransaction({ stage: "firm-quote" });
+        const firm = await requestFirmDepositQuote({
+          amounts: form.request,
+          investor: address,
+          lockDays: effectiveLockDays,
+          mode,
+          idempotencyKey: `deposit:${address.toLowerCase()}:${crypto.randomUUID()}`,
+        });
+        validateFirmQuote(firm, quote, address, poolQuery.data.contract.address, mode, assets, effectiveLockDays);
+        const calls = buildAtomicDepositCalls({
+          approvals: requiredApprovals,
+          mustSubmitBy: firm.mustSubmitBy,
+          poolAddress: poolQuery.data.contract.address,
+          requirements: firm.requirements.approvals,
+          transaction: firm.transaction,
+        });
+        setFirmQuote(firm);
+        if (Date.parse(firm.mustSubmitBy) <= currentTimestamp()) {
+          setTransaction({ stage: "expired", error: "Executable quote expired before the atomic wallet request opened." });
+          return;
+        }
+
+        setApprovalViews(Object.fromEntries(
+          requiredApprovals.map((approval) => [approval.assetId, { stage: "batched" }]),
+        ));
+        setTransaction({ stage: "wallet" });
+        try {
+          const result = await sendCallsAsync({
+            account: address,
+            calls,
+            chainId: requiredChainId,
+            forceAtomic: true,
+          });
+          setBatchId(result.id);
+          setTransaction({ stage: "confirming" });
+        } catch (error) {
+          const kind = classifyAtomicSendError(error);
+          if (kind === "setup-rejected" || kind === "unsupported") {
+            setAtomicFallbackConnection(connectionKey);
+            setTransaction({
+              stage: "error",
+              error: kind === "setup-rejected"
+                ? "Wallet setup for atomic execution was rejected. Retry to use sequential approvals."
+                : "This wallet could not provide required atomic execution. Retry to use sequential approvals.",
+            });
+          } else {
+            setTransaction({
+              stage: "error",
+              error: kind === "wallet-rejected"
+                ? "Atomic approval and deposit was rejected in the wallet. No calls were submitted."
+                : `Atomic wallet request failed without returning a batch ID. Check wallet activity before retrying. ${errorMessage(error)}`,
+            });
+          }
+        }
+        return;
+      }
+
+      setApprovalViews(Object.fromEntries(
+        requiredApprovals.map((approval) => [approval.assetId, { stage: "needed" }]),
+      ));
       for (const approval of requiredApprovals) {
         setApprovalViews((current) => ({ ...current, [approval.assetId]: { stage: "wallet" } }));
         let approvalHash: Hash;
@@ -473,7 +639,12 @@ export function DepositPage() {
       setAmounts({});
       setFirmQuote(null);
       setQuote(null);
+      setBatchId(undefined);
       setTransaction({ stage: "editing" });
+      return;
+    }
+    if (transaction.stage === "status-error") {
+      void batchStatus.refetch();
       return;
     }
     if (transaction.stage === "expired" || (transaction.stage === "error" && !quoteFresh)) {
@@ -550,7 +721,10 @@ export function DepositPage() {
   const indicativeSeconds = quote ? Math.max(0, Math.ceil((Date.parse(quote.validUntil) - now) / 1_000)) : null;
   const refreshAction = transaction.stage === "expired" || (transaction.stage === "error" && !quoteFresh);
   const actionEnabled = transaction.stage === "success"
-    || (refreshAction ? online && !poolStateQuery.data?.trading.paused : canExecute);
+    || (transaction.stage === "status-error" ? online && !batchStatus.isFetching
+      : refreshAction ? online && !poolStateQuery.data?.trading.paused : canExecute);
+  const capabilityLoading = mode === "portfolio" && approvals.length > 0 && !capabilitySettled;
+  const atomicTransaction = atomicExperience || Boolean(batchId);
 
   return (
     <div className="deposit-layout">
@@ -648,7 +822,7 @@ export function DepositPage() {
 
         {approvals.length > 0 && (
           <div className="approval-list" aria-label="Required approvals">
-            <h3>Approval steps</h3>
+            <h3>{atomicExperience ? "Atomic approval & deposit" : "Approval steps"}</h3>
             {approvals.map((approval, index) => {
               const asset = assets.find((item) => item.id === approval.assetId);
               const view = approvalViews[approval.assetId];
@@ -658,7 +832,9 @@ export function DepositPage() {
                 {view?.hash && <a href={`${runtimeConfig.explorerUrl}/tx/${view.hash}`} target="_blank" rel="noreferrer">View</a>}
               </div>;
             })}
-            <p>Approvals are submitted and confirmed one at a time before the executable quote is requested.</p>
+            <p>{atomicExperience
+              ? "Exact approvals and the deposit execute together atomically with one wallet confirmation. If the deposit reverts, every approval reverts too."
+              : "Approvals are submitted and confirmed one at a time before the executable quote is requested."}</p>
           </div>
         )}
 
@@ -670,7 +846,10 @@ export function DepositPage() {
 
         <button className="primary-button deposit-action" type="button" disabled={!actionEnabled}
           onClick={handleDepositAction}>
-          {quoteLoading ? "Refreshing estimate…" : transactionLabel(transaction.stage, approvals.length)}
+          {quoteLoading ? "Refreshing estimate…"
+            : capabilityLoading ? "Checking wallet capabilities…"
+              : batchStatus.isFetching && transaction.stage === "status-error" ? "Checking batch status…"
+                : transactionLabel(transaction.stage, approvals.length, atomicTransaction)}
         </button>
         {transaction.error && <div className="error-panel" role="alert">{transaction.error}</div>}
         {transaction.hash && (
@@ -690,7 +869,9 @@ export function DepositPage() {
               <div><dt>Indicative freshness</dt><dd>{quoteFresh ? `${indicativeSeconds ?? 0}s` : "Refreshing…"}</dd></div>
               {firmSeconds !== null && <div className={firmSeconds <= 3 ? "is-warning" : ""}><dt>Firm quote</dt><dd>Confirm within {firmSeconds}s</dd></div>}
             </dl>
-            <p className="quote-note">The estimate can change until approvals finish and the signed executable quote is issued.</p>
+            <p className="quote-note">{atomicExperience
+              ? "A signed executable quote is validated before the single atomic wallet request opens."
+              : "The estimate can change until approvals finish and the signed executable quote is issued."}</p>
           </>
         ) : <p>{quoteLoading ? "Getting an indicative price…" : "Enter an amount to preview SETWISE shares."}</p>}
       </aside>
