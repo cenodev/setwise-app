@@ -34,13 +34,27 @@ export const poolSchema = z.object({
   lpToken: z.object({ symbol: z.string(), decimals: z.number().int(), address: addressSchema }),
   quotePolicy: z.object({ allowedLockDays: z.array(z.number().int().min(0)) }).passthrough(),
   assets: z.array(assetSchema).min(1),
+  pairs: z.array(z.object({
+    assets: z.tuple([z.string().min(1), z.string().min(1)]),
+    enabled: z.boolean(),
+    feeBps: z.number().int().min(0),
+  }).passthrough()).optional(),
+  capabilities: z.object({
+    nativeAsset: z.boolean(),
+    swaps: z.object({ exactInput: z.boolean(), firm: z.boolean(), indicative: z.boolean() }).passthrough(),
+  }).passthrough().optional(),
 }).passthrough();
 
 export const poolStateSchema = z.object({
   poolId: z.string(),
   chainId: z.number().int(),
   poolAddress: addressSchema,
-  trading: z.object({ paused: z.boolean(), deposits: z.enum(["available", "paused"]) }).passthrough(),
+  trading: z.object({
+    paused: z.boolean(),
+    deposits: z.enum(["available", "paused"]),
+    swaps: z.enum(["available", "paused"]).optional(),
+  }).passthrough(),
+  contract: z.object({ wrappedNativeToken: addressSchema }).passthrough().optional(),
   assets: z.array(z.object({
     asset: z.string(),
     index: z.number().int(),

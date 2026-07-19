@@ -2,6 +2,7 @@ export type PublicRuntimeConfig = {
   appUrl: string;
   bscTestnetRpcUrl: string;
   explorerUrl: string;
+  nativeGasReserveBnb: string;
   poolId: string;
   reownProjectId: string | null;
   rfqApiUrl: string;
@@ -12,6 +13,7 @@ type PublicEnv = Partial<Record<
   | "VITE_APP_URL"
   | "VITE_BSC_TESTNET_RPC_URL"
   | "VITE_BSC_TESTNET_EXPLORER_URL"
+  | "VITE_NATIVE_GAS_RESERVE_BNB"
   | "VITE_POOL_ID"
   | "VITE_REOWN_PROJECT_ID"
   | "VITE_RFQ_API_URL",
@@ -23,6 +25,14 @@ const DEFAULT_BSC_TESTNET_RPC_URL = "https://data-seed-prebsc-1-s1.bnbchain.org:
 function normalizeUrl(value: string | undefined, fallback: string): string {
   const candidate = value?.trim() || fallback;
   return new URL(candidate).toString().replace(/\/$/, "");
+}
+
+function normalizeNativeGasReserve(value: string | undefined): string {
+  const candidate = value?.trim() || "0.001";
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,18})?$/.test(candidate)) {
+    throw new Error("VITE_NATIVE_GAS_RESERVE_BNB must be a non-negative decimal with at most 18 decimal places");
+  }
+  return candidate;
 }
 
 export function resolveRuntimeConfig(
@@ -41,6 +51,7 @@ export function resolveRuntimeConfig(
       env.VITE_BSC_TESTNET_EXPLORER_URL,
       "https://testnet.bscscan.com",
     ),
+    nativeGasReserveBnb: normalizeNativeGasReserve(env.VITE_NATIVE_GAS_RESERVE_BNB),
     poolId: env.VITE_POOL_ID?.trim() || "bstock-ai-no-bnb-bsc-testnet",
     reownProjectId,
     rfqApiUrl: normalizeUrl(
