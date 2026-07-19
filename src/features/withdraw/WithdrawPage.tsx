@@ -19,7 +19,13 @@ import {
 import { atomicToDecimal, decimalInputError, decimalToAtomic, formatTokenAmount } from "../../lib/decimal";
 import { truncateAddress } from "../../lib/format";
 import { orderAssetsByContract } from "../deposit/model";
-import { canReceiveNative, mapWithdrawalOutputs, shareShortcut, validateFirmWithdrawal } from "./model";
+import {
+  canReceiveNative,
+  mapWithdrawalOutputs,
+  relevantWithdrawalWarnings,
+  shareShortcut,
+  validateFirmWithdrawal,
+} from "./model";
 
 type ChainWithdrawalState = {
   assetBalances: Record<string, bigint>;
@@ -458,6 +464,7 @@ export function WithdrawPage() {
   }
 
   const mappedOutputs = quote ? mapWithdrawalOutputs(quote, assets) : [];
+  const quoteWarnings = quote ? relevantWithdrawalWarnings(quote) : [];
   const indicativeSeconds = quote ? Math.max(0, Math.ceil((Date.parse(quote.validUntil) - now) / 1_000)) : null;
   const firmSeconds = firmQuote ? Math.max(0, Math.ceil((Date.parse(firmQuote.mustSubmitBy) - now) / 1_000)) : null;
   const terminalAction = ["success", "rejected", "expired", "simulation-failed", "reverted", "error"].includes(transaction.stage);
@@ -543,7 +550,14 @@ export function WithdrawPage() {
         )}
         {!online && <div className="warning-panel">Offline — reconnect to price or submit a withdrawal.</div>}
         {quoteError && <div className="error-panel" role="alert">{quoteError}</div>}
-        {quote?.warnings.map((warning) => <div className="warning-panel" key={`${warning.code}:${warning.message}`}>{warning.message}</div>)}
+        {quoteWarnings.length > 0 && (
+          <div className="notice quote-warnings" role="note">
+            <strong>Market disclosures</strong>
+            <ul>
+              {quoteWarnings.map((warning) => <li key={`${warning.code}:${warning.message}`}>{warning.message}</li>)}
+            </ul>
+          </div>
+        )}
 
         {firmSeconds !== null && transaction.stage === "wallet" && (
           <div className={firmSeconds <= 3 ? "firm-countdown is-warning" : "firm-countdown"} role="status">

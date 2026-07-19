@@ -73,7 +73,11 @@ function indicative(mode: "proportional" | "single-asset") {
     quoteType: "indicative",
     stateSnapshot: { chainId: 97, poolAddress, poolId: pool.id, tradingPaused: mocks.tradingPaused },
     validUntil: new Date(now + 60_000).toISOString(),
-    warnings: [],
+    warnings: [
+      { asset: "WBNB", code: "SESSION", message: "Underlying session not verified" },
+      { asset: "WBNB", code: "SESSION", message: "Underlying session not verified" },
+      { asset: "USDT", code: "SESSION", message: "Underlying session not verified" },
+    ],
   };
 }
 
@@ -161,6 +165,7 @@ describe("WithdrawPage", () => {
     expect(await screen.findByText("0.01")).toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
     expect(screen.getByText(/Locked shares are excluded from Max/)).toBeInTheDocument();
+    expect(screen.getAllByText("Underlying session not verified")).toHaveLength(1);
 
     fireEvent.click(action);
 

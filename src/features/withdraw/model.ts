@@ -33,6 +33,20 @@ export function mapWithdrawalOutputs(
   });
 }
 
+export function relevantWithdrawalWarnings(
+  quote: WithdrawalQuote,
+): WithdrawalQuote["warnings"] {
+  const outputAssets = new Set(quote.outputs.map((output) => output.asset));
+  const seen = new Set<string>();
+  return quote.warnings.filter((warning) => {
+    if (typeof warning.asset === "string" && !outputAssets.has(warning.asset)) return false;
+    const key = `${warning.code}\u0000${warning.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function validateFirmWithdrawal(input: {
   address: Address;
   chainId: number;

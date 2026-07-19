@@ -1,7 +1,13 @@
 import type { Address } from "viem";
 
 import type { FirmWithdrawalQuote, WithdrawalQuote } from "../../data/rfq/withdrawals";
-import { canReceiveNative, mapWithdrawalOutputs, shareShortcut, validateFirmWithdrawal } from "./model";
+import {
+  canReceiveNative,
+  mapWithdrawalOutputs,
+  relevantWithdrawalWarnings,
+  shareShortcut,
+  validateFirmWithdrawal,
+} from "./model";
 
 const pool = "0x1000000000000000000000000000000000000000" as Address;
 const investor = "0x2000000000000000000000000000000000000000" as Address;
@@ -66,6 +72,23 @@ describe("withdrawal model", () => {
       ],
     } satisfies WithdrawalQuote;
     expect(mapWithdrawalOutputs(quote, assets).map(({ asset }) => asset.id)).toEqual(["WBNB", "USDT"]);
+  });
+
+  it("scopes asset warnings to quoted outputs and deduplicates pool-wide disclosures", () => {
+    const quote = {
+      ...indicative,
+      warnings: [
+        { asset: "WBNB", code: "SESSION", message: "Underlying session not verified" },
+        { asset: "WBNB", code: "SESSION", message: "Underlying session not verified" },
+        { asset: "USDT", code: "SESSION", message: "Underlying session not verified" },
+        { code: "GENERAL", message: "General pool notice" },
+      ],
+    } satisfies WithdrawalQuote;
+
+    expect(relevantWithdrawalWarnings(quote).map((warning) => warning.message)).toEqual([
+      "Underlying session not verified",
+      "General pool notice",
+    ]);
   });
 
   it("validates sender, pool, value, balance, native selection, and expiry", () => {
