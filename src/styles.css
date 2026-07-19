@@ -370,6 +370,43 @@ code {
 .locked-card { display: grid; gap: .9rem; }
 .locked-card h2 { margin: .25rem 0 0; font-size: 1.15rem; overflow-wrap: anywhere; }
 
+.withdraw-layout { display: grid; gap: 1rem; }
+.withdraw-card {
+  min-width: 0;
+  padding: 1.1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  background: linear-gradient(145deg, rgb(25 33 54 / 94%), rgb(17 23 38 / 94%));
+}
+.withdraw-form { display: grid; gap: 1rem; }
+.withdraw-amount-control { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.withdraw-amount-control > span { color: var(--text-secondary); font-size: .78rem; font-weight: 750; }
+.share-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem; }
+.share-shortcuts button {
+  min-height: 2.75rem;
+  border: 1px solid rgb(124 140 255 / 38%);
+  border-radius: .65rem;
+  background: rgb(124 140 255 / 9%);
+  color: var(--text-primary);
+  font-size: .78rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.share-shortcuts button:disabled { opacity: .4; cursor: not-allowed; }
+.notice a { color: var(--info); }
+.quote-warnings { display: grid; gap: .4rem; }
+.quote-warnings ul { display: grid; gap: .3rem; margin: 0; padding-left: 1.15rem; }
+.native-toggle { display: flex; min-height: 2.75rem; align-items: center; gap: .65rem; color: var(--text-secondary); font-size: .82rem; font-weight: 700; }
+.native-toggle input { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
+.inline-action { justify-self: start; min-height: 2.25rem; padding: .35rem .65rem; border: 1px solid currentColor; border-radius: .55rem; background: transparent; color: inherit; font-weight: 750; cursor: pointer; }
+.withdraw-action { margin: 0; }
+.withdraw-outputs { display: grid; gap: .55rem; }
+.withdraw-output { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; padding: .75rem; border: 1px solid var(--border-subtle); border-radius: .7rem; background: rgb(9 13 24 / 28%); }
+.withdraw-output > div { display: grid; gap: .2rem; min-width: 0; }
+.withdraw-output > div:last-child { text-align: right; }
+.withdraw-output strong { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88rem; font-variant-numeric: tabular-nums; }
+.withdraw-output span { color: var(--text-tertiary); font-size: .7rem; }
+
 .faucet-layout { display: grid; gap: 1rem; }
 .faucet-card {
   min-width: 0;
@@ -438,11 +475,13 @@ code {
   .app-main { width: min(100%, 64rem); padding: 3rem 1.5rem 4rem; }
   .screen { max-width: 32rem; margin-inline: auto; }
   .screen.deposit-screen { max-width: none; }
+  .screen.withdraw-screen { max-width: none; }
   .screen.faucet-screen { max-width: none; }
   .deposit-layout { grid-template-columns: minmax(0, 1.45fr) minmax(17rem, .75fr); align-items: start; }
   .deposit-form { grid-row: span 2; }
   .quote-card { position: sticky; top: 7.5rem; }
   .locked-card { grid-column: 2; }
+  .withdraw-layout { grid-template-columns: minmax(0, 1.3fr) minmax(18rem, .8fr); align-items: start; }
   .faucet-layout { grid-template-columns: minmax(0, 1.45fr) minmax(17rem, .75fr); align-items: start; }
   .faucet-claim-card { grid-row: span 2; }
 }
