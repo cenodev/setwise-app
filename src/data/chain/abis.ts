@@ -107,4 +107,11 @@ export const setwisePoolAbi = [
     inputs: [],
     outputs: [{ name: "shares", type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "withdrawPortfolio",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
 ] as const;
