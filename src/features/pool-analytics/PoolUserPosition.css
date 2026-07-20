@@ -1,0 +1,22 @@
+.pool-user-section { display: grid; gap: 1rem; }
+.pool-user-card { display: grid; gap: 1rem; min-width: 0; padding: 1.1rem; border: 1px solid var(--border-subtle); border-radius: 1rem; background: linear-gradient(145deg, rgb(25 33 54 / 94%), rgb(17 23 38 / 94%)); }
+.pool-user-card h2 { margin: .3rem 0 0; font-size: 1.15rem; }
+.pool-user-card > p:not(.eyebrow), .pool-user-empty, .estimate-note { margin: 0; color: var(--text-secondary); font-size: .8rem; line-height: 1.5; }
+.pool-user-card--prompt .secondary-button { justify-self: start; }
+.pool-user-card--error { border-color: rgb(255 119 136 / 35%); background: linear-gradient(145deg, rgb(62 31 48 / 94%), rgb(27 19 31 / 94%)); }
+.pool-user-heading { display: flex; align-items: start; justify-content: space-between; gap: .75rem; }
+.estimate-label { flex: 0 0 auto; padding: .25rem .5rem; border-radius: 999px; background: rgb(124 140 255 / 12%); color: var(--accent-hover); font-size: .68rem; font-weight: 800; }
+.pool-user-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; margin: 0; }
+.pool-user-metrics div { display: grid; gap: .35rem; min-width: 0; padding: .8rem; border-radius: .75rem; background: rgb(9 13 24 / 35%); }
+.pool-user-metrics dt { color: var(--text-tertiary); font-size: .7rem; }
+.pool-user-metrics dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .86rem; font-variant-numeric: tabular-nums; }
+.estimate-note { color: var(--text-tertiary); font-size: .74rem; }
+.wallet-balance-list { display: grid; gap: .45rem; margin: 0; padding: 0; list-style: none; }
+.wallet-balance-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .75rem; padding: .75rem .1rem; border-bottom: 1px solid var(--border-subtle); font-size: .82rem; }
+.wallet-balance-list li:last-child { border-bottom: 0; }
+.wallet-balance-list li > span { min-width: 0; color: var(--text-primary); font-weight: 750; }
+.wallet-balance-list strong { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.wallet-balance-list small { color: var(--text-tertiary); font-size: .72rem; text-align: right; }
+.wallet-balance-list__native { border-radius: .65rem; background: rgb(114 183 255 / 8%); padding-inline: .65rem !important; }
+.wallet-balance-list__native span small { margin-left: .25rem; color: var(--info); }
+@media (min-width: 720px) { .pool-user-section { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .pool-user-card--prompt, .pool-user-card--error { grid-column: 1 / -1; } }
