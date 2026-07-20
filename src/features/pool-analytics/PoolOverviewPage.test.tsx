@@ -1,17 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 
-import { PoolOverviewPage } from "./PoolOverviewPage";
-
-const mocks = vi.hoisted(() => ({
-  pool: undefined as Record<string, unknown> | undefined,
-  poolError: null as Error | null,
-  poolFetching: false,
-  poolPending: false,
-  state: undefined as Record<string, unknown> | undefined,
-  stateError: null as Error | null,
-  stateFetching: false,
-  statePending: false,
-}));
+import type { Pool, PoolState } from "../../data/rfq/deposits";
+import { PoolOverviewPage, type PoolOverviewPageProps } from "./PoolOverviewPage";
 
 const poolAddress = "0x1111111111111111111111111111111111111111";
 
@@ -42,39 +32,23 @@ const state = {
   ],
 };
 
-vi.mock("@tanstack/react-query", () => ({
-  useQuery: (options: { queryKey: readonly unknown[] }) => {
-    const isPool = options.queryKey[0] === "pool";
-    return {
-      data: isPool ? mocks.pool : mocks.state,
-      error: isPool ? mocks.poolError : mocks.stateError,
-      isFetching: isPool ? mocks.poolFetching : mocks.stateFetching,
-      isPending: isPool ? mocks.poolPending : mocks.statePending,
-      refetch: vi.fn(),
-    };
-  },
-}));
+const defaultProps: PoolOverviewPageProps = {
+  error: null,
+  loading: false,
+  onRetry: vi.fn(),
+  online: true,
+  pool: pool as Pool,
+  refreshing: false,
+  state: state as PoolState,
+};
 
-function renderReady() {
-  mocks.pool = pool;
-  mocks.state = state;
-  render(<PoolOverviewPage />);
+function renderOverview(overrides: Partial<PoolOverviewPageProps> = {}) {
+  return render(<PoolOverviewPage {...defaultProps} {...overrides} />);
 }
 
 describe("PoolOverviewPage", () => {
-  beforeEach(() => {
-    mocks.pool = undefined;
-    mocks.state = undefined;
-    mocks.poolError = null;
-    mocks.stateError = null;
-    mocks.poolFetching = false;
-    mocks.stateFetching = false;
-    mocks.poolPending = false;
-    mocks.statePending = false;
-  });
-
   it("renders wallet-free headline metrics, timestamp, and contract-ordered reserve rows", () => {
-    renderReady();
+    renderOverview();
 
     expect(screen.getByText("$1000.01")).toBeInTheDocument();
     expect(screen.getByText("400.004")).toBeInTheDocument();
@@ -90,8 +64,13 @@ describe("PoolOverviewPage", () => {
   });
 
   it("shows a visible warning for drifted balances while retaining the server usable balance", () => {
-    state.assets[1] = { ...state.assets[1], actualAtomicBalance: "500000000", balanceStatus: "drifted" };
-    renderReady();
+    const driftedState = {
+      ...state,
+      assets: state.assets.map((assetState) => assetState.asset === "USDT"
+        ? { ...assetState, actualAtomicBalance: "500000000", balanceStatus: "drifted" }
+        : assetState),
+    } as PoolState;
+    renderOverview({ state: driftedState });
 
     expect(screen.getByRole("alert")).toHaveTextContent(/Reserve balance drift detected/);
     expect(screen.getByText("Drifted")).toBeInTheDocument();
@@ -100,25 +79,16 @@ describe("PoolOverviewPage", () => {
   });
 
   it("defines loading, empty, stale, and API-error states", () => {
-    mocks.poolPending = true;
-    mocks.statePending = true;
-    const { rerender } = render(<PoolOverviewPage />);
+    const { rerender } = render(<PoolOverviewPage {...defaultProps} loading pool={undefined} state={undefined} />);
     expect(screen.getByText(/Loading public pool overview/)).toBeInTheDocument();
 
-    mocks.poolPending = false;
-    mocks.statePending = false;
-    rerender(<PoolOverviewPage />);
-    expect(screen.getByText(/No public pool data yet/)).toBeInTheDocument();
+    rerender(<PoolOverviewPage {...defaultProps} error={new Error("Pool API unavailable")} pool={undefined} state={undefined} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Pool API unavailable");
 
-    mocks.pool = pool;
-    mocks.state = state;
-    mocks.poolFetching = true;
-    rerender(<PoolOverviewPage />);
+    rerender(<PoolOverviewPage {...defaultProps} refreshing />);
     expect(screen.getByRole("status")).toHaveTextContent(/Refreshing live pool data/);
 
-    mocks.poolFetching = false;
-    mocks.poolError = new Error("Pool API unavailable");
-    rerender(<PoolOverviewPage />);
-    expect(screen.getByRole("alert")).toHaveTextContent("Pool API unavailable");
+    rerender(<PoolOverviewPage {...defaultProps} online={false} pool={undefined} state={undefined} />);
+    expect(screen.getByRole("status")).toHaveTextContent("No saved pool snapshot is available offline");
   });
 });

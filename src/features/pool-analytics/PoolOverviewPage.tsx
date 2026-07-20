@@ -1,9 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import { runtimeConfig } from "../../config/env";
-import { poolQueryKeys } from "../../data/queryKeys";
-import { getPool, getPoolState, type Pool, type PoolAsset, type PoolState } from "../../data/rfq/deposits";
+import type { Pool, PoolAsset, PoolState } from "../../data/rfq/deposits";
 import {
   calculateCurrentAssetAllocation,
   calculateLpSharePrice,
@@ -18,6 +15,16 @@ import {
 type LiquidityRow = {
   asset: PoolAsset;
   state: PoolState["assets"][number];
+};
+
+export type PoolOverviewPageProps = {
+  error: Error | null;
+  loading: boolean;
+  onRetry: () => void;
+  online: boolean;
+  pool: Pool | undefined;
+  refreshing: boolean;
+  state: PoolState | undefined;
 };
 
 function trimTrailingZeros(value: string): string {
@@ -68,45 +75,47 @@ function healthLabel(status: PoolState["assets"][number]["balanceStatus"]): stri
   return status === "synced" ? "Healthy" : status[0].toUpperCase() + status.slice(1);
 }
 
-export function PoolOverviewPage() {
-  const poolQuery = useQuery({
-    queryKey: poolQueryKeys.discovery(runtimeConfig.poolId),
-    queryFn: ({ signal }) => getPool(runtimeConfig.poolId, signal),
-    staleTime: 15_000,
-  });
-  const poolStateQuery = useQuery({
-    queryKey: poolQueryKeys.state(runtimeConfig.poolId),
-    queryFn: ({ signal }) => getPoolState(runtimeConfig.poolId, signal),
-    staleTime: 15_000,
-  });
+export function PoolOverviewPage({
+  error,
+  loading,
+  onRetry,
+  online,
+  pool,
+  refreshing,
+  state,
+}: PoolOverviewPageProps) {
   const rows = useMemo(
-    () => poolQuery.data && poolStateQuery.data ? orderedLiquidityRows(poolQuery.data, poolStateQuery.data) : undefined,
-    [poolQuery.data, poolStateQuery.data],
+    () => pool && state ? orderedLiquidityRows(pool, state) : undefined,
+    [pool, state],
   );
-  const snapshotMismatch = poolQuery.data && poolStateQuery.data && (
-    poolQuery.data.id !== poolStateQuery.data.poolId
-    || poolQuery.data.chain.id !== poolStateQuery.data.chainId
-    || poolQuery.data.contract.address.toLowerCase() !== poolStateQuery.data.poolAddress.toLowerCase()
+  const snapshotMismatch = pool && state && (
+    pool.id !== state.poolId
+    || pool.chain.id !== state.chainId
+    || pool.contract.address.toLowerCase() !== state.poolAddress.toLowerCase()
     || !rows
   );
-  const loading = poolQuery.isPending || poolStateQuery.isPending;
-  const error = poolQuery.error ?? poolStateQuery.error;
-  const refreshing = Boolean(poolQuery.isFetching || poolStateQuery.isFetching);
-  const retry = () => { void poolQuery.refetch(); void poolStateQuery.refetch(); };
 
-  if (loading) {
+  if (!online && (!pool || !state)) {
+    return (
+      <section className="pool-card pool-status-card warning-panel" role="status">
+        <strong>No saved pool snapshot is available offline.</strong>
+        <span>Reconnect to load public pool reserves and wallet estimates.</span>
+      </section>
+    );
+  }
+  if (loading && (!pool || !state)) {
     return <section className="pool-card pool-status-card" aria-live="polite">Loading public pool overview…</section>;
   }
-  if (error || snapshotMismatch) {
+  if (!pool || !state || snapshotMismatch) {
     return (
       <section className="pool-card pool-status-card error-panel" role="alert">
         <strong>Couldn’t load a consistent public pool snapshot.</strong>
         <span>{error instanceof Error ? error.message : "The pool discovery and state data do not match."}</span>
-        <button className="inline-action" onClick={retry} type="button">Retry</button>
+        <button className="inline-action" disabled={!online} onClick={onRetry} type="button">Retry</button>
       </section>
     );
   }
-  if (!poolQuery.data || !poolStateQuery.data || !rows?.length) {
+  if (!rows?.length) {
     return (
       <section className="pool-card pool-status-card empty-card">
         <div className="empty-mark" aria-hidden="true">$</div>
@@ -116,8 +125,6 @@ export function PoolOverviewPage() {
     );
   }
 
-  const { data: pool } = poolQuery;
-  const { data: state } = poolStateQuery;
   const lpPrice = calculateLpSharePrice(state);
   const driftedAssets = rows.filter(({ state: assetState }) => assetState.balanceStatus === "drifted");
 

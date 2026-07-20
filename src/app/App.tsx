@@ -5,7 +5,7 @@ import { DepositPage } from "../features/deposit/DepositPage";
 import { FaucetPage } from "../features/faucet/FaucetPage";
 import { SwapPage } from "../features/swap/SwapPage";
 import { WithdrawPage } from "../features/withdraw/WithdrawPage";
-import { PoolOverviewPage } from "../features/pool-analytics/PoolOverviewPage";
+import { PoolPage } from "../features/pool-analytics/PoolPage";
 import { WalletGate } from "../features/wallet/WalletGate";
 import { AppShell } from "./AppShell";
 
@@ -21,7 +21,7 @@ export function App() {
               <h1>Pool overview</h1>
               <p>Track the pool’s total value, LP supply, and usable reserve liquidity without connecting a wallet.</p>
             </header>
-            <PoolOverviewPage />
+            <PoolPage />
             <aside className="disclosure" role="note">
               <strong>Testnet only.</strong> Reserve values are indicative and can change with market prices.
             </aside>

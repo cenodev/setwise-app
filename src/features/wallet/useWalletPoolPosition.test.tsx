@@ -17,6 +17,7 @@ vi.mock("wagmi", () => ({
 }));
 
 const account = "0x0000000000000000000000000000000000000001" as Address;
+const nextAccount = "0x0000000000000000000000000000000000000002" as Address;
 const poolAddress = "0x0000000000000000000000000000000000000010" as Address;
 const lpToken = "0x0000000000000000000000000000000000000011" as Address;
 const asset = "0x0000000000000000000000000000000000000020" as Address;
@@ -76,5 +77,34 @@ describe("useWalletPoolPosition", () => {
       },
       status: "ready",
     });
+  });
+
+  it("refreshes wallet reads after account and network changes", async () => {
+    const publicClient = {
+      chain: { id: 97 },
+      getBalance: vi.fn().mockResolvedValue(2n),
+      multicall: vi.fn().mockResolvedValue([3n, 4n, [0n, 0n], false]),
+    };
+    let connection = { address: account, chainId: 97, isConnected: true };
+    mocks.account.mockImplementation(() => connection);
+    mocks.publicClient.mockReturnValue(publicClient);
+
+    const { rerender, result } = renderHook(() => useWalletPoolPosition(pool, poolState), { wrapper });
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
+    expect(publicClient.multicall).toHaveBeenCalledOnce();
+
+    connection = { address: nextAccount, chainId: 97, isConnected: true };
+    rerender();
+    await waitFor(() => expect(publicClient.multicall).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.state).toMatchObject({ position: { account: nextAccount }, status: "ready" }));
+
+    connection = { address: nextAccount, chainId: 1, isConnected: true };
+    rerender();
+    expect(result.current.state).toMatchObject({ actualChainId: 1, status: "wrong-network" });
+
+    connection = { address: nextAccount, chainId: 97, isConnected: true };
+    rerender();
+    await waitFor(() => expect(publicClient.multicall).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(result.current.state.status).toBe("ready"));
   });
 });

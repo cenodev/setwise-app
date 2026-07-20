@@ -469,7 +469,22 @@ code {
 .withdraw-output span { color: var(--text-tertiary); font-size: .7rem; }
 
 .faucet-layout { display: grid; gap: 1rem; }
-.pool-overview { display: grid; gap: 1rem; }
+.pool-page, .pool-overview { display: grid; gap: 1rem; }
+.pool-stale-notice { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.pool-stale-notice strong { grid-column: 1; }
+.pool-stale-notice .inline-action { grid-column: 2; grid-row: 1 / span 2; }
+.pool-liquidity-note {
+  display: grid;
+  gap: .25rem;
+  padding: .85rem 1rem;
+  border-left: 3px solid var(--info);
+  border-radius: .35rem .7rem .7rem .35rem;
+  background: rgb(114 183 255 / 8%);
+  color: var(--text-secondary);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.pool-liquidity-note strong { color: var(--text-primary); }
 .pool-card {
   display: grid;
   gap: 1rem;
