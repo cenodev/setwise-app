@@ -50,7 +50,7 @@ export const swapQuoteSchema = z.object({
   indicativeQuoteId: z.string().min(1),
   quoteType: z.literal("indicative"),
   operation: z.literal("swap"),
-  intent: z.literal("exact-input"),
+  intent: z.enum(["exact-input", "exact-output"]),
   pricedAt: z.string().datetime(),
   validUntil: z.string().datetime(),
   stateSnapshot: stateSnapshotSchema.extend({ tradingPaused: z.boolean() }),
@@ -101,11 +101,18 @@ export const swapQuoteSchema = z.object({
     }),
     inventoryBefore: decimalSchema,
     inventoryAfterLowerBound: decimalSchema,
-    constraints: z.object({
-      curveOutputAtomic: atomicSchema,
-      fairValueOutputAtomic: atomicSchema,
-      externalGuardOutputAtomic: atomicSchema.nullable(),
-    }),
+    constraints: z.union([
+      z.object({
+        curveOutputAtomic: atomicSchema,
+        fairValueOutputAtomic: atomicSchema,
+        externalGuardOutputAtomic: atomicSchema.nullable(),
+      }),
+      z.object({
+        curveInputAtomic: atomicSchema,
+        fairValueInputAtomic: atomicSchema,
+        externalGuardInputAtomic: atomicSchema.nullable(),
+      }),
+    ]),
     venues: z.array(venueSchema),
   }),
   warnings: z.array(warningSchema),
@@ -143,7 +150,7 @@ export const firmSwapQuoteSchema = z.object({
   quoteType: z.literal("firm"),
   status: z.literal("executable"),
   operation: z.literal("swap"),
-  intent: z.literal("exact-input"),
+  intent: z.enum(["exact-input", "exact-output"]),
   createdAt: z.string().datetime(),
   mustSubmitBy: z.string().datetime(),
   executionDeadline: atomicSchema,
@@ -218,19 +225,24 @@ async function requestJson<T>(
   return parsed.data;
 }
 
+type SwapAmount =
+  | { inputAmount: string; outputAmount?: never }
+  | { inputAmount?: never; outputAmount: string };
+
 export function requestSwapQuote(input: {
-  inputAmount: string;
   inputAsset: string;
   outputAsset: string;
   signal?: AbortSignal;
-}): Promise<SwapQuote> {
+} & SwapAmount): Promise<SwapQuote> {
   return requestJson("/v1/quotes/swaps", swapQuoteSchema, {
     method: "POST",
     body: JSON.stringify({
       poolId: runtimeConfig.poolId,
       inputAsset: input.inputAsset,
       outputAsset: input.outputAsset,
-      inputAmount: input.inputAmount,
+      ...(input.inputAmount !== undefined
+        ? { inputAmount: input.inputAmount }
+        : { outputAmount: input.outputAmount }),
     }),
     signal: input.signal,
   });
@@ -238,14 +250,13 @@ export function requestSwapQuote(input: {
 
 export function requestFirmSwapQuote(input: {
   idempotencyKey: string;
-  inputAmount: string;
   inputAsset: string;
   inputNative: boolean;
   outputAsset: string;
   outputNative: boolean;
   payer: Address;
   recipient: Address;
-}): Promise<FirmSwapQuote> {
+} & SwapAmount): Promise<FirmSwapQuote> {
   return requestJson("/v1/firm-quotes/swaps", firmSwapQuoteSchema, {
     method: "POST",
     headers: { "Idempotency-Key": input.idempotencyKey },
@@ -253,7 +264,9 @@ export function requestFirmSwapQuote(input: {
       poolId: runtimeConfig.poolId,
       inputAsset: input.inputAsset,
       outputAsset: input.outputAsset,
-      inputAmount: input.inputAmount,
+      ...(input.inputAmount !== undefined
+        ? { inputAmount: input.inputAmount }
+        : { outputAmount: input.outputAmount }),
       payer: input.payer,
       recipient: input.recipient,
       inputNative: input.inputNative,

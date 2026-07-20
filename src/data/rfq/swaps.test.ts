@@ -127,6 +127,31 @@ describe("swap RFQ client", () => {
     expect(JSON.parse(init.body)).toMatchObject({ inputAmount: "10", inputAsset: "USDT", outputAsset: "TOKEN" });
   });
 
+  it("posts and validates an exact-output indicative request", async () => {
+    const exactOutput = {
+      ...indicative(),
+      intent: "exact-output",
+      pricing: {
+        ...indicative().pricing,
+        constraints: {
+          curveInputAtomic: venue.input.atomicAmount,
+          externalGuardInputAtomic: null,
+          fairValueInputAtomic: venue.input.atomicAmount,
+        },
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(response(exactOutput));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const quote = await requestSwapQuote({ inputAsset: "USDT", outputAmount: "2", outputAsset: "TOKEN" });
+
+    expect(quote.intent).toBe("exact-output");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    if (typeof init.body !== "string") throw new Error("Expected a JSON request body");
+    expect(JSON.parse(init.body)).toMatchObject({ inputAsset: "USDT", outputAmount: "2", outputAsset: "TOKEN" });
+    expect(JSON.parse(init.body)).not.toHaveProperty("inputAmount");
+  });
+
   it("sends native flags, both wallet roles, and a fresh idempotency header for firm quotes", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(firm()));
     vi.stubGlobal("fetch", fetchMock);
@@ -138,6 +163,18 @@ describe("swap RFQ client", () => {
     expect(new Headers(init.headers).get("Idempotency-Key")).toBe("swap:test");
     if (typeof init.body !== "string") throw new Error("Expected a JSON request body");
     expect(JSON.parse(init.body)).toMatchObject({ inputNative: false, outputNative: false, payer, recipient: payer });
+  });
+
+  it("sends the fixed output amount for exact-output firm quotes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ ...firm(), intent: "exact-output" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestFirmSwapQuote({ idempotencyKey: "swap:output", inputAsset: "USDT", inputNative: false, outputAmount: "2", outputAsset: "TOKEN", outputNative: false, payer, recipient: payer });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    if (typeof init.body !== "string") throw new Error("Expected a JSON request body");
+    expect(JSON.parse(init.body)).toMatchObject({ outputAmount: "2" });
+    expect(JSON.parse(init.body)).not.toHaveProperty("inputAmount");
   });
 
   it("rejects incomplete indicative and firm responses at the runtime boundary", async () => {
