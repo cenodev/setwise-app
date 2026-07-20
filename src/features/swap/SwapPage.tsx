@@ -30,6 +30,7 @@ import {
 
 type AssetChainState = { allowance: bigint; balance: bigint };
 type ChainSwapState = { assets: Record<string, AssetChainState>; nativeBalance: bigint };
+type SwapIntent = SwapQuote["intent"];
 
 type TransactionStage =
   | "editing"
@@ -118,6 +119,7 @@ export function SwapPage() {
   const [outputAssetId, setOutputAssetId] = useState("");
   const [inputNative, setInputNative] = useState(false);
   const [outputNative, setOutputNative] = useState(false);
+  const [intent, setIntent] = useState<SwapIntent>("exact-input");
   const [amount, setAmount] = useState("");
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [quoteRequestKey, setQuoteRequestKey] = useState("");
@@ -166,6 +168,7 @@ export function SwapPage() {
     && isWrappedNativeAsset(outputAsset, wrappedNativeToken));
   const effectiveInputNative = inputNativeEligible && inputNative;
   const effectiveOutputNative = outputNativeEligible && outputNative;
+  const exactOutputSupported = Boolean(poolQuery.data?.capabilities?.swaps.exactOutput);
 
   const chainQuery = useQuery({
     queryKey: ["swap-chain", address, poolQuery.data?.contract.address, ...assets.map((asset) => asset.address)],
@@ -198,22 +201,27 @@ export function SwapPage() {
     ? 0n
     : (chainQuery.data?.assets[effectiveInputAssetId]?.allowance ?? 0n);
   const amountError = (() => {
-    if (!inputAsset) return "Choose an input asset";
-    const error = decimalInputError(amount, inputAsset.decimals);
+    const specifiedAsset = intent === "exact-input" ? inputAsset : outputAsset;
+    if (!specifiedAsset) return `Choose an ${intent === "exact-input" ? "input" : "output"} asset`;
+    const error = decimalInputError(amount, specifiedAsset.decimals);
     if (error) return error;
-    return decimalToAtomic(amount, inputAsset.decimals) > 0n ? null : "Amount must be greater than zero";
+    return decimalToAtomic(amount, specifiedAsset.decimals) > 0n ? null : "Amount must be greater than zero";
   })();
-  const amountAtomic = amountError || !inputAsset ? 0n : decimalToAtomic(amount, inputAsset.decimals);
+  const specifiedAsset = intent === "exact-input" ? inputAsset : outputAsset;
+  const amountAtomic = amountError || !specifiedAsset ? 0n : decimalToAtomic(amount, specifiedAsset.decimals);
   const pairSupported = Boolean(inputAsset && outputAsset
     && isSupportedSwapPair(poolQuery.data?.pairs, inputAsset.id, outputAsset.id));
   const maximumInput = maximumSwapInput(inputBalance, effectiveInputNative, gasReserve);
-  const insufficientBalance = amountAtomic > maximumInput;
   const insufficientGas = Boolean(chainQuery.data && chainQuery.data.nativeBalance < gasReserve);
   const tradingPaused = Boolean(poolStateQuery.data?.trading.paused);
-  const currentRequestKey = `${effectiveInputAssetId}:${effectiveOutputAssetId}:${amount}`;
-  const quoteMatchesInput = quoteRequestKey === currentRequestKey;
+  const currentRequestKey = `${intent}:${effectiveInputAssetId}:${effectiveOutputAssetId}:${amount}`;
+  const quoteMatchesDraft = quoteRequestKey === currentRequestKey;
   const quoteFresh = Boolean(quote && Date.parse(quote.validUntil) > now);
-  const needsApproval = !effectiveInputNative && amountAtomic > allowance;
+  const requiredInputAtomic = quoteMatchesDraft && quote
+    ? BigInt(quote.input.atomicAmount)
+    : intent === "exact-input" ? amountAtomic : 0n;
+  const insufficientBalance = requiredInputAtomic > maximumInput;
+  const needsApproval = !effectiveInputNative && requiredInputAtomic > allowance;
   const busy = ["approval-wallet", "approval-confirming", "firm-quote", "wallet", "confirming"].includes(transaction.stage);
 
   const clearExecutable = useCallback(() => {
@@ -234,7 +242,7 @@ export function SwapPage() {
 
   useEffect(() => {
     const sequence = ++quoteSequence.current;
-    if (!online || !poolQuery.data || !inputAsset || !outputAsset || amountError || amountAtomic <= 0n
+    if (busy || !online || !poolQuery.data || !inputAsset || !outputAsset || amountError || amountAtomic <= 0n
       || !pairSupported || tradingPaused) {
       const reset = window.setTimeout(() => {
         setQuoteLoading(false);
@@ -252,15 +260,17 @@ export function SwapPage() {
       setQuoteError(null);
     }, 0);
     const requestTimer = window.setTimeout(() => {
+      const amountRequest = intent === "exact-input" ? { inputAmount: amount } : { outputAmount: amount };
       void requestSwapQuote({
-        inputAmount: amount,
+        ...amountRequest,
         inputAsset: inputAsset.id,
         outputAsset: outputAsset.id,
         signal: controller.signal,
       }).then((nextQuote) => {
         if (sequence !== quoteSequence.current || controller.signal.aborted) return;
         validateIndicativeSwap({
-          amountAtomic,
+          specifiedAmountAtomic: amountAtomic,
+          intent,
           chainId: requiredChainId,
           inputAsset,
           outputAsset,
@@ -283,7 +293,7 @@ export function SwapPage() {
       window.clearTimeout(loadingTimer);
       window.clearTimeout(requestTimer);
     };
-  }, [amount, amountAtomic, amountError, currentRequestKey, inputAsset, online, outputAsset, pairSupported,
+  }, [amount, amountAtomic, amountError, busy, currentRequestKey, inputAsset, intent, online, outputAsset, pairSupported,
     poolQuery.data, quoteRefresh, tradingPaused]);
 
   useEffect(() => {
@@ -323,7 +333,7 @@ export function SwapPage() {
   }, [executionContext, transaction.stage]);
 
   const canReview = Boolean(
-    address && chainId === requiredChainId && publicClient && quote && quoteFresh && quoteMatchesInput
+    address && chainId === requiredChainId && publicClient && quote && quoteFresh && quoteMatchesDraft
     && !quoteLoading && online && !busy && !amountError && pairSupported && !insufficientBalance
     && !insufficientGas && !tradingPaused,
   );
@@ -355,13 +365,14 @@ export function SwapPage() {
       const latestBalance = effectiveInputNative
         ? latestChain.data.nativeBalance
         : (latestChain.data.assets[inputAsset.id]?.balance ?? 0n);
-      if (amountAtomic > maximumSwapInput(latestBalance, effectiveInputNative, gasReserve)) {
+      const quotedInputAtomic = BigInt(quote.input.atomicAmount);
+      if (quotedInputAtomic > maximumSwapInput(latestBalance, effectiveInputNative, gasReserve)) {
         throw new Error(`Insufficient ${effectiveInputNative ? "BNB after gas reserve" : inputAsset.symbol} balance`);
       }
       if (latestChain.data.nativeBalance < gasReserve) throw new Error("Insufficient BNB for gas");
 
       let latestAllowance = effectiveInputNative ? 0n : (latestChain.data.assets[inputAsset.id]?.allowance ?? 0n);
-      if (!effectiveInputNative && latestAllowance < amountAtomic) {
+      if (!effectiveInputNative && latestAllowance < quotedInputAtomic) {
         approving = true;
         setTransaction({ stage: "approval-wallet" });
         const approvalHash = await writeContractAsync({
@@ -369,14 +380,14 @@ export function SwapPage() {
           address: inputAsset.address,
           abi: erc20Abi,
           functionName: "approve",
-          args: [poolQuery.data.contract.address, amountAtomic],
+          args: [poolQuery.data.contract.address, quotedInputAtomic],
         });
         setTransaction({ stage: "approval-confirming", approvalHash });
         const approvalReceipt = await publicClient.waitForTransactionReceipt({ hash: approvalHash });
         if (approvalReceipt.status !== "success") throw new Error("Token approval reverted on chain");
         const approvedChain = await chainQuery.refetch();
         latestAllowance = approvedChain.data?.assets[inputAsset.id]?.allowance ?? 0n;
-        if (latestAllowance < amountAtomic) throw new Error("Approval confirmed, but the required allowance is not available yet. Retry the chain read.");
+        if (latestAllowance < quotedInputAtomic) throw new Error("Approval confirmed, but the required allowance is not available yet. Retry the chain read.");
         approving = false;
       }
 
@@ -386,9 +397,10 @@ export function SwapPage() {
         throw new Error("Wallet, network, or connectivity changed before the executable quote request");
       }
       setTransaction({ stage: "firm-quote" });
+      const amountRequest = intent === "exact-input" ? { inputAmount: amount } : { outputAmount: amount };
       const firm = await requestFirmSwapQuote({
+        ...amountRequest,
         idempotencyKey: createSwapIdempotencyKey(),
-        inputAmount: amount,
         inputAsset: inputAsset.id,
         inputNative: effectiveInputNative,
         outputAsset: outputAsset.id,
@@ -396,6 +408,15 @@ export function SwapPage() {
         payer: address,
         recipient: address,
       });
+      const firmInputAtomic = BigInt(firm.input.atomicAmount);
+      if (intent === "exact-output"
+        && (firmInputAtomic > maximumSwapInput(latestBalance, effectiveInputNative, gasReserve)
+          || (!effectiveInputNative && firmInputAtomic > latestAllowance))) {
+        setQuote(null);
+        setQuoteRequestKey("");
+        setQuoteRefresh((value) => value + 1);
+        throw new Error("The required input changed while preparing the exact-output swap. Review the refreshed estimate.");
+      }
       validateFirmSwap({
         address,
         allowance: latestAllowance,
@@ -466,7 +487,7 @@ export function SwapPage() {
       setTransaction({ stage: "editing" });
       return;
     }
-    if (transaction.stage === "expired" || !quoteFresh || !quoteMatchesInput) {
+    if (transaction.stage === "expired" || !quoteFresh || !quoteMatchesDraft) {
       setFirmQuote(null);
       setTransaction({ stage: "editing" });
       setQuoteRefresh((value) => value + 1);
@@ -499,6 +520,15 @@ export function SwapPage() {
     setOutputNative(effectiveInputNative);
     setAmount("");
     setQuote(null);
+    clearExecutable();
+  }
+
+  function chooseIntent(nextIntent: SwapIntent) {
+    if (nextIntent === intent) return;
+    setIntent(nextIntent);
+    setAmount("");
+    setQuote(null);
+    setQuoteRequestKey("");
     clearExecutable();
   }
 
@@ -536,7 +566,7 @@ export function SwapPage() {
     ?? (insufficientBalance ? `Insufficient ${effectiveInputNative ? "BNB after gas reserve" : inputAsset?.symbol ?? "input"} balance` : null)
     ?? (tradingPaused ? "Trading is paused" : null)
     ?? (!online ? "Offline — reconnect to continue" : null)
-    ?? (quoteLoading || !quoteMatchesInput ? "Refreshing the estimate" : null)
+    ?? (quoteLoading || !quoteMatchesDraft ? "Refreshing the estimate" : null)
     ?? (!quoteFresh ? "The estimate is stale and refreshing" : null)
     ?? quoteError;
   const displayQuote = firmQuote ?? quote;
@@ -544,6 +574,13 @@ export function SwapPage() {
   return (
     <div className="swap-layout">
       <section className="swap-card swap-form" aria-labelledby="swap-form-title">
+        <div className="mode-tabs" aria-label="Swap amount mode">
+          <button type="button" className={intent === "exact-input" ? "is-active" : ""}
+            disabled={busy || transaction.stage === "review"} onClick={() => chooseIntent("exact-input")}>Exact input</button>
+          <button type="button" className={intent === "exact-output" ? "is-active" : ""}
+            disabled={busy || transaction.stage === "review" || !exactOutputSupported}
+            onClick={() => chooseIntent("exact-output")}>Exact output</button>
+        </div>
         <div className="swap-assets">
           <div className="asset-input-card">
             <div className="amount-heading">
@@ -565,19 +602,25 @@ export function SwapPage() {
                 <span>Pay with native BNB</span>
               </label>
             )}
-            <div className="amount-control">
-              <input aria-label="You pay amount" inputMode="decimal" placeholder="0.0" disabled={busy || transaction.stage === "review"}
-                value={amount} onChange={(event) => {
-                  if (/^\d*\.?\d*$/.test(event.target.value)) {
-                    setAmount(event.target.value);
-                    clearExecutable();
-                  }
-                }} />
-              <button type="button" disabled={busy || transaction.stage === "review" || maximumInput === 0n}
-                onClick={() => { setAmount(atomicToDecimal(maximumInput, inputAsset?.decimals ?? 18)); clearExecutable(); }}>Max</button>
-            </div>
+            {intent === "exact-input" ? (
+              <div className="amount-control">
+                <input aria-label="You pay amount" inputMode="decimal" placeholder="0.0" disabled={busy || transaction.stage === "review"}
+                  value={amount} onChange={(event) => {
+                    if (/^\d*\.?\d*$/.test(event.target.value)) {
+                      setAmount(event.target.value);
+                      clearExecutable();
+                    }
+                  }} />
+                <button type="button" disabled={busy || transaction.stage === "review" || maximumInput === 0n}
+                  onClick={() => { setAmount(atomicToDecimal(maximumInput, inputAsset?.decimals ?? 18)); clearExecutable(); }}>Max</button>
+              </div>
+            ) : (
+              <div className="swap-output-amount" aria-label="You pay amount">
+                {displayQuote?.input.amount ?? "—"} <span>{effectiveInputNative ? "BNB" : inputAsset?.symbol}</span>
+              </div>
+            )}
             {effectiveInputNative && <p className="quote-note">Gas reserved: {runtimeConfig.nativeGasReserveBnb} BNB.</p>}
-            {amount && amountError && <p className="field-error">{amountError}</p>}
+            {intent === "exact-input" && amount && amountError && <p className="field-error">{amountError}</p>}
             {insufficientBalance && <p className="field-error">Insufficient {effectiveInputNative ? "BNB after gas reserve" : inputAsset?.symbol} balance.</p>}
           </div>
 
@@ -601,9 +644,22 @@ export function SwapPage() {
                 <span>Receive native BNB</span>
               </label>
             )}
-            <div className="swap-output-amount" aria-label="You receive amount">
-              {displayQuote?.output.amount ?? "—"} <span>{effectiveOutputNative ? "BNB" : outputAsset?.symbol}</span>
-            </div>
+            {intent === "exact-output" ? (
+              <div className="amount-control">
+                <input aria-label="You receive amount" inputMode="decimal" placeholder="0.0" disabled={busy || transaction.stage === "review"}
+                  value={amount} onChange={(event) => {
+                    if (/^\d*\.?\d*$/.test(event.target.value)) {
+                      setAmount(event.target.value);
+                      clearExecutable();
+                    }
+                  }} />
+              </div>
+            ) : (
+              <div className="swap-output-amount" aria-label="You receive amount">
+                {displayQuote?.output.amount ?? "—"} <span>{effectiveOutputNative ? "BNB" : outputAsset?.symbol}</span>
+              </div>
+            )}
+            {intent === "exact-output" && amount && amountError && <p className="field-error">{amountError}</p>}
           </div>
         </div>
 
@@ -630,7 +686,7 @@ export function SwapPage() {
             <ul>{quoteWarnings.map((warning) => <li key={`${warning.code}:${warning.message}`}>{warning.message}</li>)}</ul>
           </div>
         )}
-        {!effectiveInputNative && amountAtomic > 0n && (
+        {!effectiveInputNative && requiredInputAtomic > 0n && (
           <div className="approval-list" aria-label="Approval requirement">
             <h3>Token approval</h3>
             <div className="approval-row">
@@ -640,7 +696,7 @@ export function SwapPage() {
                   : needsApproval ? "exact approval needed" : "sufficient"}</span>
               {transaction.approvalHash && <a href={`${runtimeConfig.explorerUrl}/tx/${transaction.approvalHash}`} target="_blank" rel="noreferrer">View</a>}
             </div>
-            <p>Only the exact reviewed input is approved. Approval must confirm before the executable quote is requested.</p>
+            <p>Only the reviewed required input is approved. If exact-output pricing moves above it, refresh and approve the new amount.</p>
           </div>
         )}
         {firmSeconds !== null && (transaction.stage === "wallet" || transaction.stage === "confirming") && (
@@ -665,23 +721,23 @@ export function SwapPage() {
         {displayQuote ? (
           <>
             <div className="quote-share">
-              <span>{firmQuote ? "Quoted receive" : "Estimated receive"}</span>
+              <span>{intent === "exact-output" ? "Exact receive" : firmQuote ? "Quoted receive" : "Estimated receive"}</span>
               <strong>{displayQuote.output.amount} {effectiveOutputNative ? "BNB" : outputAsset?.symbol}</strong>
             </div>
             {quote && <dl className="quote-details">
-              <div><dt>Exact input</dt><dd>{quote.input.amount} {effectiveInputNative ? "BNB" : inputAsset?.symbol} · ${quote.economics.inputValueUsd}</dd></div>
-              <div><dt>Exact output</dt><dd>{displayQuote.output.amount} {effectiveOutputNative ? "BNB" : outputAsset?.symbol} · ${quote.economics.outputValueUsd}</dd></div>
+              <div><dt>{intent === "exact-input" ? "Exact input" : "Required input"}</dt><dd>{displayQuote.input.amount} {effectiveInputNative ? "BNB" : inputAsset?.symbol} · ${quote.economics.inputValueUsd}</dd></div>
+              <div><dt>{intent === "exact-output" ? "Exact output" : "Estimated output"}</dt><dd>{displayQuote.output.amount} {effectiveOutputNative ? "BNB" : outputAsset?.symbol} · ${quote.economics.outputValueUsd}</dd></div>
               <div><dt>Effective rate</dt><dd>1 {effectiveInputNative ? "BNB" : inputAsset?.symbol} = {quote.economics.effectiveRate} {effectiveOutputNative ? "BNB" : outputAsset?.symbol}</dd></div>
               <div><dt>Fair rate</dt><dd>{quote.economics.fairRate} {effectiveOutputNative ? "BNB" : outputAsset?.symbol}</dd></div>
               <div className={quote.economics.priceImpactBps > 100 ? "is-warning" : ""}><dt>Price impact</dt><dd>{quote.economics.priceImpactBps / 100}%</dd></div>
               <div><dt>Pool fee</dt><dd>{quote.economics.fee.bps / 100}% · {atomicToDecimal(BigInt(quote.economics.fee.indicativeAtomicAmount), inputAsset?.decimals ?? 18)} {inputAsset?.symbol}</dd></div>
               <div><dt>Venue status</dt><dd>{quote.pricing.venues.length === 0 ? "Pool only" : quote.pricing.venues.some((venue) => venue.eligible) ? "External guard eligible" : "External guard unavailable"}</dd></div>
-              <div><dt>Indicative freshness</dt><dd>{quoteFresh && quoteMatchesInput ? `${indicativeSeconds ?? 0}s` : "Refreshing…"}</dd></div>
+              <div><dt>Indicative freshness</dt><dd>{quoteFresh && quoteMatchesDraft ? `${indicativeSeconds ?? 0}s` : "Refreshing…"}</dd></div>
               {firmSeconds !== null && <div className={firmSeconds <= 3 ? "is-warning" : ""}><dt>Firm quote</dt><dd>Confirm within {firmSeconds}s</dd></div>}
             </dl>}
             <p className="quote-note">Indicative estimates are never executable. The signed transaction is requested only after review and approval.</p>
           </>
-        ) : <p>{quoteLoading ? "Getting an indicative price…" : "Enter an exact input amount to see an estimate."}</p>}
+        ) : <p>{quoteLoading ? "Getting an indicative price…" : `Enter an exact ${intent === "exact-input" ? "input" : "output"} amount to see an estimate.`}</p>}
       </aside>
     </div>
   );

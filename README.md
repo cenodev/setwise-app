@@ -19,7 +19,7 @@ The prototype enables only BSC Testnet (chain ID `97`) and external wallets. App
 The app uses the deployed Setwise RFQ API and its no-BNB testnet pool by default. Set `VITE_RFQ_API_URL` or
 `VITE_POOL_ID` only when intentionally testing another deployment.
 
-`/swap` discovers enabled pairs from that API, requests cancellation-safe exact-input estimates, confirms exact ERC-20
+`/swap` discovers enabled pairs from that API, requests cancellation-safe exact-input or exact-output estimates, confirms exact ERC-20
 approvals before requesting executable calldata, and validates every firm quote before opening the wallet. Native BNB
 input/output controls appear automatically when a discovered pool includes its wrapped native asset and advertises
 native support. `VITE_NATIVE_GAS_RESERVE_BNB` configures the amount retained by native-input Max calculations (default

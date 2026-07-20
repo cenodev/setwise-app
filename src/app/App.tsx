@@ -18,7 +18,7 @@ export function App() {
             <header className="screen-header">
               <p className="eyebrow">Trade</p>
               <h1>Swap assets</h1>
-              <p>Exchange supported pool assets using an exact-input quote on BSC Testnet.</p>
+              <p>Exchange supported pool assets using exact-input or exact-output quotes on BSC Testnet.</p>
             </header>
             <WalletGate><SwapPage /></WalletGate>
             <aside className="disclosure" role="note">

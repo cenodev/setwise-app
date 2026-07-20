@@ -35,7 +35,7 @@ const assets = [
 
 const pool = {
   assets,
-  capabilities: { nativeAsset: true, swaps: { exactInput: true, firm: true, indicative: true } },
+  capabilities: { nativeAsset: true, swaps: { exactInput: true, exactOutput: true, firm: true, indicative: true } },
   chain: { id: 97, name: "BSC Testnet" },
   contract: { address: poolAddress },
   id: "bstock-ai-no-bnb-bsc-testnet",
@@ -68,9 +68,17 @@ function chainData() {
   };
 }
 
-function indicative(inputAsset: string, outputAsset: string, inputAmount: string) {
-  const inputAtomic = BigInt(inputAmount.replace(".", "").padEnd(inputAmount.includes(".") ? 19 : inputAmount.length + 18, "0"));
-  const outputAtomic = inputAtomic * 2n;
+function indicative(
+  inputAsset: string,
+  outputAsset: string,
+  specifiedAmount: string,
+  intent: "exact-input" | "exact-output" = "exact-input",
+) {
+  const specifiedAtomic = BigInt(specifiedAmount.replace(".", "").padEnd(specifiedAmount.includes(".") ? 19 : specifiedAmount.length + 18, "0"));
+  const inputAtomic = intent === "exact-input" ? specifiedAtomic : specifiedAtomic / 2n;
+  const outputAtomic = intent === "exact-input" ? specifiedAtomic * 2n : specifiedAtomic;
+  const inputAmount = intent === "exact-input" ? specifiedAmount : (Number(specifiedAmount) / 2).toString();
+  const outputAmount = intent === "exact-input" ? (Number(specifiedAmount) * 2).toString() : specifiedAmount;
   const now = Date.now();
   return {
     economics: {
@@ -78,15 +86,15 @@ function indicative(inputAsset: string, outputAsset: string, inputAmount: string
       fairRate: "2.01",
       fee: { asset: inputAsset, bps: 10, indicativeAtomicAmount: (inputAtomic / 1_000n).toString(), type: "curve-input-adjustment" },
       inputValueUsd: `${inputAmount}.00`,
-      outputValueUsd: `${Number(inputAmount) * 2}.00`,
+      outputValueUsd: `${outputAmount}.00`,
       priceImpactBps: 5,
     },
     indicativeQuoteId: `indicative-${inputAmount}`,
     input: { amount: inputAmount, asset: inputAsset, atomicAmount: inputAtomic.toString(), decimals: 18 },
-    intent: "exact-input",
+    intent,
     marketSnapshot: [],
     operation: "swap",
-    output: { amount: (Number(inputAmount) * 2).toString(), asset: outputAsset, atomicAmount: outputAtomic.toString(), decimals: 18 },
+    output: { amount: outputAmount, asset: outputAsset, atomicAmount: outputAtomic.toString(), decimals: 18 },
     pricedAt: new Date(now).toISOString(),
     pricing: { venues: [] },
     quoteType: "indicative",
@@ -97,14 +105,18 @@ function indicative(inputAsset: string, outputAsset: string, inputAmount: string
 }
 
 function firm(input: {
-  inputAmount: string;
+  inputAmount?: string;
   inputAsset: string;
   inputNative: boolean;
   outputAsset: string;
+  outputAmount?: string;
   outputNative: boolean;
   payer: string;
 }, expired = false) {
-  const preview = indicative(input.inputAsset, input.outputAsset, input.inputAmount);
+  const intent = input.inputAmount !== undefined ? "exact-input" : "exact-output";
+  const specifiedAmount = input.inputAmount ?? input.outputAmount;
+  if (specifiedAmount === undefined) throw new Error("Firm request needs an input or output amount");
+  const preview = indicative(input.inputAsset, input.outputAsset, specifiedAmount, intent);
   const inputMetadata = assets.find((asset) => asset.id === input.inputAsset)!;
   const outputMetadata = assets.find((asset) => asset.id === input.outputAsset)!;
   const deadline = Math.floor(Date.now() / 1_000) + (expired ? -1 : 60);
@@ -126,7 +138,7 @@ function firm(input: {
     firmQuoteId: quoteId,
     guard: { inputTolerancePpm: "5000", maximumInputBalance: "1", minimumOutputBalance: "1", offchainInputBalance: "1", offchainOutputBalance: "1", outputTolerancePpm: "5000", packedDeadline: "123" },
     input: preview.input,
-    intent: "exact-input",
+    intent,
     mustSubmitBy: new Date(deadline * 1_000).toISOString(),
     operation: "swap",
     output: preview.output,
@@ -202,9 +214,11 @@ describe("SwapPage", () => {
     mocks.chainRefetch.mockReset().mockImplementation(() => Promise.resolve({ data: chainData() }));
     mocks.poolStateRefetch.mockReset().mockImplementation(() => Promise.resolve({ data: poolState() }));
     mocks.requestSwapQuote.mockReset().mockImplementation(({
-      inputAmount, inputAsset, outputAsset,
-    }: { inputAmount: string; inputAsset: string; outputAsset: string }) =>
-      Promise.resolve(indicative(inputAsset, outputAsset, inputAmount)));
+      inputAmount, inputAsset, outputAmount, outputAsset,
+    }: { inputAmount?: string; inputAsset: string; outputAmount?: string; outputAsset: string }) => {
+      const intent = inputAmount !== undefined ? "exact-input" : "exact-output";
+      return Promise.resolve(indicative(inputAsset, outputAsset, inputAmount ?? outputAmount ?? "", intent));
+    });
     mocks.requestFirmSwapQuote.mockReset().mockImplementation((input: Parameters<typeof firm>[0]) => Promise.resolve(firm(input)));
     mocks.writeContract.mockReset().mockImplementation(({ address, args }: { address: string; args: readonly [string, bigint] }) => {
       const asset = assets.find((candidate) => candidate.address === address)!;
@@ -255,6 +269,32 @@ describe("SwapPage", () => {
     expect(mocks.updateActivity).toHaveBeenCalledWith("activity-1", expect.objectContaining({ hash: swapHash, status: "success" }));
     expect(mocks.chainRefetch.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(mocks.poolStateRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("quotes and executes a user-specified exact output", async () => {
+    render(<MemoryRouter><SwapPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Exact output" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "You receive amount" }), { target: { value: "20" } });
+
+    const review = await screen.findByRole("button", { name: "Review swap" });
+    await waitFor(() => expect(review).toBeEnabled());
+    expect(mocks.requestSwapQuote).toHaveBeenCalledWith(expect.objectContaining({
+      inputAsset: "USDT",
+      outputAmount: "20",
+      outputAsset: "TOKEN",
+    }));
+    expect(mocks.requestSwapQuote.mock.calls[0]?.[0]).not.toHaveProperty("inputAmount");
+    expect(screen.getByLabelText("You pay amount")).toHaveTextContent("10 USDT");
+
+    await executeReviewedSwap(review);
+
+    await screen.findByRole("button", { name: "New swap" });
+    expect(mocks.writeContract).toHaveBeenCalledWith(expect.objectContaining({
+      args: [poolAddress, 10n * 10n ** 18n],
+    }));
+    expect(mocks.requestFirmSwapQuote).toHaveBeenCalledWith(expect.objectContaining({ outputAmount: "20" }));
+    expect(mocks.requestFirmSwapQuote.mock.calls[0]?.[0]).not.toHaveProperty("inputAmount");
+    expect(mocks.sendTransaction).toHaveBeenCalled();
   });
 
   it("skips approval for native input and submits the API's exact native transaction value", async () => {
