@@ -38,7 +38,7 @@ body {
 
 button, a { -webkit-tap-highlight-color: transparent; }
 button, input { font: inherit; }
-button:focus-visible, a:focus-visible {
+button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid var(--border-strong);
   outline-offset: 3px;
 }
@@ -505,6 +505,7 @@ code {
 .pool-metrics dd span { color: var(--text-secondary); font-family: inherit; font-size: .75rem; }
 .pool-refreshing { margin: 0; color: var(--info); font-size: .78rem; text-align: right; }
 .pool-table-scroll { overflow-x: auto; margin-inline: -.2rem; padding-bottom: .2rem; }
+.pool-table-scroll:focus-visible { outline: 2px solid var(--border-strong); outline-offset: 3px; }
 .pool-table { width: 100%; min-width: 56rem; border-collapse: collapse; font-size: .76rem; }
 .pool-table th, .pool-table td { padding: .75rem .6rem; border-bottom: 1px solid var(--border-subtle); text-align: right; white-space: nowrap; }
 .pool-table thead th { color: var(--text-tertiary); font-size: .68rem; font-weight: 750; }
@@ -517,6 +518,13 @@ code {
 .pool-health--synced { background: rgb(93 213 167 / 12%); color: var(--success); }
 .pool-health--drifted, .pool-health--deficit { background: rgb(255 119 136 / 12%); color: var(--critical); }
 .pool-health--surplus { background: rgb(242 189 91 / 12%); color: var(--warning); }
+@media (max-width: 519px) {
+  .pool-section-heading { display: grid; gap: .45rem; }
+  .pool-section-heading > p { max-width: none; text-align: left; }
+  .pool-metrics { grid-template-columns: 1fr; }
+  .pool-stale-notice { grid-template-columns: 1fr; }
+  .pool-stale-notice .inline-action { grid-column: 1; grid-row: auto; }
+}
 .faucet-card {
   min-width: 0;
   padding: 1.1rem;

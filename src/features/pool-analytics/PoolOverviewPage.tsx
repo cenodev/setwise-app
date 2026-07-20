@@ -152,8 +152,9 @@ export function PoolOverviewPage({
           <div><p className="eyebrow">Reserve composition</p><h2 id="pool-liquidity-title">Pool liquidity</h2></div>
           <p>Balances and reserve values are supplied by the pool server.</p>
         </div>
-        <div className="pool-table-scroll">
+        <div className="pool-table-scroll" aria-label="Pool liquidity details" role="region" tabIndex={0}>
           <table className="pool-table">
+            <caption className="sr-only">Pool liquidity, allocations, and reserve health</caption>
             <thead><tr><th scope="col">Asset</th><th scope="col">Usable balance</th><th scope="col">Midpoint price</th><th scope="col">Reserve value</th><th scope="col">Current</th><th scope="col">Target</th><th scope="col">Variance</th><th scope="col">Health</th></tr></thead>
             <tbody>{rows.map(({ asset, state: assetState }) => {
               const current = calculateCurrentAssetAllocation(assetState, state);

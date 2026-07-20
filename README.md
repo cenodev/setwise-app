@@ -29,6 +29,25 @@ The `/faucet` route reads its contract and token addresses from `src/config/gene
 the contracts deployment scripts. It queries claim amounts, inventory, pause state, cooldown eligibility, and wallet
 balances directly from BSC Testnet; no deployer key or privileged API is used by the app.
 
+## Pool overview
+
+`/pool` is a public, wallet-optional pool overview. It displays the RFQ API's latest pool snapshot: total value
+locked, LP supply, implied LP share price, contract-ordered usable reserves, midpoint market prices, reserve values,
+current versus target allocations, and explicit reserve-health labels. The page refreshes pool state every 15 seconds
+while online and refreshes again when the browser regains focus or connectivity. If a refresh fails, the last complete
+snapshot remains visible; offline mode makes that state explicit rather than presenting it as live data.
+
+All displayed financial calculations use exact integer ratios (`bigint`) rather than JavaScript floating-point values.
+The implied LP share price is `total value locked / LP supply`; a user's liquidity estimate is `total value locked ×
+attributed shares / LP supply`; current allocation is `asset reserve value / total value locked`; and variance is
+current allocation minus the configured target, in percentage points. A derived value is shown as unavailable when
+its denominator is zero.
+
+Connecting a wallet adds a separate position and wallet-balance section. It includes unlocked and locked LP shares,
+claimability, ownership percentage, and estimated USD values. Wallet-specific RPC failures never hide public pool
+data. Pool reserves describe assets held by this pool; they are not external venue market depth and do not guarantee
+an executable price or withdrawal quote.
+
 ## Checks
 
 ```sh
