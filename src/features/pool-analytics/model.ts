@@ -72,6 +72,13 @@ function add(left: DecimalRatio, right: DecimalRatio): DecimalRatio {
   );
 }
 
+function subtract(left: DecimalRatio, right: DecimalRatio): DecimalRatio {
+  return ratio(
+    left.numerator * right.denominator - right.numerator * left.denominator,
+    left.denominator * right.denominator,
+  );
+}
+
 /** Parses an API decimal string without converting it through a JavaScript number. */
 export function decimalRatio(value: string): DecimalRatio {
   const match = DECIMAL_PATTERN.exec(value);
@@ -132,6 +139,20 @@ export function calculateCurrentAssetAllocation(
   return available(divide(decimalRatio(asset.valueUsd), tvl));
 }
 
+/** Returns the difference between the current allocation and target weight in percentage points. */
+export function calculateTargetAllocationVariance(
+  asset: Pick<PoolAssetState, "valueUsd">,
+  state: Pick<PoolState, "totalValueUsd">,
+  targetWeight: number,
+): Calculation {
+  if (!Number.isInteger(targetWeight) || targetWeight < 0) {
+    throw new Error("Target allocation must be a non-negative integer percentage");
+  }
+  const currentAllocation = calculateCurrentAssetAllocation(asset, state);
+  if (currentAllocation.status === "unavailable") return currentAllocation;
+  return available(subtract(multiply(currentAllocation.value, ratio(100n)), ratio(BigInt(targetWeight))));
+}
+
 export function calculateOwnershipPercentage(
   attributedSharesAtomic: bigint,
   totalSupply: TokenAmount,
@@ -163,4 +184,10 @@ export function calculateWalletAssetUsdValue(input: {
   if (input.balanceAtomic < 0n) throw new Error("Wallet balances must be non-negative");
   const midpointPrice = divide(add(decimalRatio(input.market.bidUsd), decimalRatio(input.market.askUsd)), ratio(2n));
   return multiply(atomicAmountRatio(input.balanceAtomic, input.tokenDecimals), midpointPrice);
+}
+
+export function calculateMidpointMarketPrice(
+  market: Pick<PoolAssetState["market"], "askUsd" | "bidUsd">,
+): DecimalRatio {
+  return divide(add(decimalRatio(market.bidUsd), decimalRatio(market.askUsd)), ratio(2n));
 }

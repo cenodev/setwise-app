@@ -6,6 +6,7 @@ import { WalletButton } from "../features/wallet/WalletButton";
 import { PwaStatus } from "../features/pwa/PwaStatus";
 
 const navigation = [
+  { label: "Pool", to: "/pool" },
   { label: "Swap", to: "/swap" },
   { label: "Deposit", to: "/deposit" },
   { label: "Withdraw", to: "/withdraw" },
