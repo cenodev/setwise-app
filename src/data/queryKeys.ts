@@ -1,0 +1,4 @@
+export const poolQueryKeys = {
+  discovery: (poolId: string) => ["pool", poolId] as const,
+  state: (poolId: string) => ["pool-state", poolId] as const,
+};

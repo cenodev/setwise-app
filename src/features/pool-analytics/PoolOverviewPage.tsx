@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { runtimeConfig } from "../../config/env";
+import { poolQueryKeys } from "../../data/queryKeys";
 import { getPool, getPoolState, type Pool, type PoolAsset, type PoolState } from "../../data/rfq/deposits";
 import {
   calculateCurrentAssetAllocation,
@@ -69,12 +70,12 @@ function healthLabel(status: PoolState["assets"][number]["balanceStatus"]): stri
 
 export function PoolOverviewPage() {
   const poolQuery = useQuery({
-    queryKey: ["pool", runtimeConfig.poolId],
+    queryKey: poolQueryKeys.discovery(runtimeConfig.poolId),
     queryFn: ({ signal }) => getPool(runtimeConfig.poolId, signal),
     staleTime: 15_000,
   });
   const poolStateQuery = useQuery({
-    queryKey: ["pool-state", runtimeConfig.poolId],
+    queryKey: poolQueryKeys.state(runtimeConfig.poolId),
     queryFn: ({ signal }) => getPoolState(runtimeConfig.poolId, signal),
     staleTime: 15_000,
   });

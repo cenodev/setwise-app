@@ -7,6 +7,7 @@ import { useAccount, usePublicClient, useSendTransaction, useWriteContract } fro
 import { requiredChainId } from "../../config/chains";
 import { bscTestnetDeployment } from "../../config/deployment";
 import { runtimeConfig } from "../../config/env";
+import { poolQueryKeys } from "../../data/queryKeys";
 import { erc20Abi, setwisePoolAbi } from "../../data/chain/abis";
 import { getPool, getPoolState, RfqApiError, type PoolAsset } from "../../data/rfq/deposits";
 import {
@@ -172,12 +173,12 @@ export function WithdrawPage() {
   const [now, setNow] = useState(currentTimestamp);
 
   const poolQuery = useQuery({
-    queryKey: ["pool", runtimeConfig.poolId],
+    queryKey: poolQueryKeys.discovery(runtimeConfig.poolId),
     queryFn: ({ signal }) => getPool(runtimeConfig.poolId, signal),
     staleTime: 60_000,
   });
   const poolStateQuery = useQuery({
-    queryKey: ["pool-state", runtimeConfig.poolId],
+    queryKey: poolQueryKeys.state(runtimeConfig.poolId),
     queryFn: ({ signal }) => getPoolState(runtimeConfig.poolId, signal),
     refetchInterval: online ? 15_000 : false,
   });
