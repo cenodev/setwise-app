@@ -53,7 +53,9 @@ export function useWalletPoolPosition(
   const query = useQuery<WalletPoolPositionState, Error>({
     queryKey,
     enabled: hasReadContext && correctNetwork,
+    refetchOnWindowFocus: true,
     retry: false,
+    staleTime: 0,
     queryFn: async () => {
       if (!pool || !poolState || !publicClient || connection.status !== "connected" || !address) {
         throw new PoolPositionContextError("The wallet pool-position query is missing its read context");

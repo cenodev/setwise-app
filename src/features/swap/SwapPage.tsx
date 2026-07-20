@@ -6,6 +6,7 @@ import { useAccount, usePublicClient, useSendTransaction, useWriteContract } fro
 
 import { requiredChainId } from "../../config/chains";
 import { runtimeConfig } from "../../config/env";
+import { poolQueryKeys } from "../../data/queryKeys";
 import { erc20Abi } from "../../data/chain/abis";
 import { getPool, getPoolState, RfqApiError } from "../../data/rfq/deposits";
 import {
@@ -136,12 +137,12 @@ export function SwapPage() {
   }, [address, chainId, online]);
 
   const poolQuery = useQuery({
-    queryKey: ["pool", runtimeConfig.poolId],
+    queryKey: poolQueryKeys.discovery(runtimeConfig.poolId),
     queryFn: ({ signal }) => getPool(runtimeConfig.poolId, signal),
     staleTime: 60_000,
   });
   const poolStateQuery = useQuery({
-    queryKey: ["pool-state", runtimeConfig.poolId],
+    queryKey: poolQueryKeys.state(runtimeConfig.poolId),
     queryFn: ({ signal }) => getPoolState(runtimeConfig.poolId, signal),
     refetchInterval: online ? 15_000 : false,
   });
