@@ -21,6 +21,7 @@ const deadline = Math.floor(Date.now() / 1_000) + 60;
 
 const indicative = {
   input: { amount: "10", asset: "USDT", atomicAmount: inputAtomic, decimals: 18 },
+  intent: "exact-input",
   output: { amount: "2", asset: "TOKEN", atomicAmount: outputAtomic, decimals: 18 },
 } as SwapQuote;
 
@@ -90,6 +91,31 @@ describe("swap model", () => {
 
   it("accepts a fully matching ERC-20 firm quote", () => {
     expect(() => validateFirmSwap(validInput())).not.toThrow();
+  });
+
+  it("accepts a higher firm input when the reviewed exact output is unchanged", () => {
+    const higherInput = (BigInt(inputAtomic) + 1n).toString();
+    const exactOutputIndicative = { ...indicative, intent: "exact-output" } as SwapQuote;
+    const exactOutputFirm = firm({
+      authorization: {
+        ...firm().authorization,
+        typedData: {
+          ...firm().authorization.typedData,
+          message: { ...firm().authorization.typedData.message, inputAmount: higherInput },
+        },
+      },
+      input: { ...indicative.input, atomicAmount: higherInput },
+      intent: "exact-output",
+      requirements: { approvals: [{ minimumAtomicAmount: higherInput, spender: poolAddress, token: inputAddress }], sender: address },
+    });
+
+    expect(() => validateFirmSwap({
+      ...validInput(),
+      allowance: BigInt(higherInput),
+      balance: BigInt(higherInput),
+      firm: exactOutputFirm,
+      indicative: exactOutputIndicative,
+    })).not.toThrow();
   });
 
   it.each([

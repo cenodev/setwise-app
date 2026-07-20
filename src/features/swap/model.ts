@@ -44,7 +44,8 @@ export function relevantSwapWarnings(quote: SwapQuote): SwapQuote["warnings"] {
 }
 
 export function validateIndicativeSwap(input: {
-  amountAtomic: bigint;
+  specifiedAmountAtomic: bigint;
+  intent: SwapQuote["intent"];
   inputAsset: PoolAsset;
   outputAsset: PoolAsset;
   poolAddress: Address;
@@ -52,20 +53,24 @@ export function validateIndicativeSwap(input: {
   quote: SwapQuote;
   chainId: number;
 }): void {
-  const { amountAtomic, inputAsset, outputAsset, poolAddress, poolId, quote, chainId } = input;
+  const { specifiedAmountAtomic, intent, inputAsset, outputAsset, poolAddress, poolId, quote, chainId } = input;
   if (quote.stateSnapshot.chainId !== chainId) throw new Error("Indicative quote targets the wrong chain");
   if (quote.stateSnapshot.poolId !== poolId || !isAddressEqual(quote.stateSnapshot.poolAddress, poolAddress)) {
     throw new Error("Indicative quote targets an unexpected pool");
   }
   if (quote.stateSnapshot.tradingPaused) throw new Error("Trading paused while pricing this swap");
-  if (quote.intent !== "exact-input") throw new Error("Indicative quote is not exact-input");
+  if (quote.intent !== intent) throw new Error(`Indicative quote is not ${intent}`);
   if (quote.input.asset !== inputAsset.id || quote.output.asset !== outputAsset.id) {
     throw new Error("Indicative quote pair does not match the selection");
   }
   if (quote.input.decimals !== inputAsset.decimals || quote.output.decimals !== outputAsset.decimals) {
     throw new Error("Indicative quote decimals do not match asset discovery");
   }
-  if (BigInt(quote.input.atomicAmount) !== amountAtomic) throw new Error("Indicative quote changed the input amount");
+  const fixedAmount = intent === "exact-input" ? quote.input.atomicAmount : quote.output.atomicAmount;
+  if (BigInt(fixedAmount) !== specifiedAmountAtomic) {
+    throw new Error(`Indicative quote changed the ${intent === "exact-input" ? "input" : "output"} amount`);
+  }
+  if (BigInt(quote.input.atomicAmount) <= 0n) throw new Error("Indicative quote input must be positive");
   if (BigInt(quote.output.atomicAmount) <= 0n) throw new Error("Indicative quote output must be positive");
 }
 
@@ -88,7 +93,7 @@ export function validateFirmSwap(input: {
     address, allowance, balance, chainId, firm, indicative, inputAsset, inputNative,
     outputAsset, outputNative, poolAddress, poolId,
   } = input;
-  const expectedInput = BigInt(indicative.input.atomicAmount);
+  const firmInput = BigInt(firm.input.atomicAmount);
   const firmOutput = BigInt(firm.output.atomicAmount);
   const message = firm.authorization.typedData.message;
 
@@ -96,6 +101,7 @@ export function validateFirmSwap(input: {
     || firm.authorization.typedData.domain.chainId !== chainId) {
     throw new Error("Firm quote targets the wrong chain");
   }
+  if (firm.intent !== indicative.intent) throw new Error("Firm quote intent does not match the reviewed swap");
   if (firm.stateSnapshot.poolId !== poolId
     || !isAddressEqual(firm.stateSnapshot.poolAddress, poolAddress)
     || !isAddressEqual(firm.transaction.to, poolAddress)
@@ -112,19 +118,21 @@ export function validateFirmSwap(input: {
     || !isAddressEqual(message.outputAsset, outputAsset.address)) {
     throw new Error("Firm quote pair does not match the reviewed swap");
   }
-  if (firm.input.atomicAmount !== indicative.input.atomicAmount
-    || BigInt(message.inputAmount) !== expectedInput
+  if ((firm.intent === "exact-input" && firm.input.atomicAmount !== indicative.input.atomicAmount)
+    || (firm.intent === "exact-output" && firm.output.atomicAmount !== indicative.output.atomicAmount)
+    || firmInput <= 0n
+    || BigInt(message.inputAmount) !== firmInput
     || firmOutput <= 0n
     || BigInt(message.outputAmount) !== firmOutput) {
     throw new Error("Firm quote amounts do not match the reviewed swap");
   }
-  if (balance < expectedInput) throw new Error(`Insufficient ${inputNative ? "BNB" : inputAsset.symbol} balance`);
+  if (balance < firmInput) throw new Error(`Insufficient ${inputNative ? "BNB" : inputAsset.symbol} balance`);
 
   const expectedMethod = inputNative
     ? "swapExactNativeForAsset"
     : outputNative ? "swapExactAssetForNative" : "swapExactAssetForAsset";
   if (firm.transaction.method !== expectedMethod) throw new Error("Firm quote native mode does not match the reviewed swap");
-  const expectedValue = inputNative ? expectedInput : 0n;
+  const expectedValue = inputNative ? firmInput : 0n;
   if (BigInt(firm.transaction.value) !== expectedValue) throw new Error("Firm quote transaction value is incorrect");
 
   if (inputNative) {
@@ -134,10 +142,10 @@ export function validateFirmSwap(input: {
     const approval = firm.requirements.approvals[0];
     if (!isAddressEqual(approval.token, inputAsset.address)
       || !isAddressEqual(approval.spender, poolAddress)
-      || BigInt(approval.minimumAtomicAmount) !== expectedInput) {
+      || BigInt(approval.minimumAtomicAmount) !== firmInput) {
       throw new Error("Firm quote approval requirement does not match the reviewed swap");
     }
-    if (allowance < expectedInput || allowance < BigInt(approval.minimumAtomicAmount)) {
+    if (allowance < firmInput || allowance < BigInt(approval.minimumAtomicAmount)) {
       throw new Error("Token approval is insufficient for the firm quote");
     }
   }

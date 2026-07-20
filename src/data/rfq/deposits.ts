@@ -41,7 +41,7 @@ export const poolSchema = z.object({
   }).passthrough()).optional(),
   capabilities: z.object({
     nativeAsset: z.boolean(),
-    swaps: z.object({ exactInput: z.boolean(), firm: z.boolean(), indicative: z.boolean() }).passthrough(),
+    swaps: z.object({ exactInput: z.boolean(), exactOutput: z.boolean(), firm: z.boolean(), indicative: z.boolean() }).passthrough(),
   }).passthrough().optional(),
 }).passthrough();
 
