@@ -15,6 +15,12 @@ const amountSchema = z.object({
   decimals: z.number().int().min(0),
 });
 
+const balanceAmountSchema = z.object({
+  amount: decimalSchema,
+  atomicAmount: atomicSchema,
+  decimals: z.number().int().min(0),
+});
+
 const assetSchema = z.object({
   id: z.string().min(1),
   symbol: z.string().min(1),
@@ -49,16 +55,32 @@ export const poolStateSchema = z.object({
   poolId: z.string(),
   chainId: z.number().int(),
   poolAddress: addressSchema,
+  blockNumber: atomicSchema,
+  blockTimestamp: z.string().datetime(),
   trading: z.object({
     paused: z.boolean(),
     deposits: z.enum(["available", "paused"]),
     swaps: z.enum(["available", "paused"]).optional(),
   }).passthrough(),
+  totalValueUsd: decimalSchema,
+  totalSupply: balanceAmountSchema,
   contract: z.object({ wrappedNativeToken: addressSchema }).passthrough().optional(),
   assets: z.array(z.object({
-    asset: z.string(),
+    asset: z.string().min(1),
+    amount: decimalSchema,
+    atomicAmount: atomicSchema,
+    decimals: z.number().int().min(0),
     index: z.number().int(),
-    market: z.object({ bidUsd: decimalSchema, askUsd: decimalSchema }).passthrough(),
+    recordedAtomicBalance: atomicSchema,
+    actualAtomicBalance: atomicSchema,
+    balanceStatus: z.enum(["synced", "surplus", "deficit"]),
+    multiplier: decimalSchema,
+    valueUsd: decimalSchema,
+    market: z.object({
+      bidUsd: decimalSchema,
+      askUsd: decimalSchema,
+      observedAt: z.string().datetime(),
+    }).passthrough(),
   }).passthrough()),
 }).passthrough();
 
