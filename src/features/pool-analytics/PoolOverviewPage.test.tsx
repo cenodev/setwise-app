@@ -57,6 +57,8 @@ describe("PoolOverviewPage", () => {
     expect(screen.getByText(/Block 120266420/)).toBeInTheDocument();
     expect(screen.getByText("$1.0002")).toBeInTheDocument();
     expect(screen.getByText("+5.00 pp")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Pool liquidity details" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByText("Pool liquidity, allocations, and reserve health")).toBeInTheDocument();
 
     const rows = screen.getAllByRole("row");
     expect(within(rows[1]).getByText("Mock Tether")).toBeInTheDocument();
@@ -90,5 +92,24 @@ describe("PoolOverviewPage", () => {
 
     rerender(<PoolOverviewPage {...defaultProps} online={false} pool={undefined} state={undefined} />);
     expect(screen.getByRole("status")).toHaveTextContent("No saved pool snapshot is available offline");
+  });
+
+  it("shows unavailable derived values and preserves long asset labels without numeric coercion", () => {
+    const unavailableState = {
+      ...state,
+      totalValueUsd: "0",
+      totalSupply: { ...state.totalSupply, amount: "0", atomicAmount: "0" },
+      assets: state.assets.map((assetState) => ({ ...assetState, valueUsd: "0" })),
+    } as PoolState;
+    const longSymbolPool = {
+      ...pool,
+      assets: pool.assets.map((asset) => asset.id === "USDT"
+        ? { ...asset, name: "Long-form reserve asset", symbol: "VERY-LONG-RESERVE-SYMBOL" }
+        : asset),
+    } as Pool;
+    renderOverview({ pool: longSymbolPool, state: unavailableState });
+
+    expect(screen.getAllByText("Unavailable")).toHaveLength(5);
+    expect(screen.getByText("VERY-LONG-RESERVE-SYMBOL")).toBeVisible();
   });
 });
