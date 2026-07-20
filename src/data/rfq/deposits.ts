@@ -73,7 +73,7 @@ export const poolStateSchema = z.object({
     index: z.number().int(),
     recordedAtomicBalance: atomicSchema,
     actualAtomicBalance: atomicSchema,
-    balanceStatus: z.enum(["synced", "surplus", "deficit"]),
+    balanceStatus: z.enum(["synced", "surplus", "deficit", "drifted"]),
     multiplier: decimalSchema,
     valueUsd: decimalSchema,
     market: z.object({

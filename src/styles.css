@@ -151,7 +151,7 @@ code {
   bottom: 0;
   left: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   min-height: calc(4.25rem + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid var(--border-subtle);
@@ -469,6 +469,39 @@ code {
 .withdraw-output span { color: var(--text-tertiary); font-size: .7rem; }
 
 .faucet-layout { display: grid; gap: 1rem; }
+.pool-overview { display: grid; gap: 1rem; }
+.pool-card {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1.1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  background: linear-gradient(145deg, rgb(25 33 54 / 94%), rgb(17 23 38 / 94%));
+}
+.pool-status-card { color: var(--text-secondary); line-height: 1.5; }
+.pool-section-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.pool-section-heading h2 { margin: .3rem 0 0; font-size: 1.15rem; }
+.pool-section-heading > p { max-width: 19rem; margin: 0; color: var(--text-tertiary); font-size: .72rem; line-height: 1.45; text-align: right; }
+.pool-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; margin: 0; }
+.pool-metrics div { display: grid; gap: .35rem; min-width: 0; padding: .85rem; border-radius: .75rem; background: rgb(9 13 24 / 35%); }
+.pool-metrics dt { color: var(--text-tertiary); font-size: .72rem; }
+.pool-metrics dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.pool-metrics dd span { color: var(--text-secondary); font-family: inherit; font-size: .75rem; }
+.pool-refreshing { margin: 0; color: var(--info); font-size: .78rem; text-align: right; }
+.pool-table-scroll { overflow-x: auto; margin-inline: -.2rem; padding-bottom: .2rem; }
+.pool-table { width: 100%; min-width: 56rem; border-collapse: collapse; font-size: .76rem; }
+.pool-table th, .pool-table td { padding: .75rem .6rem; border-bottom: 1px solid var(--border-subtle); text-align: right; white-space: nowrap; }
+.pool-table thead th { color: var(--text-tertiary); font-size: .68rem; font-weight: 750; }
+.pool-table th:first-child { text-align: left; }
+.pool-table tbody th { display: grid; gap: .2rem; color: var(--text-primary); font-weight: 750; }
+.pool-table tbody th small { color: var(--text-tertiary); font-size: .68rem; font-weight: 600; }
+.pool-table tbody tr:last-child > * { border-bottom: 0; }
+.pool-variance { color: var(--warning); }
+.pool-health { display: inline-flex; padding: .25rem .45rem; border-radius: 999px; background: var(--bg-surface-raised); color: var(--text-secondary); font-size: .68rem; font-weight: 800; }
+.pool-health--synced { background: rgb(93 213 167 / 12%); color: var(--success); }
+.pool-health--drifted, .pool-health--deficit { background: rgb(255 119 136 / 12%); color: var(--critical); }
+.pool-health--surplus { background: rgb(242 189 91 / 12%); color: var(--warning); }
 .faucet-card {
   min-width: 0;
   padding: 1.1rem;
@@ -539,6 +572,7 @@ code {
   .screen.swap-screen { max-width: none; }
   .screen.withdraw-screen { max-width: none; }
   .screen.faucet-screen { max-width: none; }
+  .screen.pool-screen { max-width: none; }
   .deposit-layout { grid-template-columns: minmax(0, 1.45fr) minmax(17rem, .75fr); align-items: start; }
   .swap-layout { grid-template-columns: minmax(0, 1.25fr) minmax(18rem, .75fr); align-items: start; }
   .deposit-form { grid-row: span 2; }

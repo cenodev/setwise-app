@@ -2,8 +2,10 @@ import { poolStateSchema } from "../../data/rfq/deposits";
 import {
   calculateCurrentAssetAllocation,
   calculateLpSharePrice,
+  calculateMidpointMarketPrice,
   calculateOwnershipPercentage,
   calculatePoolTvl,
+  calculateTargetAllocationVariance,
   calculateUserLiquidityValue,
   calculateWalletAssetUsdValue,
   formatDecimalRatio,
@@ -36,6 +38,8 @@ describe("pool analytics calculations", () => {
     expect(formatDecimalRatio(calculatePoolTvl(state), 2)).toBe("1000.01");
     expect(formatDecimalRatio(expectAvailable(calculateLpSharePrice(state)), 6)).toBe("2.500000");
     expect(formatDecimalRatio(expectAvailable(calculateCurrentAssetAllocation(state.assets[0], state)), 8)).toBe("0.40000000");
+    expect(formatDecimalRatio(expectAvailable(calculateTargetAllocationVariance(state.assets[0], state, 35)), 2)).toBe("5.00");
+    expect(formatDecimalRatio(calculateMidpointMarketPrice(state.assets[0].market), 4)).toBe("1.0002");
   });
 
   it("retains tiny ownership percentages and large atomic balances", () => {
