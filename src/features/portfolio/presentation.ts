@@ -112,6 +112,13 @@ export function setPublicLiquidity(set: PortfolioSetView): string {
   return state ? formatUsd(decimalRatio(state.totalValueUsd)) : "Unavailable";
 }
 
+/** True only when a wallet read succeeded and the account holds no attributed shares. Unknown states stay visible. */
+export function setHasNoUserLiquidity(set: PortfolioSetView): boolean {
+  return !!set.wallet
+    && "position" in set.wallet
+    && set.wallet.position.shares.totalAttributed === 0n;
+}
+
 export function setUserLiquidity(set: PortfolioSetView): string {
   const state = readableSetState(set);
   const { wallet } = set;

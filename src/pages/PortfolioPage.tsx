@@ -6,6 +6,7 @@ import { useOnlineStatus } from "../lib/useOnlineStatus";
 import { PortfolioPublicOverview } from "../features/portfolio/PortfolioPublicOverview";
 import { PortfolioSetPositionCard } from "../features/portfolio/PortfolioSetPositionCard";
 import { PortfolioWalletSummary } from "../features/portfolio/PortfolioWalletSummary";
+import { setHasNoUserLiquidity } from "../features/portfolio/presentation";
 import { usePortfolio } from "../features/portfolio/usePortfolio";
 
 export function PortfolioPage() {
@@ -13,6 +14,7 @@ export function PortfolioPage() {
   const online = useOnlineStatus();
   const tokenMetadata = useTokenMetadata();
   const view = portfolio.view;
+  const visibleSets = view?.sets.filter((set) => !setHasNoUserLiquidity(set)) ?? [];
 
   return (
     <div className="screen portfolio-screen">
@@ -86,18 +88,25 @@ export function PortfolioPage() {
                   <h2>Set positions</h2>
                 </div>
                 <span>
-                  {view.sets.length} Sets · {view.freshness.stale} stale ·
+                  {visibleSets.length} of {view.sets.length} Sets · {view.freshness.stale} stale ·
                   {" "}{view.publicTvl.coverage.errors} errors
                 </span>
               </div>
-              {view.sets.map((set) => (
-                <PortfolioSetPositionCard
-                  key={set.snapshot.definition.id}
-                  publicTvl={view.publicTvl}
-                  set={set}
-                  tokenIndex={tokenMetadata.data}
-                />
-              ))}
+              {visibleSets.length === 0 ? (
+                <p className="portfolio-positions-empty" role="status">
+                  No Set positions with attributed liquidity in this wallet yet.
+                  Sets you deposit into will appear here.
+                </p>
+              ) : (
+                visibleSets.map((set) => (
+                  <PortfolioSetPositionCard
+                    key={set.snapshot.definition.id}
+                    publicTvl={view.publicTvl}
+                    set={set}
+                    tokenIndex={tokenMetadata.data}
+                  />
+                ))
+              )}
             </section>
           )}
         </>

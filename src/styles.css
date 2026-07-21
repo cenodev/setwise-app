@@ -317,6 +317,17 @@ code {
 .portfolio-overview,
 .portfolio-wallet-panel,
 .portfolio-sets { display: grid; gap: .85rem; }
+.portfolio-sets > .portfolio-section-heading,
+.portfolio-sets > .portfolio-positions-empty { grid-column: 1 / -1; }
+.portfolio-positions-empty {
+  margin: 0;
+  padding: .9rem 1rem;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 1rem;
+  color: var(--text-tertiary);
+  font-size: .8rem;
+  line-height: 1.5;
+}
 .portfolio-summary { display: grid; gap: .75rem; }
 .portfolio-metric-card,
 .portfolio-set-card {

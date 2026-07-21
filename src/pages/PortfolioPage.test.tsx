@@ -330,6 +330,99 @@ describe("PortfolioPage", () => {
       },
       sets: [{
         snapshot: { ...first, status: "ready" },
+        wallet: readyWallet(first.pool.id),
+      }],
+      userLiquidity: {
+        coverage: { available: 1, errors: 0, stale: 0, total: 1, unsupported: 0 },
+        status: "ready",
+        value: { numerator: 50n, denominator: 1n },
+      },
+      walletLoading: false,
+    }));
+
+    render(<MemoryRouter><PortfolioPage /></MemoryRouter>);
+
+    expect(screen.getByRole("region", { name: "Setwise liquidity overview" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Your Set liquidity" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Set positions" })).toBeVisible();
+
+    const actions = screen.getByRole("navigation", { name: "set-alpha actions" });
+    const links = within(actions).getAllByRole("link");
+    expect(links).toHaveLength(3);
+    for (const link of links) {
+      expect(link).not.toHaveAttribute("tabindex", "-1");
+      expect(link).toBeVisible();
+    }
+  });
+
+  it("hides Sets whose wallet position is confirmed to hold no liquidity", () => {
+    const owned = setData("set-alpha", 10);
+    const empty = setData("set-beta", 20);
+    mocks.usePortfolio.mockReturnValue(result({
+      externalLiquidity: undefined,
+      externalLiquidityCoverage: { available: 0, total: 2 },
+      freshness: {
+        newestTimestamp: owned.state.blockTimestamp,
+        oldestTimestamp: owned.state.blockTimestamp,
+        stale: 0,
+        status: "ready",
+        total: 2,
+      },
+      publicTvl: {
+        coverage: { available: 2, errors: 0, stale: 0, total: 2, unsupported: 0 },
+        status: "ready",
+        value: { numerator: 200n, denominator: 1n },
+      },
+      sets: [
+        { snapshot: { ...owned, status: "ready" }, wallet: readyWallet(owned.pool.id) },
+        {
+          snapshot: { ...empty, status: "ready" },
+          wallet: {
+            ...readyWallet(empty.pool.id, {
+              canClaim: false,
+              locked: 0n,
+              lockedUntil: 0n,
+              totalAttributed: 0n,
+              unlocked: 0n,
+            }),
+            status: "zero-balance",
+          },
+        },
+      ],
+      userLiquidity: {
+        coverage: { available: 2, errors: 0, stale: 0, total: 2, unsupported: 0 },
+        status: "ready",
+        value: { numerator: 50n, denominator: 1n },
+      },
+      walletLoading: false,
+    }));
+
+    render(<MemoryRouter><PortfolioPage /></MemoryRouter>);
+
+    expect(screen.getByRole("article", { name: "Set set-alpha position" })).toBeVisible();
+    expect(screen.queryByRole("article", { name: "Set set-beta position" })).not.toBeInTheDocument();
+    expect(screen.getByText(/1 of 2 Sets/)).toBeVisible();
+  });
+
+  it("shows an empty positions state when no Set has attributed liquidity", () => {
+    const first = setData("set-alpha", 10);
+    mocks.usePortfolio.mockReturnValue(result({
+      externalLiquidity: undefined,
+      externalLiquidityCoverage: { available: 0, total: 1 },
+      freshness: {
+        newestTimestamp: first.state.blockTimestamp,
+        oldestTimestamp: first.state.blockTimestamp,
+        stale: 0,
+        status: "ready",
+        total: 1,
+      },
+      publicTvl: {
+        coverage: { available: 1, errors: 0, stale: 0, total: 1, unsupported: 0 },
+        status: "ready",
+        value: { numerator: 100n, denominator: 1n },
+      },
+      sets: [{
+        snapshot: { ...first, status: "ready" },
         wallet: {
           ...readyWallet(first.pool.id, {
             canClaim: false,
@@ -351,17 +444,9 @@ describe("PortfolioPage", () => {
 
     render(<MemoryRouter><PortfolioPage /></MemoryRouter>);
 
-    expect(screen.getByRole("region", { name: "Setwise liquidity overview" })).toBeVisible();
-    expect(screen.getByRole("region", { name: "Your Set liquidity" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Set positions" })).toBeVisible();
+    expect(screen.getByText(/No Set positions with attributed liquidity/i)).toBeVisible();
     expect(screen.getByText(/No attributed Set shares/i)).toBeVisible();
-
-    const actions = screen.getByRole("navigation", { name: "set-alpha actions" });
-    const links = within(actions).getAllByRole("link");
-    expect(links).toHaveLength(3);
-    for (const link of links) {
-      expect(link).not.toHaveAttribute("tabindex", "-1");
-      expect(link).toBeVisible();
-    }
+    expect(screen.queryByRole("article", { name: /^Set / })).not.toBeInTheDocument();
   });
 });

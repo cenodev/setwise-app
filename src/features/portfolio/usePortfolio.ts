@@ -184,9 +184,20 @@ export function usePortfolio(): UsePortfolioResult {
     if (publicClient) result.set(requiredChainId, publicClient);
     return result;
   }, [publicClient]);
+  const walletQueryKey = portfolioWalletPositionsQueryKey({ connection, snapshots: readable });
   const walletQuery: UseQueryResult<PortfolioWalletPositionState[], Error> = useQuery({
-    queryKey: portfolioWalletPositionsQueryKey({ connection, snapshots: readable }),
+    queryKey: walletQueryKey,
     enabled: connection.status === "connected" && readable.length > 0,
+    // Snapshot refreshes change the query key; keep the previous positions while the new read
+    // is pending so confirmed zero-balance Sets do not flash back into view, but drop them
+    // when the account or chain changes so stale wallet data is never shown.
+    placeholderData: (previousData, previousQuery) => (
+      previousQuery
+      && previousQuery.queryKey[1] === walletQueryKey[1]
+      && previousQuery.queryKey[2] === walletQueryKey[2]
+        ? previousData
+        : undefined
+    ),
     queryFn: () => readPortfolioWalletPositions({
       clients,
       connection,
