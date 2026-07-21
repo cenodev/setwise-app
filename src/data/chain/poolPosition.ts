@@ -106,6 +106,62 @@ function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error("Pool-position RPC reads failed", { cause: error });
 }
 
+export function createPoolPositionContracts(pool: Pool, account: Address) {
+  return [
+    ...pool.assets.map((asset) => ({
+      abi: erc20Abi,
+      address: asset.address,
+      args: [account],
+      functionName: "balanceOf" as const,
+    })),
+    { abi: erc20Abi, address: pool.lpToken.address, args: [account], functionName: "balanceOf" as const },
+    { abi: setwisePoolAbi, address: pool.contract.address, args: [account], functionName: "lockedDeposits" as const },
+    { abi: setwisePoolAbi, address: pool.contract.address, args: [account], functionName: "canClaimShares" as const },
+  ] as const;
+}
+
+export function decodeWalletPoolPosition(input: {
+  account: Address;
+  nativeBalance: bigint;
+  pool: Pool;
+  poolState: PoolState;
+  results: readonly unknown[];
+}): WalletPoolPosition {
+  const { account, nativeBalance, pool, poolState, results } = input;
+  const expectedResults = pool.assets.length + 3;
+  if (results.length !== expectedResults) {
+    throw new Error(`RPC returned ${results.length} results for ${expectedResults} Set reads`);
+  }
+  const assetBalances = pool.assets.map((asset, index): WalletAssetBalance => ({
+    address: asset.address,
+    assetId: asset.id,
+    balance: asBigint(results[index], `${asset.id} wallet balance`),
+  }));
+  const unlocked = asBigint(results[pool.assets.length], "unlocked share balance");
+  const [lockedUntil, locked] = asLockedDeposit(results[pool.assets.length + 1]);
+  const canClaim = asBoolean(results[pool.assets.length + 2], "claim eligibility");
+  return {
+    account,
+    assetBalances,
+    blockNumber: BigInt(poolState.blockNumber),
+    chainId: pool.chain.id,
+    nativeBalance,
+    shares: {
+      canClaim,
+      locked,
+      lockedUntil,
+      totalAttributed: unlocked + locked,
+      unlocked,
+    },
+  };
+}
+
+export function isWalletPoolPositionZero(position: WalletPoolPosition): boolean {
+  return position.nativeBalance === 0n
+    && position.assetBalances.every((asset) => asset.balance === 0n)
+    && position.shares.totalAttributed === 0n;
+}
+
 export function walletPoolPositionQueryKey(input: Pick<
   WalletPoolPositionInput,
   "connection" | "pool" | "poolState" | "requestedAccount"
@@ -139,50 +195,21 @@ export async function readWalletPoolPosition(
   }
 
   const { account, blockNumber, client } = validateReadContext(input);
-  const balanceContracts = pool.assets.map((asset) => ({
-    abi: erc20Abi,
-    address: asset.address,
-    args: [account],
-    functionName: "balanceOf" as const,
-  }));
-  const contracts = [
-    ...balanceContracts,
-    { abi: erc20Abi, address: pool.lpToken.address, args: [account], functionName: "balanceOf" as const },
-    { abi: setwisePoolAbi, address: pool.contract.address, args: [account], functionName: "lockedDeposits" as const },
-    { abi: setwisePoolAbi, address: pool.contract.address, args: [account], functionName: "canClaimShares" as const },
-  ] as const;
+  const contracts = createPoolPositionContracts(pool, account);
 
   try {
     const [results, nativeBalance] = await Promise.all([
       client.multicall({ allowFailure: false, blockNumber, contracts }),
       client.getBalance({ address: account, blockNumber }),
     ]);
-    const assetBalances = pool.assets.map((asset, index): WalletAssetBalance => ({
-      address: asset.address,
-      assetId: asset.id,
-      balance: asBigint(results[index], `${asset.id} wallet balance`),
-    }));
-    const unlocked = asBigint(results[pool.assets.length], "unlocked share balance");
-    const [lockedUntil, locked] = asLockedDeposit(results[pool.assets.length + 1]);
-    const canClaim = asBoolean(results[pool.assets.length + 2], "claim eligibility");
-    const position: WalletPoolPosition = {
+    const position = decodeWalletPoolPosition({
       account,
-      assetBalances,
-      blockNumber,
-      chainId: pool.chain.id,
       nativeBalance,
-      shares: {
-        canClaim,
-        locked,
-        lockedUntil,
-        totalAttributed: unlocked + locked,
-        unlocked,
-      },
-    };
-    const isZeroBalance = nativeBalance === 0n
-      && assetBalances.every((asset) => asset.balance === 0n)
-      && position.shares.totalAttributed === 0n;
-    return { position, status: isZeroBalance ? "zero-balance" : "ready" };
+      pool,
+      poolState: input.poolState,
+      results,
+    });
+    return { position, status: isWalletPoolPositionZero(position) ? "zero-balance" : "ready" };
   } catch (error) {
     return {
       account,
