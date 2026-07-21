@@ -1,7 +1,9 @@
 import type { FirmSwapQuote, SwapQuote } from "../../data/rfq/swaps";
 import type { PoolAsset } from "../../data/rfq/deposits";
-import type { Address } from "viem";
+import { decodeFunctionData, type Address } from "viem";
+import { erc20Abi } from "../../data/chain/abis";
 import {
+  buildAtomicSwapCalls,
   isSupportedSwapPair,
   maximumSwapInput,
   reverseSwapPair,
@@ -116,6 +118,27 @@ describe("swap model", () => {
       firm: exactOutputFirm,
       indicative: exactOutputIndicative,
     })).not.toThrow();
+  });
+
+  it("validates and constructs an exact planned approval before the firm swap", () => {
+    expect(() => validateFirmSwap({
+      ...validInput(),
+      allowance: 0n,
+      plannedApprovalAmount: BigInt(inputAtomic),
+    })).not.toThrow();
+    expect(() => validateFirmSwap({
+      ...validInput(),
+      allowance: 0n,
+      plannedApprovalAmount: BigInt(inputAtomic) + 1n,
+    })).toThrow(/not exact/);
+
+    const calls = buildAtomicSwapCalls({ firm: firm(), inputAsset, now: 0, poolAddress });
+    expect(calls).toHaveLength(2);
+    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0].data })).toEqual({
+      args: [poolAddress, BigInt(inputAtomic)],
+      functionName: "approve",
+    });
+    expect(calls[1]).toEqual({ data: "0x1234", to: poolAddress, value: 0n });
   });
 
   it.each([

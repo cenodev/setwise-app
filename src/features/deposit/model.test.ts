@@ -3,12 +3,9 @@ import { decodeFunctionData, type Address } from "viem";
 import { erc20Abi } from "../../data/chain/abis";
 import {
   allowedLockSelection,
-  atomicCapabilityStatus,
   buildAtomicDepositCalls,
-  classifyAtomicSendError,
   orderAssetsByContract,
   planApprovals,
-  supportsAtomicBatch,
 } from "./model";
 
 const first = "0x0000000000000000000000000000000000000001" as Address;
@@ -41,17 +38,6 @@ describe("deposit model", () => {
       { assetId: "C", token: second, amount: 4n, allowance: 4n },
     ]);
     expect(planned.map((item) => item.assetId)).toEqual(["A"]);
-  });
-
-  it.each(["supported", "ready"] as const)("enables atomic batches for an atomic: %s capability", (status) => {
-    expect(atomicCapabilityStatus({ atomic: { status } })).toBe(status);
-    expect(supportsAtomicBatch({ atomic: status })).toBe(true);
-  });
-
-  it("treats missing and unsupported atomic capabilities as unavailable", () => {
-    expect(supportsAtomicBatch(undefined)).toBe(false);
-    expect(supportsAtomicBatch({})).toBe(false);
-    expect(supportsAtomicBatch({ atomic: { status: "unsupported" } })).toBe(false);
   });
 
   it.each([1, 2, 9])("builds %i exact approvals in order with the deposit last", (count) => {
@@ -108,10 +94,4 @@ describe("deposit model", () => {
     })).toThrow(/expired/);
   });
 
-  it("distinguishes atomic setup, support, and wallet rejection failures", () => {
-    expect(classifyAtomicSendError({ code: 5750 })).toBe("setup-rejected");
-    expect(classifyAtomicSendError({ cause: { code: 5760 } })).toBe("unsupported");
-    expect(classifyAtomicSendError({ code: 4001 })).toBe("wallet-rejected");
-    expect(classifyAtomicSendError(new Error("RPC unavailable"))).toBe("other");
-  });
 });

@@ -2,6 +2,7 @@ import { isAddressEqual, type Address } from "viem";
 
 import type { PoolAsset } from "../../data/rfq/deposits";
 import type { FirmSwapQuote, SwapQuote } from "../../data/rfq/swaps";
+import { buildAtomicApprovalCalls, type AtomicCall } from "../wallet/atomicBatch";
 
 export type DiscoveredPair = { assets: readonly [string, string]; enabled: boolean };
 
@@ -86,12 +87,13 @@ export function validateFirmSwap(input: {
   now?: number;
   outputAsset: PoolAsset;
   outputNative: boolean;
+  plannedApprovalAmount?: bigint;
   poolAddress: Address;
   poolId: string;
 }): void {
   const {
     address, allowance, balance, chainId, firm, indicative, inputAsset, inputNative,
-    outputAsset, outputNative, poolAddress, poolId,
+    outputAsset, outputNative, plannedApprovalAmount, poolAddress, poolId,
   } = input;
   const firmInput = BigInt(firm.input.atomicAmount);
   const firmOutput = BigInt(firm.output.atomicAmount);
@@ -145,7 +147,11 @@ export function validateFirmSwap(input: {
       || BigInt(approval.minimumAtomicAmount) !== firmInput) {
       throw new Error("Firm quote approval requirement does not match the reviewed swap");
     }
-    if (allowance < firmInput || allowance < BigInt(approval.minimumAtomicAmount)) {
+    if (plannedApprovalAmount !== undefined && plannedApprovalAmount !== firmInput) {
+      throw new Error("Planned token approval is not exact for the firm quote");
+    }
+    if (plannedApprovalAmount === undefined
+      && (allowance < firmInput || allowance < BigInt(approval.minimumAtomicAmount))) {
       throw new Error("Token approval is insufficient for the firm quote");
     }
   }
@@ -159,4 +165,24 @@ export function validateFirmSwap(input: {
     throw new Error("Firm quote deadline is inconsistent");
   }
   if (mustSubmitAt <= (input.now ?? Date.now())) throw new Error("Firm quote expired before wallet confirmation");
+}
+
+export function buildAtomicSwapCalls(input: {
+  firm: FirmSwapQuote;
+  inputAsset: PoolAsset;
+  now?: number;
+  poolAddress: Address;
+}): AtomicCall[] {
+  const { firm, inputAsset, poolAddress } = input;
+  if (firm.transaction.method === "swapExactNativeForAsset") {
+    throw new Error("Native-input swaps do not require an atomic approval batch");
+  }
+  return buildAtomicApprovalCalls({
+    approvals: [{ amount: BigInt(firm.input.atomicAmount), assetId: inputAsset.id, token: inputAsset.address }],
+    mustSubmitBy: firm.mustSubmitBy,
+    now: input.now,
+    requirements: firm.requirements.approvals,
+    spender: poolAddress,
+    transaction: firm.transaction,
+  });
 }

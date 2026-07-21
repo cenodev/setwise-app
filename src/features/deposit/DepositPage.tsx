@@ -40,11 +40,15 @@ import { truncateAddress } from "../../lib/format";
 import {
   allowedLockSelection,
   buildAtomicDepositCalls,
-  classifyAtomicSendError,
   orderAssetsByContract,
   planApprovals,
-  supportsAtomicBatch,
 } from "./model";
+import {
+  atomicBatchResult,
+  atomicConnectionKey,
+  classifyAtomicSendError,
+  supportsAtomicBatch,
+} from "../wallet/atomicBatch";
 
 type ChainAssetState = { allowance: bigint; balance: bigint };
 type ChainDepositState = {
@@ -242,7 +246,7 @@ export function DepositPage() {
   const [claimTransaction, setClaimTransaction] = useState<TransactionView>({ stage: "editing" });
   const [batchId, setBatchId] = useState<string>();
   const [atomicFallbackConnection, setAtomicFallbackConnection] = useState<string | null>(null);
-  const connectionKey = address ? `${address.toLowerCase()}:${connector?.uid ?? connector?.id ?? "wallet"}` : "";
+  const connectionKey = atomicConnectionKey(address, connector);
   const batchStatus = useWaitForCallsStatus({
     id: batchId,
     throwOnFailure: false,
@@ -438,31 +442,33 @@ export function DepositPage() {
   useEffect(() => {
     if (!batchId || !["confirming", "status-error"].includes(transaction.stage) || batchStatus.isFetching) return;
     const timer = window.setTimeout(() => {
-      if (batchStatus.error) {
+      const result = atomicBatchResult({
+        error: batchStatus.error,
+        expectedChainId: requiredChainId,
+        status: batchStatus.data,
+      });
+      if (result.kind === "query-error") {
         setTransaction({
           stage: "status-error",
           error: "Could not confirm the atomic batch status. Check the wallet or explorer before retrying status; sequential fallback is disabled for this submitted batch.",
         });
         return;
       }
-      const status = batchStatus.data;
-      if (!status) return;
-      const receipt = status.receipts?.at(-1);
-      const hash = receipt?.transactionHash;
-      if (!status.atomic) {
+      if (result.kind === "pending") return;
+      if (result.kind === "non-atomic") {
         setBatchId(undefined);
         setTransaction({
           stage: "error",
-          hash,
+          hash: result.hash,
           error: "The wallet reported a non-atomic result for a batch that required atomic execution. Review the transaction before retrying.",
         });
         return;
       }
-      if (status.status === "failure") {
+      if (result.kind === "failure") {
         setBatchId(undefined);
         setTransaction({
           stage: "error",
-          hash,
+          hash: result.hash,
           error: "Atomic approval-and-deposit batch reverted. No approval or deposit was applied.",
         });
         setApprovalViews((current) => Object.fromEntries(
@@ -470,12 +476,11 @@ export function DepositPage() {
         ));
         return;
       }
-      if (status.status !== "success") return;
-      if (status.chainId !== requiredChainId || !receipt || receipt.status !== "success" || !hash) {
+      if (result.kind === "invalid-receipt") {
         setBatchId(undefined);
         setTransaction({
           stage: "error",
-          hash,
+          hash: result.hash,
           error: "The completed atomic batch returned an invalid chain receipt. Review the wallet or explorer before retrying.",
         });
         return;
@@ -484,7 +489,7 @@ export function DepositPage() {
       setApprovalViews((current) => Object.fromEntries(
         Object.keys(current).map((assetId) => [assetId, { stage: "confirmed" as const }]),
       ));
-      setTransaction({ stage: "success", hash });
+      setTransaction({ stage: "success", hash: result.hash });
       void refreshAfterReceipt();
     }, 0);
     return () => window.clearTimeout(timer);
