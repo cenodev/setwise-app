@@ -19,6 +19,12 @@ The prototype enables only BSC Testnet (chain ID `97`) and external wallets. App
 The app uses the deployed Setwise RFQ API and its no-BNB testnet pool by default. Set `VITE_RFQ_API_URL` or
 `VITE_POOL_ID` only when intentionally testing another deployment.
 
+Token names, symbols, classifications, and logos are fetched from the public Setwise token list. Override its URL with
+`VITE_TOKEN_LIST_URL` when needed. This data is presentation-only: metadata is matched only by `(chainId, lowercase
+contract address)`, and RFQ pool discovery remains the authority for supported assets, ordering, addresses, and every
+quote or transaction identifier. If the list or an image is unavailable, the app retains RFQ labels and a stable
+initials icon.
+
 `/swap` discovers enabled pairs from that API, requests cancellation-safe exact-input or exact-output estimates, confirms exact ERC-20
 approvals before requesting executable calldata, and validates every firm quote before opening the wallet. Native BNB
 input/output controls appear automatically when a discovered pool includes its wrapped native asset and advertises

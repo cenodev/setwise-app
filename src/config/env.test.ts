@@ -10,6 +10,7 @@ describe("resolveRuntimeConfig", () => {
     expect(config.walletConfigured).toBe(false);
     expect(config.reownProjectId).toBeNull();
     expect(config.rfqApiUrl).toBe("https://setwise-rfq-api.datadex.workers.dev");
+    expect(config.tokenListUrl).toBe("https://raw.githubusercontent.com/cenodev/setwise-token-list/main/data/token-list.json");
   });
 
   it("recognizes a configured Reown project", () => {
