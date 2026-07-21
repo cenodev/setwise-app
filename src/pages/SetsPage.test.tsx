@@ -14,6 +14,7 @@ const usdtAddress = "0x3333333333333333333333333333333333333333";
 function summary(id: string, chainId = 97): PoolSummary {
   return {
     id,
+    display: { description: `Description for ${id}`, name: `Set ${id}`, sortOrder: 0 },
     chain: { id: chainId, name: chainId === 97 ? "BSC Testnet" : "Ethereum" },
     contract: { address: poolAddress },
     lpToken: { symbol: "SETWISE", decimals: 18, address: lpAddress },
