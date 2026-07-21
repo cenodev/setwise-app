@@ -28,6 +28,14 @@ const balanceAmountSchema = z.object({
   decimals: z.number().int().min(0),
 });
 
+const externalLiquiditySourceSchema = z.object({
+  chainId: z.number().int(),
+  venue: z.string().min(1),
+  sourceAddress: addressSchema,
+  liquidityUsd: decimalSchema,
+  observedAt: z.string().datetime().optional(),
+}).passthrough();
+
 const assetSchema = z.object({
   id: z.string().min(1),
   symbol: z.string().min(1),
@@ -72,6 +80,7 @@ export const poolStateSchema = z.object({
   }).passthrough(),
   totalValueUsd: decimalSchema,
   totalSupply: balanceAmountSchema,
+  externalLiquiditySources: z.array(externalLiquiditySourceSchema).optional(),
   contract: z.object({ wrappedNativeToken: addressSchema }).passthrough().optional(),
   assets: z.array(z.object({
     asset: z.string().min(1),
