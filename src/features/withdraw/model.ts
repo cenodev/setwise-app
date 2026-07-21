@@ -63,13 +63,15 @@ export function validateFirmWithdrawal(input: {
   if (!isAddressEqual(firm.investor, address) || !isAddressEqual(firm.requirements.sender, address)) {
     throw new Error("Firm quote requires a different sender");
   }
-  if (!isAddressEqual(firm.transaction.to, poolAddress)) throw new Error("Firm quote targets an unexpected pool");
+  if (!isAddressEqual(firm.transaction.to, poolAddress)) throw new Error("Firm quote targets an unexpected Set");
   if (BigInt(firm.transaction.value) !== 0n) throw new Error("Withdrawal unexpectedly requests native value");
   if (firm.receiveNative !== receiveNative) throw new Error("Firm quote native output does not match the selection");
   if (firm.output.asset !== outputAssetId) throw new Error("Firm quote output does not match the selected asset");
-  if (firm.shares.atomicAmount !== indicative.input.atomicAmount
+  if (firm.shares.asset !== indicative.input.asset
+    || firm.shares.decimals !== indicative.input.decimals
+    || firm.shares.atomicAmount !== indicative.input.atomicAmount
     || firm.requirements.minimumPoolTokenBalance !== firm.shares.atomicAmount) {
-    throw new Error("Firm quote changed the required pool-token balance");
+    throw new Error("Firm quote changed the required Set-share balance");
   }
   if (BigInt(firm.requirements.minimumPoolTokenBalance) > unlockedBalance) {
     throw new Error("Insufficient unlocked SETWISE balance for the firm quote");

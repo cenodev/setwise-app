@@ -64,6 +64,11 @@ export const poolSchema = z.object({
   capabilities: z.object({
     nativeAsset: z.boolean(),
     swaps: z.object({ exactInput: z.boolean(), exactOutput: z.boolean(), firm: z.boolean(), indicative: z.boolean() }).passthrough(),
+    withdrawals: z.object({
+      proportional: z.boolean(),
+      singleAsset: z.boolean(),
+      firm: z.boolean(),
+    }).passthrough().optional(),
   }).passthrough().optional(),
 }).passthrough();
 
@@ -77,6 +82,8 @@ export const poolStateSchema = z.object({
     paused: z.boolean(),
     deposits: z.enum(["available", "paused"]),
     swaps: z.enum(["available", "paused"]).optional(),
+    proportionalWithdrawals: z.enum(["available", "paused"]).optional(),
+    singleAssetWithdrawals: z.enum(["available", "paused"]).optional(),
   }).passthrough(),
   totalValueUsd: decimalSchema,
   totalSupply: balanceAmountSchema,

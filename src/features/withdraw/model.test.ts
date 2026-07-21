@@ -106,6 +106,10 @@ describe("withdrawal model", () => {
     expect(() => validateFirmWithdrawal(base)).not.toThrow();
     expect(() => validateFirmWithdrawal({ ...base, unlockedBalance: 1n })).toThrow(/Insufficient unlocked/);
     expect(() => validateFirmWithdrawal({ ...base, receiveNative: false })).toThrow(/native output/);
+    expect(() => validateFirmWithdrawal({
+      ...base,
+      firm: { ...firm, shares: { ...firm.shares, asset: "OTHER-SET-LP" } },
+    })).toThrow(/Set-share balance/);
     expect(() => validateFirmWithdrawal({ ...base, now: Date.parse(until) })).toThrow(/expired/);
     expect(() => validateFirmWithdrawal({
       ...base,

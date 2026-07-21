@@ -1,17 +1,19 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
+import type { Pool, PoolState } from "../../data/rfq/deposits";
 import { DepositPage } from "./DepositPage";
 
 const mocks = vi.hoisted(() => ({
   atomicStatus: "supported",
+  chainData: null as object | null,
   chainRefetch: vi.fn(),
   createActivity: vi.fn(),
   events: [] as string[],
   markActivityFailed: vi.fn(),
   markActivityPending: vi.fn(),
   markActivitySuccessful: vi.fn(),
-  poolStateRefetch: vi.fn(),
+  invalidateQueries: vi.fn(),
   requestDepositQuote: vi.fn(),
   requestFirmDepositQuote: vi.fn(),
   sendCalls: vi.fn(),
@@ -38,24 +40,41 @@ const asset = {
   name: "Tether USD",
   symbol: "USDT",
   weight: 100,
-};
+} satisfies Pool["assets"][number];
 
 const pool = {
   assets: [asset],
   chain: { id: 97, name: "BSC Testnet" },
   contract: { address: poolAddress },
+  display: { description: "Primary Set", name: "Primary Set", sortOrder: 0 },
   id: "bstock-ai-no-bnb-bsc-testnet",
   lpToken: { address: poolAddress, decimals: 18, symbol: "SETWISE" },
   quotePolicy: { allowedLockDays: [0] },
-};
+} satisfies Pool;
 
 const poolState = {
-  assets: [{ asset: "USDT", index: 0, market: { askUsd: "1", bidUsd: "1" } }],
+  assets: [{
+    actualAtomicBalance: "1000000",
+    amount: "1",
+    asset: "USDT",
+    atomicAmount: "1000000",
+    balanceStatus: "synced" as const,
+    decimals: 6,
+    index: 0,
+    market: { askUsd: "1", bidUsd: "1", observedAt: pricedAt },
+    multiplier: "1",
+    recordedAtomicBalance: "1000000",
+    valueUsd: "1",
+  }],
+  blockNumber: "1",
+  blockTimestamp: pricedAt,
   chainId: 97,
   poolAddress,
   poolId: pool.id,
+  totalSupply: { amount: "1", atomicAmount: "1000000000000000000", decimals: 18 },
+  totalValueUsd: "1",
   trading: { deposits: "available", paused: false },
-};
+} satisfies PoolState;
 
 const chainData = {
   assets: { USDT: { allowance: 0n, balance: 10_000_000n } },
@@ -100,18 +119,10 @@ const firmQuote = {
 };
 
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: (options: { queryKey: readonly unknown[] }) => {
-    const key = options.queryKey[0];
-    if (key === "pool") return {
-      data: pool, error: null, isPending: false, refetch: vi.fn().mockResolvedValue({ data: pool }),
-    };
-    if (key === "pool-state") return {
-      data: poolState, error: null, isPending: false, refetch: mocks.poolStateRefetch,
-    };
-    return {
-      data: chainData, error: null, isPending: false, refetch: mocks.chainRefetch,
-    };
-  },
+  useQuery: () => ({
+    data: mocks.chainData, error: null, isPending: false, refetch: mocks.chainRefetch,
+  }),
+  useQueryClient: () => ({ invalidateQueries: mocks.invalidateQueries }),
 }));
 
 vi.mock("wagmi", () => ({
@@ -158,7 +169,7 @@ vi.mock("../activity/store", () => ({
 }));
 
 async function preparePortfolioDeposit() {
-  render(<MemoryRouter><DepositPage /></MemoryRouter>);
+  render(<MemoryRouter><DepositPage pool={pool} poolState={poolState} /></MemoryRouter>);
   fireEvent.click(screen.getByRole("button", { name: "Portfolio" }));
   fireEvent.change(screen.getByRole("textbox", { name: "USDT amount" }), { target: { value: "1" } });
   await waitFor(() => expect(screen.getByRole("button", { name: "Approve assets & deposit" })).toBeEnabled());
@@ -178,8 +189,9 @@ describe("DepositPage atomic deposits", () => {
     mocks.markActivityPending.mockReset();
     mocks.markActivitySuccessful.mockReset();
     mocks.saveActivity.mockReset();
+    mocks.chainData = chainData;
     mocks.chainRefetch.mockReset().mockResolvedValue({ data: chainData });
-    mocks.poolStateRefetch.mockReset().mockResolvedValue({ data: poolState });
+    mocks.invalidateQueries.mockReset().mockResolvedValue(undefined);
     mocks.requestDepositQuote.mockReset().mockResolvedValue(indicativeQuote);
     mocks.requestFirmDepositQuote.mockReset().mockImplementation(() => {
       mocks.events.push("firm-quote");
@@ -229,12 +241,18 @@ describe("DepositPage atomic deposits", () => {
     expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("deposit-activity-1", batchHash);
     expect(screen.getByRole("link", { name: /0xcccc/ })).toHaveAttribute("href", expect.stringContaining(batchHash));
     expect(mocks.chainRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(mocks.poolStateRefetch).toHaveBeenCalled();
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      exact: true,
+      queryKey: ["sets", pool.id, "state"],
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["wallet-pool-position", pool.id],
+    });
   });
 
   it("falls back before submission when atomic capability is unsupported", async () => {
     mocks.atomicStatus = "unsupported";
-    render(<MemoryRouter><DepositPage /></MemoryRouter>);
+    render(<MemoryRouter><DepositPage pool={pool} poolState={poolState} /></MemoryRouter>);
     fireEvent.click(screen.getByRole("button", { name: "Portfolio" }));
     fireEvent.change(screen.getByRole("textbox", { name: "USDT amount" }), { target: { value: "1" } });
     const action = await screen.findByRole("button", { name: "Approve 1 token & deposit" });
@@ -284,7 +302,7 @@ describe("DepositPage atomic deposits", () => {
       ...firmQuote,
       mustSubmitBy: new Date(Date.now() - 1_000).toISOString(),
     });
-    render(<MemoryRouter><DepositPage /></MemoryRouter>);
+    render(<MemoryRouter><DepositPage pool={pool} poolState={poolState} /></MemoryRouter>);
     fireEvent.click(screen.getByRole("button", { name: "Portfolio" }));
     fireEvent.change(screen.getByRole("textbox", { name: "USDT amount" }), { target: { value: "1" } });
     const action = await screen.findByRole("button", { name: "Approve 1 token & deposit" });
@@ -294,5 +312,114 @@ describe("DepositPage atomic deposits", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/expired/i);
     expect(mocks.saveActivity).not.toHaveBeenCalled();
+  });
+
+  it("uses only the route-selected Set for reads, quotes, approvals, activity, and refreshes", async () => {
+    const secondPoolAddress = "0x4000000000000000000000000000000000000000" as const;
+    const secondTokenAddress = "0x5000000000000000000000000000000000000000" as const;
+    const secondAsset = {
+      ...asset,
+      address: secondTokenAddress,
+      decimals: 8,
+      id: "WBTC",
+      name: "Wrapped Bitcoin",
+      symbol: "WBTC",
+    } satisfies Pool["assets"][number];
+    const secondPool = {
+      ...pool,
+      assets: [secondAsset],
+      contract: { address: secondPoolAddress },
+      display: { description: "Second Set", name: "Second Set", sortOrder: 1 },
+      id: "second-set",
+      lpToken: { address: secondPoolAddress, decimals: 18, symbol: "SECOND" },
+      quotePolicy: { allowedLockDays: [0, 30] },
+    } satisfies Pool;
+    const secondState = {
+      ...poolState,
+      assets: [{
+        ...poolState.assets[0],
+        asset: secondAsset.id,
+        decimals: secondAsset.decimals,
+      }],
+      poolAddress: secondPoolAddress,
+      poolId: secondPool.id,
+    } satisfies PoolState;
+    const secondChainData = {
+      ...chainData,
+      assets: { WBTC: { allowance: 0n, balance: 200_000_000n } },
+      orderedAssets: [secondAsset],
+    };
+    const secondIndicative = {
+      ...indicativeQuote,
+      deposits: [{ amount: "1", asset: "WBTC", atomicAmount: "100000000", decimals: 8 }],
+      marketSnapshot: [{ askUsd: "60000", asset: "WBTC", bidUsd: "59900" }],
+      orderedAtomicAmounts: ["100000000"],
+      output: { ...indicativeQuote.output, asset: "SECOND" },
+      stateSnapshot: { chainId: 97, poolAddress: secondPoolAddress, tradingPaused: false },
+    };
+    const secondFirm = {
+      ...firmQuote,
+      mode: "single-asset" as const,
+      orderedAtomicAmounts: ["100000000"],
+      requirements: {
+        approvals: [{
+          minimumAtomicAmount: "100000000",
+          spender: secondPoolAddress,
+          token: secondTokenAddress,
+        }],
+        sender: investor,
+      },
+      shares: { ...firmQuote.shares, asset: "SECOND" },
+      transaction: {
+        ...firmQuote.transaction,
+        method: "depositSingleAsset" as const,
+        to: secondPoolAddress,
+      },
+    };
+
+    mocks.atomicStatus = "unsupported";
+    mocks.chainData = secondChainData;
+    mocks.chainRefetch.mockResolvedValue({ data: secondChainData });
+    mocks.requestDepositQuote.mockResolvedValue(secondIndicative);
+    mocks.requestFirmDepositQuote.mockResolvedValue(secondFirm);
+
+    render(<MemoryRouter><DepositPage pool={secondPool} poolState={secondState} /></MemoryRouter>);
+    fireEvent.change(screen.getByRole("textbox", { name: "Amount" }), { target: { value: "1" } });
+
+    const action = await screen.findByRole("button", { name: "Approve 1 token & deposit" });
+    await waitFor(() => expect(action).toBeEnabled());
+    expect(mocks.requestDepositQuote).toHaveBeenCalledWith(
+      secondPool.id,
+      [{ amount: "1", asset: secondAsset.id }],
+      0,
+      expect.any(AbortSignal),
+    );
+
+    fireEvent.click(action);
+    await screen.findByRole("button", { name: "New deposit" });
+
+    expect(mocks.writeContract).toHaveBeenCalledWith(expect.objectContaining({
+      address: secondTokenAddress,
+      args: [secondPoolAddress, 100_000_000n],
+    }));
+    expect(mocks.requestFirmDepositQuote).toHaveBeenCalledWith(expect.objectContaining({
+      amounts: [{ amount: "1", asset: secondAsset.id }],
+      mode: "single-asset",
+      poolId: secondPool.id,
+    }));
+    expect(mocks.createActivity).toHaveBeenCalledWith(expect.objectContaining({
+      setId: secondPool.id,
+      shares: { amount: "1", symbol: "SECOND" },
+    }));
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      exact: true,
+      queryKey: ["sets", secondPool.id, "state"],
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["wallet-pool-position", secondPool.id],
+    });
+    expect(mocks.invalidateQueries).not.toHaveBeenCalledWith(expect.objectContaining({
+      queryKey: ["sets", pool.id, "state"],
+    }));
   });
 });
