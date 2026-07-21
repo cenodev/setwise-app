@@ -1,18 +1,34 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { decodeFunctionData } from "viem";
 
+import { erc20Abi } from "../../data/chain/abis";
 import { SwapPage } from "./SwapPage";
+
+type AtomicTestCall = { data: `0x${string}`; to: `0x${string}`; value: bigint };
 
 const mocks = vi.hoisted(() => ({
   allowances: Object.fromEntries<bigint>([]),
   chainError: null as Error | null,
   chainRefetch: vi.fn(),
+  atomicCapability: "unsupported",
+  batchStatus: null as null | {
+    atomic: boolean;
+    chainId: number;
+    receipts?: { status: string; transactionHash: `0x${string}` }[];
+    status: string;
+  },
+  batchStatusError: null as Error | null,
+  batchStatusRefetch: vi.fn(),
+  capabilityRefetch: vi.fn(),
   createActivity: vi.fn(),
   poolStateRefetch: vi.fn(),
   requestFirmSwapQuote: vi.fn(),
   requestSwapQuote: vi.fn(),
   saveActivity: vi.fn(),
   sendTransaction: vi.fn(),
+  sendCalls: vi.fn<(input: { calls: AtomicTestCall[] }) => Promise<{ id: string }>>(),
+  firmInputDelta: 0n,
   tradingPaused: false,
   updateActivity: vi.fn(),
   waitForTransactionReceipt: vi.fn(),
@@ -24,8 +40,8 @@ const wallet = "0x2000000000000000000000000000000000000000";
 const wrappedAddress = "0x3000000000000000000000000000000000000000";
 const usdtAddress = "0x4000000000000000000000000000000000000000";
 const tokenAddress = "0x5000000000000000000000000000000000000000";
-const approvalHash = `0x${"a".repeat(64)}`;
-const swapHash = `0x${"b".repeat(64)}`;
+const approvalHash = `0x${"a".repeat(64)}` as const;
+const swapHash = `0x${"b".repeat(64)}` as const;
 
 const assets = [
   { address: usdtAddress, decimals: 18, id: "USDT", index: 0, name: "Tether USD", symbol: "USDT", weight: 40 },
@@ -117,6 +133,8 @@ function firm(input: {
   const specifiedAmount = input.inputAmount ?? input.outputAmount;
   if (specifiedAmount === undefined) throw new Error("Firm request needs an input or output amount");
   const preview = indicative(input.inputAsset, input.outputAsset, specifiedAmount, intent);
+  const finalInputAtomic = (BigInt(preview.input.atomicAmount) + mocks.firmInputDelta).toString();
+  const finalInput = { ...preview.input, atomicAmount: finalInputAtomic };
   const inputMetadata = assets.find((asset) => asset.id === input.inputAsset)!;
   const outputMetadata = assets.find((asset) => asset.id === input.outputAsset)!;
   const deadline = Math.floor(Date.now() / 1_000) + (expired ? -1 : 60);
@@ -128,7 +146,7 @@ function firm(input: {
       signer: tokenAddress,
       typedData: {
         domain: { chainId: 97, name: "SetwisePool", verifyingContract: poolAddress, version: "2.0.0" },
-        message: { deadline: "123", inputAmount: preview.input.atomicAmount, inputAsset: inputMetadata.address, outputAmount: preview.output.atomicAmount, outputAsset: outputMetadata.address, payer: input.payer, quoteId, recipient: input.payer },
+        message: { deadline: "123", inputAmount: finalInputAtomic, inputAsset: inputMetadata.address, outputAmount: preview.output.atomicAmount, outputAsset: outputMetadata.address, payer: input.payer, quoteId, recipient: input.payer },
         primaryType: "SwapQuote",
         types: {},
       },
@@ -137,7 +155,7 @@ function firm(input: {
     executionDeadline: String(deadline),
     firmQuoteId: quoteId,
     guard: { inputTolerancePpm: "5000", maximumInputBalance: "1", minimumOutputBalance: "1", offchainInputBalance: "1", offchainOutputBalance: "1", outputTolerancePpm: "5000", packedDeadline: "123" },
-    input: preview.input,
+    input: finalInput,
     intent,
     mustSubmitBy: new Date(deadline * 1_000).toISOString(),
     operation: "swap",
@@ -145,7 +163,7 @@ function firm(input: {
     persisted: true,
     quoteType: "firm",
     requirements: {
-      approvals: input.inputNative ? [] : [{ minimumAtomicAmount: preview.input.atomicAmount, spender: poolAddress, token: inputMetadata.address }],
+      approvals: input.inputNative ? [] : [{ minimumAtomicAmount: finalInputAtomic, spender: poolAddress, token: inputMetadata.address }],
       sender: input.payer,
     },
     stateSnapshot: { blockHash: `0x${"2".repeat(64)}`, blockNumber: "1", blockTimestamp: "1", chainId: 97, poolAddress, poolId: pool.id },
@@ -155,7 +173,7 @@ function firm(input: {
       data: "0x1234",
       method: input.inputNative ? "swapExactNativeForAsset" : input.outputNative ? "swapExactAssetForNative" : "swapExactAssetForAsset",
       to: poolAddress,
-      value: input.inputNative ? preview.input.atomicAmount : "0",
+      value: input.inputNative ? finalInputAtomic : "0",
     },
     venues: [],
     warnings: [],
@@ -172,9 +190,22 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 vi.mock("wagmi", () => ({
-  useAccount: () => ({ address: wallet, chainId: 97 }),
+  useAccount: () => ({ address: wallet, chainId: 97, connector: { id: "test-wallet", uid: "connector-1" } }),
+  useCapabilities: () => ({
+    data: { atomic: { status: mocks.atomicCapability } },
+    isError: false,
+    isFetched: true,
+    refetch: mocks.capabilityRefetch,
+  }),
   usePublicClient: () => ({ waitForTransactionReceipt: mocks.waitForTransactionReceipt }),
+  useSendCalls: () => ({ sendCallsAsync: mocks.sendCalls }),
   useSendTransaction: () => ({ sendTransactionAsync: mocks.sendTransaction }),
+  useWaitForCallsStatus: () => ({
+    data: mocks.batchStatus,
+    error: mocks.batchStatusError,
+    isFetching: false,
+    refetch: mocks.batchStatusRefetch,
+  }),
   useWriteContract: () => ({ writeContractAsync: mocks.writeContract }),
 }));
 
@@ -202,17 +233,30 @@ async function enterAmount(value = "10") {
 
 async function executeReviewedSwap(review: HTMLElement) {
   fireEvent.click(review);
-  const confirm = await screen.findByRole("button", { name: /swap$/i });
+  const confirm = await screen.findByRole("button", { name: /swap|atomically/i });
   fireEvent.click(confirm);
 }
 
 describe("SwapPage", () => {
   beforeEach(() => {
     mocks.allowances = { TOKEN: 1_000n * 10n ** 18n, USDT: 0n, WBNB: 1_000n * 10n ** 18n };
+    mocks.atomicCapability = "unsupported";
+    mocks.batchStatus = {
+      atomic: true,
+      chainId: 97,
+      receipts: [{ status: "success", transactionHash: swapHash }],
+      status: "success",
+    };
+    mocks.batchStatusError = null;
+    mocks.firmInputDelta = 0n;
     mocks.chainError = null;
     mocks.tradingPaused = false;
     mocks.chainRefetch.mockReset().mockImplementation(() => Promise.resolve({ data: chainData() }));
     mocks.poolStateRefetch.mockReset().mockImplementation(() => Promise.resolve({ data: poolState() }));
+    mocks.capabilityRefetch.mockReset().mockImplementation(() => Promise.resolve({
+      data: { atomic: { status: mocks.atomicCapability } },
+    }));
+    mocks.batchStatusRefetch.mockReset().mockResolvedValue(undefined);
     mocks.requestSwapQuote.mockReset().mockImplementation(({
       inputAmount, inputAsset, outputAmount, outputAsset,
     }: { inputAmount?: string; inputAsset: string; outputAmount?: string; outputAsset: string }) => {
@@ -226,6 +270,7 @@ describe("SwapPage", () => {
       return Promise.resolve(approvalHash);
     });
     mocks.sendTransaction.mockReset().mockResolvedValue(swapHash);
+    mocks.sendCalls.mockReset().mockResolvedValue({ id: "batch-1" });
     mocks.waitForTransactionReceipt.mockReset().mockResolvedValue({ status: "success" });
     mocks.createActivity.mockReset().mockImplementation((input: object) => ({ ...input, id: "activity-1", operation: "swap", timestamp: 1 }));
     mocks.saveActivity.mockReset();
@@ -269,6 +314,109 @@ describe("SwapPage", () => {
     expect(mocks.updateActivity).toHaveBeenCalledWith("activity-1", expect.objectContaining({ hash: swapHash, status: "success" }));
     expect(mocks.chainRefetch.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(mocks.poolStateRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("submits exact approval and firm swap in one forced-atomic batch", async () => {
+    mocks.atomicCapability = "supported";
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    await screen.findByRole("button", { name: "New swap" });
+    expect(mocks.sendCalls).toHaveBeenCalledWith(expect.objectContaining({
+      account: wallet,
+      chainId: 97,
+      forceAtomic: true,
+    }));
+    const calls = mocks.sendCalls.mock.calls[0]?.[0].calls;
+    expect(calls).toHaveLength(2);
+    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0].data })).toEqual({
+      args: [poolAddress, 10n * 10n ** 18n],
+      functionName: "approve",
+    });
+    expect(calls[1]).toEqual({ data: "0x1234", to: poolAddress, value: 0n });
+    expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendCalls.mock.invocationCallOrder[0]);
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
+    expect(mocks.updateActivity).toHaveBeenCalledWith("activity-1", expect.objectContaining({ hash: swapHash, status: "success" }));
+  });
+
+  it("approves the final firm input atomically when exact-output pricing moves", async () => {
+    mocks.atomicCapability = "ready";
+    mocks.firmInputDelta = 1n * 10n ** 18n;
+    render(<MemoryRouter><SwapPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Exact output" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "You receive amount" }), { target: { value: "20" } });
+    const review = await screen.findByRole("button", { name: "Review swap" });
+    await waitFor(() => expect(review).toBeEnabled());
+    await executeReviewedSwap(review);
+
+    await screen.findByRole("button", { name: "New swap" });
+    const calls = mocks.sendCalls.mock.calls[0]?.[0].calls;
+    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0].data })).toEqual({
+      args: [poolAddress, 11n * 10n ** 18n],
+      functionName: "approve",
+    });
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+  });
+
+  it("offers an explicit sequential retry when atomic wallet setup is rejected", async () => {
+    mocks.atomicCapability = "ready";
+    mocks.sendCalls.mockRejectedValueOnce({ code: 5750 });
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/sequential approval and swap/i);
+    fireEvent.click(screen.getByRole("button", { name: "Try swap again" }));
+    const retry = await screen.findByRole("button", { name: "Approve exact amount & swap" });
+    await waitFor(() => expect(retry).toBeEnabled());
+    fireEvent.click(retry);
+
+    await screen.findByRole("button", { name: "New swap" }, { timeout: 3_000 });
+    expect(mocks.sendCalls).toHaveBeenCalledTimes(1);
+    expect(mocks.writeContract).toHaveBeenCalledTimes(1);
+    expect(mocks.requestFirmSwapQuote).toHaveBeenCalledTimes(2);
+    expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[1]).toBeGreaterThan(mocks.writeContract.mock.invocationCallOrder[0]);
+  });
+
+  it("reports a submitted atomic batch failure without attempting sequential fallback", async () => {
+    mocks.atomicCapability = "supported";
+    mocks.batchStatus = { atomic: true, chainId: 97, status: "failure" };
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/No approval or swap was applied/i);
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
+    expect(mocks.updateActivity).toHaveBeenCalledWith("activity-1", expect.objectContaining({ status: "failed" }));
+  });
+
+  it("retries status instead of falling back after a batch ID was returned", async () => {
+    mocks.atomicCapability = "supported";
+    mocks.batchStatus = null;
+    mocks.batchStatusError = new Error("status RPC unavailable");
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/sequential fallback is disabled/i);
+    fireEvent.click(screen.getByRole("button", { name: "Retry batch status" }));
+    expect(mocks.batchStatusRefetch).toHaveBeenCalledTimes(1);
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("does not duplicate an atomic submission while the wallet request is open", async () => {
+    mocks.atomicCapability = "supported";
+    let resolveBatch!: (value: { id: string }) => void;
+    mocks.sendCalls.mockImplementation(() => new Promise((resolve) => { resolveBatch = resolve; }));
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    const pending = await screen.findByRole("button", { name: "Confirm atomic swap in wallet…" });
+    expect(pending).toBeDisabled();
+    fireEvent.click(pending);
+    expect(mocks.sendCalls).toHaveBeenCalledTimes(1);
+    resolveBatch({ id: "batch-1" });
+    await screen.findByRole("button", { name: "New swap" });
   });
 
   it("quotes and executes a user-specified exact output", async () => {
@@ -346,6 +494,17 @@ describe("SwapPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/expired/i);
     expect(screen.getByRole("button", { name: "Refresh quote" })).toBeEnabled();
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("never submits an expired firm quote as an atomic batch", async () => {
+    mocks.atomicCapability = "supported";
+    mocks.requestFirmSwapQuote.mockReset().mockImplementation((input: Parameters<typeof firm>[0]) => Promise.resolve(firm(input, true)));
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/expired/i);
+    expect(mocks.sendCalls).not.toHaveBeenCalled();
+    expect(mocks.writeContract).not.toHaveBeenCalled();
   });
 
   it("offers recovery after wallet rejection and records the failed operation", async () => {
