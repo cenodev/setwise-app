@@ -19,11 +19,15 @@ const token = {
 };
 
 describe("token metadata", () => {
-  it("validates and indexes metadata by chain and normalized address", () => {
+  it("validates multi-chain metadata and indexes by chain and normalized address", () => {
     const index = createTokenMetadataIndex(parseTokenList({ tokens: [token, {
       ...token,
       address: "123mYEnRLM2LLYsJW3K6oyYh8uP1fngj732iG638ondo",
       chainId: 101,
+    }, {
+      ...token,
+      address: "ton-token-address",
+      chainId: -239,
     }] }));
     expect(index.get(tokenMetadataKey(97, address.toUpperCase()))).toEqual(token);
     expect(index.get(tokenMetadataKey(56, address))).toBeUndefined();

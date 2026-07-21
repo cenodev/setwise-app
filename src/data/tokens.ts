@@ -11,7 +11,7 @@ const addressSchema = z.string().min(1);
 const tokenSchema = z.object({
   address: addressSchema,
   assetType: z.string().min(1).optional(),
-  chainId: z.number().int().positive(),
+  chainId: z.number().int(),
   logoURI: z.string().url().optional(),
   name: z.string().min(1),
   symbol: z.string().min(1),
