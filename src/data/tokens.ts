@@ -4,7 +4,9 @@ import { z } from "zod";
 import { runtimeConfig } from "../config/env";
 import { tokenListQueryKeys } from "./queryKeys";
 
-const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
+// The public list is multi-chain. Pool assets are EVM addresses, but validating
+// unrelated non-EVM entries must not make the complete metadata list unusable.
+const addressSchema = z.string().min(1);
 
 const tokenSchema = z.object({
   address: addressSchema,
