@@ -1,23 +1,26 @@
 import { Link, useOutletContext } from "react-router-dom";
 
-import type { SetDefinition } from "../../data/sets";
 import { DepositPage } from "../deposit/DepositPage";
 import { PoolPage } from "../pool-analytics/PoolPage";
 import { WalletGate } from "../wallet/WalletGate";
 import { WithdrawPage } from "../withdraw/WithdrawPage";
-import { setPath, swapPath } from "../../app/routes";
-
-type SetOutletContext = {
-  definition: SetDefinition;
-  unsupported: boolean;
-};
+import { setPath } from "../../app/routes";
+import type { SetOutletContext } from "./SetDetailLayout";
 
 function useSetOutlet(): SetOutletContext {
   return useOutletContext<SetOutletContext>();
 }
 
 export function SetOverviewTab() {
-  const { definition, unsupported } = useSetOutlet();
+  const {
+    error,
+    loading,
+    pool,
+    poolState,
+    refreshing,
+    retry,
+    unsupported,
+  } = useSetOutlet();
 
   return (
     <div className="set-tab-panel">
@@ -25,20 +28,18 @@ export function SetOverviewTab() {
         <p className="eyebrow">Public Set</p>
         <h2>Set overview</h2>
         <p>
-          Track this Set’s total value, LP supply, and usable reserve liquidity
-          {unsupported ? "." : " without connecting a wallet."}
+          Track this Set’s total value, LP supply, reserve composition, and your connected wallet position.
         </p>
       </header>
-      {!unsupported && <PoolPage />}
-      {unsupported && (
-        <section className="prototype-card">
-          <p>
-            Live overview for <code>{definition.id}</code> will render here once this chain is supported.
-            The Set’s underlying liquidity pool remains on chain {definition.chainId}.
-          </p>
-          <Link className="secondary-link" to={swapPath()}>Open Swap</Link>
-        </section>
-      )}
+      <PoolPage
+        error={error}
+        loading={loading}
+        onRetry={retry}
+        pool={pool}
+        poolState={poolState}
+        refreshing={refreshing}
+        showWalletPosition={!unsupported}
+      />
       <aside className="disclosure" role="note">
         <strong>Testnet only.</strong> Reserve values are indicative and can change with market prices.
       </aside>
@@ -47,15 +48,13 @@ export function SetOverviewTab() {
 }
 
 export function SetDepositTab() {
-  const { definition, unsupported } = useSetOutlet();
+  const { definition, operationUnavailable } = useSetOutlet();
 
-  if (unsupported) {
+  if (operationUnavailable.deposit) {
     return (
       <section className="prototype-card" role="status">
         <h2>Deposits unavailable</h2>
-        <p>
-          <code>{definition.id}</code> is on an unsupported chain. Choose another Set to deposit.
-        </p>
+        <p>{operationUnavailable.deposit}</p>
         <Link className="secondary-link" to={setPath(definition.id, "overview")}>Back to overview</Link>
       </section>
     );
@@ -77,15 +76,13 @@ export function SetDepositTab() {
 }
 
 export function SetWithdrawTab() {
-  const { definition, unsupported } = useSetOutlet();
+  const { definition, operationUnavailable } = useSetOutlet();
 
-  if (unsupported) {
+  if (operationUnavailable.withdraw) {
     return (
       <section className="prototype-card" role="status">
         <h2>Withdrawals unavailable</h2>
-        <p>
-          <code>{definition.id}</code> is on an unsupported chain. Choose another Set to withdraw.
-        </p>
+        <p>{operationUnavailable.withdraw}</p>
         <Link className="secondary-link" to={setPath(definition.id, "overview")}>Back to overview</Link>
       </section>
     );

@@ -6,6 +6,13 @@ import { RfqApiError } from "./deposits";
 
 const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/).transform((value) => value as Address);
 
+const poolDisplaySchema = z.object({
+  name: z.string().min(1),
+  description: z.string().min(1),
+  sortOrder: z.number().int(),
+  category: z.string().min(1).optional(),
+}).passthrough();
+
 const poolAssetSummarySchema = z.object({
   id: z.string().min(1),
   symbol: z.string().min(1),
@@ -18,6 +25,7 @@ const poolAssetSummarySchema = z.object({
 
 export const poolSummarySchema = z.object({
   id: z.string().min(1),
+  display: poolDisplaySchema,
   chain: z.object({ id: z.number().int(), name: z.string().nullable() }),
   contract: z.object({ address: addressSchema }).passthrough(),
   lpToken: z.object({ symbol: z.string(), decimals: z.number().int(), address: addressSchema }),
