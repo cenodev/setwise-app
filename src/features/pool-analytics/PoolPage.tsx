@@ -12,15 +12,15 @@ export const POOL_STATE_REFRESH_INTERVAL_MS = 15_000;
 export function PoolPage() {
   const online = useOnlineStatus();
   const poolQuery = useQuery({
-    queryKey: poolQueryKeys.discovery(runtimeConfig.poolId),
-    queryFn: ({ signal }) => getPool(runtimeConfig.poolId, signal),
+    queryKey: poolQueryKeys.discovery(runtimeConfig.defaultPoolId),
+    queryFn: ({ signal }) => getPool(runtimeConfig.defaultPoolId, signal),
     refetchOnReconnect: true,
     refetchOnWindowFocus: true,
     staleTime: 60_000,
   });
   const poolStateQuery = useQuery({
-    queryKey: poolQueryKeys.state(runtimeConfig.poolId),
-    queryFn: ({ signal }) => getPoolState(runtimeConfig.poolId, signal),
+    queryKey: poolQueryKeys.state(runtimeConfig.defaultPoolId),
+    queryFn: ({ signal }) => getPoolState(runtimeConfig.defaultPoolId, signal),
     refetchInterval: online ? POOL_STATE_REFRESH_INTERVAL_MS : false,
     refetchOnReconnect: true,
     refetchOnWindowFocus: true,

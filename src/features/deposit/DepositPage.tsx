@@ -257,13 +257,13 @@ export function DepositPage() {
   });
 
   const poolQuery = useQuery({
-    queryKey: poolQueryKeys.discovery(runtimeConfig.poolId),
-    queryFn: ({ signal }) => getPool(runtimeConfig.poolId, signal),
+    queryKey: poolQueryKeys.discovery(runtimeConfig.defaultPoolId),
+    queryFn: ({ signal }) => getPool(runtimeConfig.defaultPoolId, signal),
     staleTime: 60_000,
   });
   const poolStateQuery = useQuery({
-    queryKey: poolQueryKeys.state(runtimeConfig.poolId),
-    queryFn: ({ signal }) => getPoolState(runtimeConfig.poolId, signal),
+    queryKey: poolQueryKeys.state(runtimeConfig.defaultPoolId),
+    queryFn: ({ signal }) => getPoolState(runtimeConfig.defaultPoolId, signal),
     refetchInterval: online ? 15_000 : false,
   });
 
@@ -274,12 +274,12 @@ export function DepositPage() {
   const tokenChainId = poolQuery.data?.chain.id ?? requiredChainId;
 
   const chainQuery = useQuery({
-    queryKey: ["deposit-chain", address, poolQuery.data?.contract.address,
+    queryKey: ["deposit-chain", poolQuery.data?.id, address, poolQuery.data?.contract.address,
       ...discoveredAssets.map((asset) => asset.address)],
     enabled: Boolean(address && publicClient && poolQuery.data),
     queryFn: async (): Promise<ChainDepositState & { orderedAssets: PoolAsset[] }> => {
       if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and pool are required");
-      if (poolQuery.data.id !== runtimeConfig.poolId || poolQuery.data.chain.id !== requiredChainId) {
+      if (poolQuery.data.id !== runtimeConfig.defaultPoolId || poolQuery.data.chain.id !== requiredChainId) {
         throw new Error("Pool discovery does not match the configured pool and chain");
       }
       const poolAddress = poolQuery.data.contract.address;
@@ -370,7 +370,7 @@ export function DepositPage() {
       setQuoteError(null);
     }, 0);
     const timer = window.setTimeout(() => {
-      void requestDepositQuote(form.request, effectiveLockDays, controller.signal)
+      void requestDepositQuote(runtimeConfig.defaultPoolId, form.request, effectiveLockDays, controller.signal)
         .then((nextQuote) => {
           validateIndicativeQuote(nextQuote, poolQuery.data.contract.address, assets);
           setQuote(nextQuote);
@@ -522,10 +522,11 @@ export function DepositPage() {
         setTransaction({ stage: "firm-quote" });
         const firm = await requestFirmDepositQuote({
           amounts: form.request,
+          idempotencyKey: `deposit:${address.toLowerCase()}:${crypto.randomUUID()}`,
           investor: address,
           lockDays: effectiveLockDays,
           mode,
-          idempotencyKey: `deposit:${address.toLowerCase()}:${crypto.randomUUID()}`,
+          poolId: runtimeConfig.defaultPoolId,
         });
         validateFirmQuote(firm, quote, address, poolQuery.data.contract.address, mode, assets, effectiveLockDays);
         const calls = buildAtomicDepositCalls({
@@ -611,10 +612,11 @@ export function DepositPage() {
       setTransaction({ stage: "firm-quote" });
       const firm = await requestFirmDepositQuote({
         amounts: form.request,
+        idempotencyKey: `deposit:${address.toLowerCase()}:${crypto.randomUUID()}`,
         investor: address,
         lockDays: effectiveLockDays,
         mode,
-        idempotencyKey: `deposit:${address.toLowerCase()}:${crypto.randomUUID()}`,
+        poolId: runtimeConfig.defaultPoolId,
       });
       validateFirmQuote(firm, quote, address, poolQuery.data.contract.address, mode, assets, effectiveLockDays);
       setFirmQuote(firm);

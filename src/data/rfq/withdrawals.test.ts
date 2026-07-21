@@ -32,7 +32,7 @@ describe("withdrawal RFQ client", () => {
   it("omits outputAsset for proportional previews and preserves the share decimal string", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(indicative("proportional")));
     vi.stubGlobal("fetch", fetchMock);
-    await requestWithdrawalQuote({ poolTokenAmount: "1.2500" });
+    await requestWithdrawalQuote({ poolId: "pool-a", poolTokenAmount: "1.2500" });
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     if (typeof init.body !== "string") throw new Error("Expected a JSON request body");
     expect(JSON.parse(init.body)).toEqual(expect.objectContaining({ poolTokenAmount: "1.2500" }));
@@ -58,11 +58,12 @@ describe("withdrawal RFQ client", () => {
       }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await requestWithdrawalQuote({ poolTokenAmount: "1", outputAsset: "WBNB" });
+    await requestWithdrawalQuote({ outputAsset: "WBNB", poolId: "pool-a", poolTokenAmount: "1" });
     await requestFirmWithdrawalQuote({
       idempotencyKey: "withdraw:test",
       investor,
       outputAsset: "WBNB",
+      poolId: "pool-a",
       poolTokenAmount: "1",
       receiveNative: true,
     });
@@ -79,7 +80,7 @@ describe("withdrawal RFQ client", () => {
 
   it("rejects malformed successful responses", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ quoteType: "indicative" })));
-    await expect(requestWithdrawalQuote({ poolTokenAmount: "1" }))
+    await expect(requestWithdrawalQuote({ poolId: "pool-a", poolTokenAmount: "1" }))
       .rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
 });

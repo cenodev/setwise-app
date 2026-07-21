@@ -117,7 +117,7 @@ describe("swap RFQ client", () => {
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();
 
-    const quote = await requestSwapQuote({ inputAmount: "10", inputAsset: "USDT", outputAsset: "TOKEN", signal: controller.signal });
+    const quote = await requestSwapQuote({ inputAmount: "10", inputAsset: "USDT", outputAsset: "TOKEN", poolId: "pool-a", signal: controller.signal });
 
     expect(quote.output.atomicAmount).toBe("2000000000000000000");
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
@@ -143,7 +143,7 @@ describe("swap RFQ client", () => {
     const fetchMock = vi.fn().mockResolvedValue(response(exactOutput));
     vi.stubGlobal("fetch", fetchMock);
 
-    const quote = await requestSwapQuote({ inputAsset: "USDT", outputAmount: "2", outputAsset: "TOKEN" });
+    const quote = await requestSwapQuote({ inputAsset: "USDT", outputAmount: "2", outputAsset: "TOKEN", poolId: "pool-a" });
 
     expect(quote.intent).toBe("exact-output");
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
@@ -156,7 +156,7 @@ describe("swap RFQ client", () => {
     const fetchMock = vi.fn().mockResolvedValue(response(firm()));
     vi.stubGlobal("fetch", fetchMock);
 
-    await requestFirmSwapQuote({ idempotencyKey: "swap:test", inputAmount: "10", inputAsset: "USDT", inputNative: false, outputAsset: "TOKEN", outputNative: false, payer, recipient: payer });
+    await requestFirmSwapQuote({ idempotencyKey: "swap:test", inputAmount: "10", inputAsset: "USDT", inputNative: false, outputAsset: "TOKEN", outputNative: false, payer, poolId: "pool-a", recipient: payer });
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.cache).toBe("no-store");
@@ -169,7 +169,7 @@ describe("swap RFQ client", () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ ...firm(), intent: "exact-output" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await requestFirmSwapQuote({ idempotencyKey: "swap:output", inputAsset: "USDT", inputNative: false, outputAmount: "2", outputAsset: "TOKEN", outputNative: false, payer, recipient: payer });
+    await requestFirmSwapQuote({ idempotencyKey: "swap:output", inputAsset: "USDT", inputNative: false, outputAmount: "2", outputAsset: "TOKEN", outputNative: false, payer, poolId: "pool-a", recipient: payer });
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     if (typeof init.body !== "string") throw new Error("Expected a JSON request body");
@@ -183,9 +183,9 @@ describe("swap RFQ client", () => {
       .mockResolvedValueOnce(response({ ...firm(), authorization: undefined }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(requestSwapQuote({ inputAmount: "10", inputAsset: "USDT", outputAsset: "TOKEN" }))
+    await expect(requestSwapQuote({ inputAmount: "10", inputAsset: "USDT", outputAsset: "TOKEN", poolId: "pool-a" }))
       .rejects.toMatchObject({ code: "INVALID_RESPONSE" });
-    await expect(requestFirmSwapQuote({ idempotencyKey: "swap:test", inputAmount: "10", inputAsset: "USDT", inputNative: false, outputAsset: "TOKEN", outputNative: false, payer, recipient: payer }))
+    await expect(requestFirmSwapQuote({ idempotencyKey: "swap:test", inputAmount: "10", inputAsset: "USDT", inputNative: false, outputAsset: "TOKEN", outputNative: false, payer, poolId: "pool-a", recipient: payer }))
       .rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
 });

@@ -5,7 +5,7 @@ describe("resolveRuntimeConfig", () => {
     const config = resolveRuntimeConfig({}, "http://localhost:4173");
 
     expect(config.appUrl).toBe("http://localhost:4173");
-    expect(config.poolId).toBe("bstock-ai-no-bnb-bsc-testnet");
+    expect(config.defaultPoolId).toBe("bstock-ai-no-bnb-bsc-testnet");
     expect(config.nativeGasReserveBnb).toBe("0.001");
     expect(config.walletConfigured).toBe(false);
     expect(config.reownProjectId).toBeNull();

@@ -33,7 +33,7 @@ describe("deposit RFQ client", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const quote = await requestDepositQuote([{ asset: "USDT", amount: "10.123" }], 30);
+    const quote = await requestDepositQuote("pool-a", [{ asset: "USDT", amount: "10.123" }], 30);
 
     expect(quote.output.atomicAmount).toBe("9900000000000000000");
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
@@ -70,6 +70,7 @@ describe("deposit RFQ client", () => {
       investor,
       lockDays: 0,
       mode: "single-asset",
+      poolId: "pool-a",
     });
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
@@ -80,7 +81,7 @@ describe("deposit RFQ client", () => {
 
   it("rejects malformed successful responses at the runtime boundary", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ quoteType: "indicative" })));
-    await expect(requestDepositQuote([{ asset: "USDT", amount: "1" }], 0))
+    await expect(requestDepositQuote("pool-a", [{ asset: "USDT", amount: "1" }], 0))
       .rejects.toMatchObject({ code: "INVALID_RESPONSE" });
   });
 

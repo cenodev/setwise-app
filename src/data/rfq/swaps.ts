@@ -232,12 +232,13 @@ type SwapAmount =
 export function requestSwapQuote(input: {
   inputAsset: string;
   outputAsset: string;
+  poolId: string;
   signal?: AbortSignal;
 } & SwapAmount): Promise<SwapQuote> {
   return requestJson("/v1/quotes/swaps", swapQuoteSchema, {
     method: "POST",
     body: JSON.stringify({
-      poolId: runtimeConfig.poolId,
+      poolId: input.poolId,
       inputAsset: input.inputAsset,
       outputAsset: input.outputAsset,
       ...(input.inputAmount !== undefined
@@ -255,13 +256,14 @@ export function requestFirmSwapQuote(input: {
   outputAsset: string;
   outputNative: boolean;
   payer: Address;
+  poolId: string;
   recipient: Address;
 } & SwapAmount): Promise<FirmSwapQuote> {
   return requestJson("/v1/firm-quotes/swaps", firmSwapQuoteSchema, {
     method: "POST",
     headers: { "Idempotency-Key": input.idempotencyKey },
     body: JSON.stringify({
-      poolId: runtimeConfig.poolId,
+      poolId: input.poolId,
       inputAsset: input.inputAsset,
       outputAsset: input.outputAsset,
       ...(input.inputAmount !== undefined
