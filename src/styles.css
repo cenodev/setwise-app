@@ -343,8 +343,8 @@ code {
 .token-selector__options li button:hover, .token-selector__options li button:focus-visible { background: var(--bg-surface-raised); }
 .token-selector__options li button:disabled { opacity: .45; cursor: not-allowed; }
 .token-identity { display: inline-flex; min-width: 0; align-items: center; gap: .6rem; }
-.token-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: 50%; object-fit: cover; background: var(--bg-surface-raised); }
-.token-icon--fallback { color: var(--accent-hover); font-size: .68rem; font-weight: 900; }
+.token-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border: 1px solid rgb(255 255 255 / 18%); border-radius: 50%; object-fit: cover; background: #fff; }
+.token-icon--fallback { border-color: transparent; background: var(--bg-surface-raised); color: var(--accent-hover); font-size: .68rem; font-weight: 900; }
 .token-identity__copy { display: grid; min-width: 0; gap: .08rem; }
 .token-identity__copy strong, .token-identity__copy span, .token-identity__copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .token-identity__copy span, .token-identity__copy small { color: var(--text-tertiary); font-size: .72rem; }
