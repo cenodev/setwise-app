@@ -33,6 +33,11 @@ export const poolSummarySchema = z.object({
   capabilities: z.object({
     nativeAsset: z.boolean(),
     swaps: z.object({ exactInput: z.boolean(), exactOutput: z.boolean(), firm: z.boolean(), indicative: z.boolean() }).passthrough(),
+    withdrawals: z.object({
+      proportional: z.boolean(),
+      singleAsset: z.boolean(),
+      firm: z.boolean(),
+    }).passthrough().optional(),
   }).passthrough().optional(),
 }).passthrough();
 

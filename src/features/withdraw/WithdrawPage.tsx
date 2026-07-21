@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { isAddressEqual, type Address, type Hash } from "viem";
@@ -7,11 +7,10 @@ import { useAccount, usePublicClient, useSendTransaction, useWriteContract } fro
 import { requiredChainId } from "../../config/chains";
 import { TokenIdentity } from "../../components/TokenIdentity";
 import { TokenSelector } from "../../components/TokenSelector";
-import { bscTestnetDeployment } from "../../config/deployment";
 import { runtimeConfig } from "../../config/env";
-import { poolQueryKeys } from "../../data/queryKeys";
+import { setQueryKeys } from "../../data/queryKeys";
 import { erc20Abi, setwisePoolAbi } from "../../data/chain/abis";
-import { getPool, getPoolState, RfqApiError, type PoolAsset } from "../../data/rfq/deposits";
+import { RfqApiError, type Pool, type PoolAsset, type PoolState } from "../../data/rfq/deposits";
 import {
   requestFirmWithdrawalQuote,
   requestWithdrawalQuote,
@@ -39,9 +38,18 @@ import {
 
 type ChainWithdrawalState = {
   assetBalances: Record<string, bigint>;
+  canClaim: boolean;
   lockedShares: bigint;
+  lockedUntil: bigint;
   orderedAssets: PoolAsset[];
   unlockedShares: bigint;
+};
+
+export type WithdrawPageProps = {
+  onBusyChange?: (busy: boolean) => void;
+  pool: Pool;
+  poolState: PoolState;
+  refreshPoolState?: () => Promise<PoolState | undefined>;
 };
 
 type TransactionStage =
@@ -129,15 +137,21 @@ function validateIndicativeQuote(input: {
   assets: readonly PoolAsset[];
   mode: WithdrawalMode;
   outputAssetId: string;
+  lpToken: Pool["lpToken"];
+  poolId: string;
   poolAddress: Address;
   quote: WithdrawalQuote;
 }) {
-  const { amountAtomic, assets, mode, outputAssetId, poolAddress, quote } = input;
+  const { amountAtomic, assets, lpToken, mode, outputAssetId, poolAddress, poolId, quote } = input;
+  if (quote.stateSnapshot.poolId !== poolId) throw new Error("Indicative quote targets the wrong Set");
   if (quote.stateSnapshot.chainId !== requiredChainId) throw new Error("Indicative quote targets the wrong chain");
   if (!isAddressEqual(quote.stateSnapshot.poolAddress, poolAddress)) {
     throw new Error("Indicative quote targets an unexpected pool");
   }
   if (quote.mode !== mode) throw new Error("Indicative quote mode does not match the withdrawal mode");
+  if (quote.input.asset !== lpToken.symbol || quote.input.decimals !== lpToken.decimals) {
+    throw new Error("Indicative quote targets the wrong Set share token");
+  }
   if (BigInt(quote.input.atomicAmount) !== amountAtomic) throw new Error("Indicative quote changed the share amount");
   if (mode === "proportional" && quote.execution !== "direct-onchain") {
     throw new Error("Proportional withdrawal was not marked for direct execution");
@@ -162,13 +176,16 @@ function currentTimestamp(): number {
   return Date.now();
 }
 
-export function WithdrawPage() {
+export function WithdrawPage({ onBusyChange, pool, poolState, refreshPoolState }: WithdrawPageProps) {
   const { address } = useAccount();
-  const publicClient = usePublicClient({ chainId: requiredChainId });
+  const publicClient = usePublicClient({ chainId: pool.chain.id });
+  const queryClient = useQueryClient();
   const { sendTransactionAsync } = useSendTransaction();
   const { writeContractAsync } = useWriteContract();
   const online = useOnlineStatus();
-  const [mode, setMode] = useState<WithdrawalMode>("proportional");
+  const [mode, setMode] = useState<WithdrawalMode>(() => (
+    pool.capabilities?.withdrawals?.proportional === false ? "single-asset" : "proportional"
+  ));
   const [amount, setAmount] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState("");
   const [receiveNative, setReceiveNative] = useState(false);
@@ -181,31 +198,24 @@ export function WithdrawPage() {
   const [transaction, setTransaction] = useState<TransactionView>({ stage: "editing" });
   const [now, setNow] = useState(currentTimestamp);
 
-  const poolQuery = useQuery({
-    queryKey: poolQueryKeys.discovery(runtimeConfig.defaultPoolId),
-    queryFn: ({ signal }) => getPool(runtimeConfig.defaultPoolId, signal),
-    staleTime: 60_000,
-  });
-  const poolStateQuery = useQuery({
-    queryKey: poolQueryKeys.state(runtimeConfig.defaultPoolId),
-    queryFn: ({ signal }) => getPoolState(runtimeConfig.defaultPoolId, signal),
-    refetchInterval: online ? 15_000 : false,
-  });
   const discoveredAssets = useMemo(
-    () => [...(poolQuery.data?.assets ?? [])].sort((left, right) => left.index - right.index),
-    [poolQuery.data?.assets],
+    () => [...pool.assets].sort((left, right) => left.index - right.index),
+    [pool.assets],
   );
-  const tokenChainId = poolQuery.data?.chain.id ?? requiredChainId;
+  const tokenChainId = pool.chain.id;
   const chainQuery = useQuery({
-    queryKey: ["withdraw-chain", poolQuery.data?.id, address, poolQuery.data?.contract.address,
+    queryKey: ["withdraw-chain", pool.id, address, pool.contract.address,
       ...discoveredAssets.map((asset) => asset.address)],
-    enabled: Boolean(address && publicClient && poolQuery.data),
+    enabled: Boolean(address && publicClient),
     queryFn: async (): Promise<ChainWithdrawalState> => {
-      if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and pool are required");
-      if (poolQuery.data.id !== runtimeConfig.defaultPoolId || poolQuery.data.chain.id !== requiredChainId) {
-        throw new Error("Pool discovery does not match the configured pool and chain");
+      if (!address || !publicClient) throw new Error("Wallet and Set are required");
+      if (pool.chain.id !== requiredChainId
+        || poolState.poolId !== pool.id
+        || poolState.chainId !== pool.chain.id
+        || !isAddressEqual(poolState.poolAddress, pool.contract.address)) {
+        throw new Error("Set discovery and state do not match the selected Set and chain");
       }
-      const poolAddress = poolQuery.data.contract.address;
+      const poolAddress = pool.contract.address;
       const assetCount = await publicClient.readContract({
         address: poolAddress, abi: setwisePoolAbi, functionName: "assetCount",
       });
@@ -216,9 +226,9 @@ export function WithdrawPage() {
         address: poolAddress, abi: setwisePoolAbi, functionName: "assetAt", args: [BigInt(index)],
       })));
       const orderedAssets = orderAssetsByContract(discoveredAssets, contractOrder);
-      const [unlockedShares, lockedDeposit, balances] = await Promise.all([
+      const [unlockedShares, lockedDeposit, canClaim, balances] = await Promise.all([
         publicClient.readContract({
-          address: poolQuery.data.lpToken.address,
+          address: pool.lpToken.address,
           abi: erc20Abi,
           functionName: "balanceOf",
           args: [address],
@@ -227,6 +237,12 @@ export function WithdrawPage() {
           address: poolAddress,
           abi: setwisePoolAbi,
           functionName: "lockedDeposits",
+          args: [address],
+        }),
+        publicClient.readContract({
+          address: poolAddress,
+          abi: setwisePoolAbi,
+          functionName: "canClaimShares",
           args: [address],
         }),
         Promise.all(orderedAssets.map(async (asset) => [asset.id, await publicClient.readContract({
@@ -238,7 +254,9 @@ export function WithdrawPage() {
       ]);
       return {
         assetBalances: Object.fromEntries(balances),
+        canClaim,
         lockedShares: lockedDeposit[1],
+        lockedUntil: lockedDeposit[0],
         orderedAssets,
         unlockedShares,
       };
@@ -248,23 +266,36 @@ export function WithdrawPage() {
   const assets = chainQuery.data?.orderedAssets ?? discoveredAssets;
   const effectiveSelectedAssetId = selectedAssetId || assets[0]?.id || "";
   const selectedAsset = assets.find((asset) => asset.id === effectiveSelectedAssetId);
-  const nativeEligible = Boolean(selectedAsset
-    && canReceiveNative(selectedAsset.address, bscTestnetDeployment.wrappedNative.address));
+  const wrappedNativeToken = poolState.contract?.wrappedNativeToken;
+  const nativeEligible = Boolean(pool.capabilities?.nativeAsset && selectedAsset && wrappedNativeToken
+    && canReceiveNative(selectedAsset.address, wrappedNativeToken));
   const effectiveReceiveNative = nativeEligible && receiveNative;
-  const lpDecimals = poolQuery.data?.lpToken.decimals ?? 18;
+  const lpDecimals = pool.lpToken.decimals;
   const amountError = useMemo(() => {
     const error = decimalInputError(amount, lpDecimals);
     if (error) return error;
     return decimalToAtomic(amount, lpDecimals) > 0n ? null : "Amount must be greater than zero";
   }, [amount, lpDecimals]);
   const amountAtomic = amountError ? 0n : decimalToAtomic(amount, lpDecimals);
-  const currentRequestKey = `${mode}:${amount}:${mode === "single-asset" ? effectiveSelectedAssetId : "all"}`;
-  const tradingPaused = Boolean(poolStateQuery.data?.trading.paused);
+  const currentRequestKey = `${pool.id}:${mode}:${amount}:${mode === "single-asset" ? effectiveSelectedAssetId : "all"}`;
+  const withdrawalCapabilities = pool.capabilities?.withdrawals;
+  const proportionalSupported = withdrawalCapabilities?.proportional ?? true;
+  const singleAssetSupported = (withdrawalCapabilities?.singleAsset ?? true)
+    && (withdrawalCapabilities?.firm ?? true);
+  const proportionalPaused = poolState.trading.proportionalWithdrawals === "paused";
+  const singleAssetPaused = poolState.trading.paused
+    || poolState.trading.singleAssetWithdrawals === "paused";
   const busy = ["simulation", "firm-quote", "wallet", "confirming"].includes(transaction.stage);
 
   useEffect(() => {
-    if (!online || !poolQuery.data || amountError || amountAtomic <= 0n
-      || (mode === "single-asset" && (!effectiveSelectedAssetId || tradingPaused))) {
+    onBusyChange?.(busy);
+    return () => onBusyChange?.(false);
+  }, [busy, onBusyChange]);
+
+  useEffect(() => {
+    if (!online || amountError || amountAtomic <= 0n
+      || (mode === "proportional" && (!proportionalSupported || proportionalPaused))
+      || (mode === "single-asset" && (!effectiveSelectedAssetId || !singleAssetSupported || singleAssetPaused))) {
       const reset = window.setTimeout(() => {
         setQuoteLoading(false);
         if (amountError || amountAtomic <= 0n) {
@@ -282,7 +313,7 @@ export function WithdrawPage() {
     }, 0);
     const requestTimer = window.setTimeout(() => {
       void requestWithdrawalQuote({
-        poolId: runtimeConfig.defaultPoolId,
+        poolId: pool.id,
         poolTokenAmount: amount,
         ...(mode === "single-asset" ? { outputAsset: effectiveSelectedAssetId } : {}),
         signal: controller.signal,
@@ -290,9 +321,11 @@ export function WithdrawPage() {
         validateIndicativeQuote({
           amountAtomic,
           assets,
+          lpToken: pool.lpToken,
           mode,
           outputAssetId: effectiveSelectedAssetId,
-          poolAddress: poolQuery.data.contract.address,
+          poolAddress: pool.contract.address,
+          poolId: pool.id,
           quote: nextQuote,
         });
         setQuote(nextQuote);
@@ -311,7 +344,8 @@ export function WithdrawPage() {
       window.clearTimeout(requestTimer);
     };
   }, [amount, amountAtomic, amountError, assets, currentRequestKey, effectiveSelectedAssetId, mode,
-    online, poolQuery.data, quoteRefresh, tradingPaused]);
+    online, pool.contract.address, pool.id, proportionalPaused, proportionalSupported, quoteRefresh,
+    singleAssetPaused, singleAssetSupported]);
 
   useEffect(() => {
     if (!quote && !firmQuote) return;
@@ -330,26 +364,43 @@ export function WithdrawPage() {
   const insufficientShares = Boolean(chainQuery.data && amountAtomic > chainQuery.data.unlockedShares);
   const canExecute = Boolean(
     address && publicClient && quote && quoteFresh && quoteMatchesInput && !quoteLoading && online && !busy
-    && !amountError && !insufficientShares && !(mode === "single-asset" && tradingPaused),
+    && !amountError && !insufficientShares
+    && (mode === "proportional" ? proportionalSupported && !proportionalPaused : singleAssetSupported && !singleAssetPaused),
   );
   const refetchChain = chainQuery.refetch;
-  const refetchPoolState = poolStateQuery.refetch;
   const refreshAfterReceipt = useCallback(async () => {
-    await Promise.all([refetchChain(), refetchPoolState()]);
-  }, [refetchChain, refetchPoolState]);
+    await Promise.all([
+      refetchChain(),
+      queryClient.invalidateQueries({ exact: true, queryKey: setQueryKeys.state(pool.id) }),
+      queryClient.invalidateQueries({ queryKey: ["wallet-pool-position", pool.id] }),
+    ]);
+  }, [pool.id, queryClient, refetchChain]);
 
   async function executeWithdrawal() {
-    if (!canExecute || !quote || !address || !publicClient || !poolQuery.data) return;
+    if (!canExecute || !quote || !address || !publicClient) return;
     setFirmQuote(null);
     let submittedHash: Hash | undefined;
     let activityId: string | undefined;
     try {
-      const [latestChain, latestPoolState] = await Promise.all([chainQuery.refetch(), poolStateQuery.refetch()]);
+      const [latestChain, latestPoolState] = await Promise.all([
+        chainQuery.refetch(),
+        refreshPoolState?.() ?? Promise.resolve(poolState),
+      ]);
       if (!latestChain.data || amountAtomic > latestChain.data.unlockedShares) {
-        throw new Error("Insufficient unlocked SETWISE balance");
+        throw new Error(`Insufficient unlocked ${pool.lpToken.symbol} balance`);
       }
-      if (mode === "single-asset" && latestPoolState.data?.trading.paused) {
+      if (!latestPoolState
+        || latestPoolState.poolId !== pool.id
+        || latestPoolState.chainId !== pool.chain.id
+        || !isAddressEqual(latestPoolState.poolAddress, pool.contract.address)) {
+        throw new Error("Latest Set state does not match the selected Set");
+      }
+      if (mode === "single-asset" && (latestPoolState.trading.paused
+        || latestPoolState.trading.singleAssetWithdrawals === "paused")) {
         throw new Error("Trading is paused. Switch to a proportional withdrawal.");
+      }
+      if (mode === "proportional" && latestPoolState.trading.proportionalWithdrawals === "paused") {
+        throw new Error("Proportional withdrawals are paused for this Set.");
       }
 
       if (mode === "proportional") {
@@ -357,7 +408,7 @@ export function WithdrawPage() {
         try {
           await publicClient.simulateContract({
             account: address,
-            address: poolQuery.data.contract.address,
+            address: pool.contract.address,
             abi: setwisePoolAbi,
             functionName: "withdrawPortfolio",
             args: [amountAtomic],
@@ -374,15 +425,15 @@ export function WithdrawPage() {
             amount: output.amount,
             symbol: assets.find((asset) => asset.id === output.asset)?.symbol ?? output.asset,
           })),
-          setId: poolQuery.data.id,
-          shares: { amount: quote.input.amount, symbol: poolQuery.data.lpToken.symbol },
+          setId: pool.id,
+          shares: { amount: quote.input.amount, symbol: pool.lpToken.symbol },
           status: "pending",
         });
         activityId = activity.id;
         saveActivity(activity);
         submittedHash = await writeContractAsync({
           account: address,
-          address: poolQuery.data.contract.address,
+          address: pool.contract.address,
           abi: setwisePoolAbi,
           functionName: "withdrawPortfolio",
           args: [amountAtomic],
@@ -393,7 +444,7 @@ export function WithdrawPage() {
           idempotencyKey: `withdraw:${address.toLowerCase()}:${crypto.randomUUID()}`,
           investor: address,
           outputAsset: effectiveSelectedAssetId,
-          poolId: runtimeConfig.defaultPoolId,
+          poolId: pool.id,
           poolTokenAmount: amount,
           receiveNative: effectiveReceiveNative,
         });
@@ -403,7 +454,7 @@ export function WithdrawPage() {
           firm,
           indicative: quote,
           outputAssetId: effectiveSelectedAssetId,
-          poolAddress: poolQuery.data.contract.address,
+          poolAddress: pool.contract.address,
           receiveNative: effectiveReceiveNative,
           unlockedBalance: latestChain.data.unlockedShares,
         });
@@ -422,8 +473,8 @@ export function WithdrawPage() {
               ? "BNB"
               : assets.find((asset) => asset.id === firm.output.asset)?.symbol ?? firm.output.asset,
           }],
-          setId: poolQuery.data.id,
-          shares: { amount: firm.shares.amount, symbol: poolQuery.data.lpToken.symbol },
+          setId: pool.id,
+          shares: { amount: firm.shares.amount, symbol: pool.lpToken.symbol },
           status: "pending",
         });
         activityId = activity.id;
@@ -488,24 +539,33 @@ export function WithdrawPage() {
     setTransaction({ stage: "editing" });
   }
 
-  if (poolQuery.isPending || poolStateQuery.isPending || chainQuery.isPending) {
+  if (chainQuery.isPending) {
     return <section className="withdraw-card" aria-live="polite">Loading Set assets and unlocked shares…</section>;
   }
-  const stateConfigurationError = poolQuery.data && poolStateQuery.data
-    && (poolStateQuery.data.poolId !== poolQuery.data.id
-      || poolStateQuery.data.chainId !== requiredChainId
-      || !isAddressEqual(poolStateQuery.data.poolAddress, poolQuery.data.contract.address))
-    ? new Error("Pool state does not match the configured pool and chain")
+  const stateConfigurationError = poolState.poolId !== pool.id
+      || poolState.chainId !== requiredChainId
+      || !isAddressEqual(poolState.poolAddress, pool.contract.address)
+    ? new Error("Set state does not match the selected Set and chain")
     : null;
-  const loadError = poolQuery.error ?? poolStateQuery.error ?? chainQuery.error ?? stateConfigurationError;
+  const loadError = chainQuery.error ?? stateConfigurationError;
   if (loadError) {
     return (
       <section className="withdraw-card error-panel" role="alert">
         <h2>Withdrawal data is unavailable</h2>
         <p>{errorMessage(loadError)}</p>
         <button className="secondary-button" type="button" onClick={() => {
-          void poolQuery.refetch(); void poolStateQuery.refetch(); void chainQuery.refetch();
+          void queryClient.invalidateQueries({ exact: true, queryKey: setQueryKeys.state(pool.id) });
+          void chainQuery.refetch();
         }}>Retry</button>
+      </section>
+    );
+  }
+
+  if (!proportionalSupported && !singleAssetSupported) {
+    return (
+      <section className="withdraw-card" role="status">
+        <h2>Withdrawals unavailable</h2>
+        <p>This Set does not currently support withdrawals.</p>
       </section>
     );
   }
@@ -523,15 +583,17 @@ export function WithdrawPage() {
       <section className="withdraw-card withdraw-form" aria-labelledby="withdraw-form-title">
         <div className="mode-tabs" aria-label="Withdrawal mode">
           <button type="button" className={mode === "proportional" ? "is-active" : ""}
-            disabled={busy} onClick={() => changeMode("proportional")}>Proportional</button>
+            disabled={busy || !proportionalSupported || proportionalPaused}
+            onClick={() => changeMode("proportional")}>Proportional</button>
           <button type="button" className={mode === "single-asset" ? "is-active" : ""}
-            disabled={busy || tradingPaused} onClick={() => changeMode("single-asset")}>Single asset</button>
+            disabled={busy || !singleAssetSupported || singleAssetPaused}
+            onClick={() => changeMode("single-asset")}>Single asset</button>
         </div>
 
         <div className="asset-input-card">
           <div className="amount-heading">
             <label className="field-label" htmlFor="withdraw-amount">Set shares</label>
-            <span>Unlocked {formatTokenAmount(chainQuery.data?.unlockedShares ?? 0n, lpDecimals)} {poolQuery.data?.lpToken.symbol}</span>
+            <span>Unlocked {formatTokenAmount(chainQuery.data?.unlockedShares ?? 0n, lpDecimals)} {pool.lpToken.symbol}</span>
           </div>
           <div className="amount-control withdraw-amount-control">
             <input id="withdraw-amount" inputMode="decimal" placeholder="0.0" disabled={busy}
@@ -542,18 +604,22 @@ export function WithdrawPage() {
                   setTransaction({ stage: "editing" });
                 }
               }} />
-            <span>{poolQuery.data?.lpToken.symbol}</span>
+            <span>{pool.lpToken.symbol}</span>
           </div>
-          <div className="share-shortcuts" aria-label="Pool share shortcuts">
+          <div className="share-shortcuts" aria-label="Set share shortcuts">
             {([25, 50, 75, 100] as const).map((percentage) => (
               <button key={percentage} type="button" disabled={busy || !chainQuery.data?.unlockedShares}
                 onClick={() => setShortcut(percentage)}>{percentage === 100 ? "Max" : `${percentage}%`}</button>
             ))}
           </div>
           {amount && amountError && <p className="field-error">{amountError}</p>}
-          {insufficientShares && <p className="field-error">Insufficient unlocked SETWISE balance.</p>}
+          {insufficientShares && <p className="field-error">Insufficient unlocked {pool.lpToken.symbol} balance.</p>}
           {Boolean(chainQuery.data?.lockedShares) && (
-            <p className="notice">Locked shares are excluded from Max and cannot be withdrawn. <Link to={`/sets/${encodeURIComponent(runtimeConfig.defaultPoolId)}/deposit#locked-shares`}>View locked shares</Link>.</p>
+            <p className="notice">
+              Locked shares are excluded from Max and cannot be withdrawn.
+              {chainQuery.data?.canClaim ? " Claim unlocked shares before withdrawing them." : " They remain subject to their lock period."}
+              {" "}<Link to={`/sets/${encodeURIComponent(pool.id)}/deposit#locked-shares`}>View locked shares</Link>.
+            </p>
           )}
         </div>
 
@@ -579,18 +645,18 @@ export function WithdrawPage() {
               </label>
             )}
             {nativeEligible && effectiveReceiveNative && (
-              <p className="notice">Receive native BNB, unwrapped from WBNB by the pool in the same withdrawal.</p>
+              <p className="notice">Receive native BNB, unwrapped from WBNB by the Set in the same withdrawal.</p>
             )}
           </div>
         )}
 
-        {tradingPaused && mode === "single-asset" && (
+        {singleAssetPaused && mode === "single-asset" && (
           <div className="warning-panel" role="alert">
-            Trading paused — single-asset withdrawals are unavailable.
+            Single-asset withdrawals are paused for this Set.
             <button className="inline-action" type="button" onClick={() => changeMode("proportional")}>Switch to proportional</button>
           </div>
         )}
-        {tradingPaused && mode === "proportional" && (
+        {poolState.trading.paused && mode === "proportional" && !proportionalPaused && (
           <div className="notice">Trading is paused, but direct proportional withdrawals remain available.</div>
         )}
         {!online && <div className="warning-panel">Offline — reconnect to price or submit a withdrawal.</div>}
@@ -639,7 +705,7 @@ export function WithdrawPage() {
               ))}
             </div>
             <dl className="quote-details">
-              <div><dt>Mode</dt><dd>{mode === "proportional" ? "Every pool asset" : effectiveReceiveNative ? "Single asset · native BNB" : "Single asset"}</dd></div>
+              <div><dt>Mode</dt><dd>{mode === "proportional" ? "Every Set asset" : effectiveReceiveNative ? "Single asset · native BNB" : "Single asset"}</dd></div>
               <div><dt>Indicative freshness</dt><dd>{quoteFresh ? `${indicativeSeconds ?? 0}s` : "Refreshing…"}</dd></div>
               {firmSeconds !== null && <div className={firmSeconds <= 3 ? "is-warning" : ""}><dt>Firm quote</dt><dd>Confirm within {firmSeconds}s</dd></div>}
             </dl>
@@ -647,7 +713,7 @@ export function WithdrawPage() {
               ? "This estimate executes through a simulated direct contract call and never requests a firm quote."
               : "The executable signed quote is requested only after you review this estimate."}</p>
           </>
-        ) : <p>{quoteLoading ? "Getting an indicative price…" : "Enter a pool-share amount to preview your outputs."}</p>}
+        ) : <p>{quoteLoading ? "Getting an indicative price…" : "Enter a Set-share amount to preview your outputs."}</p>}
       </aside>
     </div>
   );

@@ -76,7 +76,14 @@ export function SetDepositTab() {
 }
 
 export function SetWithdrawTab() {
-  const { definition, operationUnavailable } = useSetOutlet();
+  const {
+    definition,
+    operationUnavailable,
+    pool,
+    poolState,
+    refreshPoolState,
+    setOperationLocked,
+  } = useSetOutlet();
 
   if (operationUnavailable.withdraw) {
     return (
@@ -88,6 +95,8 @@ export function SetWithdrawTab() {
     );
   }
 
+  if (!pool || !poolState) return null;
+
   return (
     <div className="set-tab-panel">
       <header className="set-tab-header">
@@ -95,7 +104,15 @@ export function SetWithdrawTab() {
         <h2>Withdraw from this Set</h2>
         <p>Burn unlocked Setwise shares for every Set asset or one selected asset.</p>
       </header>
-      <WalletGate><WithdrawPage /></WalletGate>
+      <WalletGate>
+        <WithdrawPage
+          key={definition.id}
+          onBusyChange={setOperationLocked}
+          pool={pool}
+          poolState={poolState}
+          refreshPoolState={refreshPoolState}
+        />
+      </WalletGate>
       <aside className="disclosure" role="note">
         <strong>Testnet only.</strong> Contracts are unaudited, tokenized assets carry issuer and market risk, and this is not investment advice.
       </aside>

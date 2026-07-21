@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useParams } from "react-router-dom";
 
 import { SET_TABS, setPath, setsPath } from "../../app/routes";
@@ -25,8 +26,10 @@ export type SetOutletContext = {
   };
   pool: Pool | undefined;
   poolState: PoolState | undefined;
+  refreshPoolState: () => Promise<PoolState | undefined>;
   refreshing: boolean;
   retry: () => void;
+  setOperationLocked: (locked: boolean) => void;
   unsupported: boolean;
 };
 
@@ -48,6 +51,7 @@ export function SetDetailLayout() {
   const { setId: rawSetId } = useParams<{ setId: string }>();
   const setId = rawSetId ? decodeURIComponent(rawSetId) : "";
   const online = useOnlineStatus();
+  const [operationLocked, setOperationLocked] = useState(false);
 
   const poolsQuery = useQuery({
     queryKey: setQueryKeys.list,
@@ -147,18 +151,18 @@ export function SetDetailLayout() {
     void poolQuery.refetch();
     void poolStateQuery.refetch();
   };
+  const refreshPoolState = async () => (await poolStateQuery.refetch()).data;
 
   let globalOperationUnavailable: string | null = null;
   if (unsupported) {
     globalOperationUnavailable = "Transactions are unavailable because this Set is on an unsupported chain.";
-  } else if (paused) {
-    globalOperationUnavailable = "Transactions are unavailable while this Set is paused.";
   } else if (!hasSnapshot) {
     globalOperationUnavailable = error
       ? "Transactions are unavailable until a consistent live Set snapshot can be loaded."
       : "Transactions will be available after the live Set snapshot finishes loading.";
   }
   const depositUnavailable = globalOperationUnavailable
+    ?? (paused ? "Deposits are unavailable while this Set is paused." : null)
     ?? (consistentState?.trading.deposits === "paused" ? "Deposits are paused for this Set." : null);
 
   const status = unsupported
@@ -185,8 +189,10 @@ export function SetDetailLayout() {
     },
     pool: consistentPool,
     poolState: consistentState,
+    refreshPoolState,
     refreshing,
     retry,
+    setOperationLocked,
     unsupported,
   };
 
@@ -236,7 +242,7 @@ export function SetDetailLayout() {
       )}
       {paused && (
         <aside className="warning-panel" role="alert">
-          <strong>This Set is paused.</strong> Public data remains visible, but transactions are disabled.
+          <strong>This Set is paused.</strong> Public data remains visible. Deposits and single-asset trades are disabled; direct proportional withdrawals may remain available.
         </aside>
       )}
       {poolsQuery.error && poolsQuery.data && (
@@ -256,12 +262,20 @@ export function SetDetailLayout() {
             key={tab}
             to={setPath(definition.id, tab)}
             className={({ isActive }) => (isActive ? "set-tab is-active" : "set-tab")}
+            aria-disabled={operationLocked || undefined}
+            onClick={(event) => {
+              if (operationLocked) event.preventDefault();
+            }}
+            title={operationLocked ? "Wait for the current withdrawal to finish before changing Set tabs" : undefined}
             end
           >
             {label}
           </NavLink>
         ))}
       </nav>
+      {operationLocked && (
+        <p className="notice" role="status">Set navigation is locked while the withdrawal is in progress.</p>
+      )}
 
       <Outlet context={outletContext} />
     </div>
