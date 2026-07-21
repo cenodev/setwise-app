@@ -40,7 +40,7 @@ export async function mapWithConcurrency<T, R>(
     while (nextIndex < values.length) {
       const index = nextIndex;
       nextIndex += 1;
-      const value = values[index] as T;
+      const value = values[index];
       results[index] = await task(value, index);
     }
   };

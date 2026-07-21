@@ -259,6 +259,38 @@ code {
 .empty-card { display: grid; justify-items: center; padding-block: 3rem; text-align: center; }
 .empty-mark { display: grid; width: 3.5rem; height: 3.5rem; place-items: center; border-radius: 1rem; background: var(--bg-surface-raised); color: var(--accent); font-size: 1.5rem; font-weight: 900; }
 
+.portfolio-refreshing { margin: 0; color: var(--text-tertiary); font-size: .78rem; text-align: right; }
+.portfolio-summary { display: grid; gap: .75rem; }
+.portfolio-metric-card,
+.portfolio-set-card {
+  padding: 1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  background: linear-gradient(145deg, rgb(25 33 54 / 92%), rgb(17 23 38 / 92%));
+}
+.portfolio-metric-card { display: grid; gap: .35rem; }
+.portfolio-metric-card strong { font-size: 1.55rem; letter-spacing: -.025em; }
+.portfolio-metric-card span { color: var(--text-tertiary); font-size: .75rem; }
+.portfolio-sets { display: grid; gap: .75rem; }
+.portfolio-section-heading,
+.portfolio-set-heading,
+.portfolio-set-footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.portfolio-section-heading h2 { margin: .2rem 0 0; font-size: 1.25rem; }
+.portfolio-section-heading > span { color: var(--text-tertiary); font-size: .75rem; }
+.portfolio-set-card { display: grid; gap: 1rem; }
+.portfolio-set-heading { align-items: start; }
+.portfolio-set-heading h3 { margin: .2rem 0 0; font-size: 1rem; overflow-wrap: anywhere; }
+.portfolio-status { padding: .3rem .5rem; border-radius: 999px; background: rgb(93 213 167 / 12%); color: var(--success); font-size: .7rem; font-weight: 800; text-align: center; }
+.portfolio-status--stale,
+.portfolio-status--unsupported-chain { background: rgb(242 189 91 / 12%); color: var(--warning); }
+.portfolio-status--error { background: rgb(255 119 136 / 12%); color: var(--critical); }
+.portfolio-set-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; margin: 0; }
+.portfolio-set-metrics div { min-width: 0; }
+.portfolio-set-metrics dt { margin-bottom: .25rem; color: var(--text-tertiary); font-size: .68rem; }
+.portfolio-set-metrics dd { margin: 0; font-size: .82rem; font-weight: 750; overflow-wrap: anywhere; }
+.portfolio-set-footer { padding-top: .75rem; border-top: 1px solid var(--border-subtle); }
+.portfolio-set-footer > span { color: var(--text-tertiary); font-size: .7rem; }
+
 .activity-list { display: grid; gap: .75rem; }
 .activity-card { display: grid; gap: .85rem; padding: 1rem; border: 1px solid var(--border-subtle); border-radius: 1rem; background: linear-gradient(145deg, rgb(25 33 54 / 92%), rgb(17 23 38 / 92%)); }
 .activity-card h2 { margin: .25rem 0 0; font-size: 1rem; }
@@ -657,6 +689,7 @@ code {
   .screen.sets-screen,
   .screen.set-detail-screen,
   .screen.portfolio-screen { max-width: none; }
+  .portfolio-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .deposit-layout { grid-template-columns: minmax(0, 1.45fr) minmax(17rem, .75fr); align-items: start; }
   .swap-layout { grid-template-columns: minmax(0, 1.25fr) minmax(18rem, .75fr); align-items: start; }
   .deposit-form { grid-row: span 2; }

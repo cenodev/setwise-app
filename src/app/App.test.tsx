@@ -52,6 +52,9 @@ vi.mock("../features/wallet/WalletGate", () => ({
 vi.mock("../features/wallet/NetworkBanner", () => ({ NetworkBanner: () => null }));
 vi.mock("../features/wallet/WalletButton", () => ({ WalletButton: () => null }));
 vi.mock("../features/pwa/PwaStatus", () => ({ PwaStatus: () => null }));
+vi.mock("../features/portfolio/usePortfolio", () => ({
+  usePortfolio: () => ({ error: null, loading: true, refreshing: false, retry: vi.fn(), view: undefined }),
+}));
 
 function renderApp(path: string) {
   const client = new QueryClient({
