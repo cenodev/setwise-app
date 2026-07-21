@@ -1,9 +1,9 @@
 export type PublicRuntimeConfig = {
   appUrl: string;
   bscTestnetRpcUrl: string;
+  defaultPoolId: string;
   explorerUrl: string;
   nativeGasReserveBnb: string;
-  poolId: string;
   reownProjectId: string | null;
   rfqApiUrl: string;
   tokenListUrl: string;
@@ -54,7 +54,7 @@ export function resolveRuntimeConfig(
       "https://testnet.bscscan.com",
     ),
     nativeGasReserveBnb: normalizeNativeGasReserve(env.VITE_NATIVE_GAS_RESERVE_BNB),
-    poolId: env.VITE_POOL_ID?.trim() || "bstock-ai-no-bnb-bsc-testnet",
+    defaultPoolId: env.VITE_POOL_ID?.trim() || "bstock-ai-no-bnb-bsc-testnet",
     reownProjectId,
     rfqApiUrl: normalizeUrl(
       env.VITE_RFQ_API_URL,

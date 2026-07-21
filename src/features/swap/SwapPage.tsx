@@ -178,13 +178,13 @@ export function SwapPage() {
   }, [address, chainId, online]);
 
   const poolQuery = useQuery({
-    queryKey: poolQueryKeys.discovery(runtimeConfig.poolId),
-    queryFn: ({ signal }) => getPool(runtimeConfig.poolId, signal),
+    queryKey: poolQueryKeys.discovery(runtimeConfig.defaultPoolId),
+    queryFn: ({ signal }) => getPool(runtimeConfig.defaultPoolId, signal),
     staleTime: 60_000,
   });
   const poolStateQuery = useQuery({
-    queryKey: poolQueryKeys.state(runtimeConfig.poolId),
-    queryFn: ({ signal }) => getPoolState(runtimeConfig.poolId, signal),
+    queryKey: poolQueryKeys.state(runtimeConfig.defaultPoolId),
+    queryFn: ({ signal }) => getPoolState(runtimeConfig.defaultPoolId, signal),
     refetchInterval: online ? 15_000 : false,
   });
   const assets = useMemo(
@@ -220,7 +220,7 @@ export function SwapPage() {
     enabled: Boolean(address && publicClient && poolQuery.data),
     queryFn: async (): Promise<ChainSwapState> => {
       if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and pool are required");
-      if (poolQuery.data.id !== runtimeConfig.poolId || poolQuery.data.chain.id !== requiredChainId) {
+      if (poolQuery.data.id !== runtimeConfig.defaultPoolId || poolQuery.data.chain.id !== requiredChainId) {
         throw new Error("Pool discovery does not match the configured pool and chain");
       }
       const poolAddress = poolQuery.data.contract.address;
@@ -313,7 +313,7 @@ export function SwapPage() {
         ...amountRequest,
         inputAsset: inputAsset.id,
         outputAsset: outputAsset.id,
-        poolId: runtimeConfig.poolId,
+        poolId: runtimeConfig.defaultPoolId,
         signal: controller.signal,
       }).then((nextQuote) => {
         if (sequence !== quoteSequence.current || controller.signal.aborted) return;
@@ -486,7 +486,7 @@ export function SwapPage() {
           outputAsset: outputAsset.id,
           outputNative: effectiveOutputNative,
           payer: address,
-          poolId: runtimeConfig.poolId,
+          poolId: runtimeConfig.defaultPoolId,
           recipient: address,
         });
       };

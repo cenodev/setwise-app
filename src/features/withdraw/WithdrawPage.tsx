@@ -175,13 +175,13 @@ export function WithdrawPage() {
   const [now, setNow] = useState(currentTimestamp);
 
   const poolQuery = useQuery({
-    queryKey: poolQueryKeys.discovery(runtimeConfig.poolId),
-    queryFn: ({ signal }) => getPool(runtimeConfig.poolId, signal),
+    queryKey: poolQueryKeys.discovery(runtimeConfig.defaultPoolId),
+    queryFn: ({ signal }) => getPool(runtimeConfig.defaultPoolId, signal),
     staleTime: 60_000,
   });
   const poolStateQuery = useQuery({
-    queryKey: poolQueryKeys.state(runtimeConfig.poolId),
-    queryFn: ({ signal }) => getPoolState(runtimeConfig.poolId, signal),
+    queryKey: poolQueryKeys.state(runtimeConfig.defaultPoolId),
+    queryFn: ({ signal }) => getPoolState(runtimeConfig.defaultPoolId, signal),
     refetchInterval: online ? 15_000 : false,
   });
   const discoveredAssets = useMemo(
@@ -195,7 +195,7 @@ export function WithdrawPage() {
     enabled: Boolean(address && publicClient && poolQuery.data),
     queryFn: async (): Promise<ChainWithdrawalState> => {
       if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and pool are required");
-      if (poolQuery.data.id !== runtimeConfig.poolId || poolQuery.data.chain.id !== requiredChainId) {
+      if (poolQuery.data.id !== runtimeConfig.defaultPoolId || poolQuery.data.chain.id !== requiredChainId) {
         throw new Error("Pool discovery does not match the configured pool and chain");
       }
       const poolAddress = poolQuery.data.contract.address;
@@ -275,7 +275,7 @@ export function WithdrawPage() {
     }, 0);
     const requestTimer = window.setTimeout(() => {
       void requestWithdrawalQuote({
-        poolId: runtimeConfig.poolId,
+        poolId: runtimeConfig.defaultPoolId,
         poolTokenAmount: amount,
         ...(mode === "single-asset" ? { outputAsset: effectiveSelectedAssetId } : {}),
         signal: controller.signal,
@@ -372,7 +372,7 @@ export function WithdrawPage() {
           idempotencyKey: `withdraw:${address.toLowerCase()}:${crypto.randomUUID()}`,
           investor: address,
           outputAsset: effectiveSelectedAssetId,
-          poolId: runtimeConfig.poolId,
+          poolId: runtimeConfig.defaultPoolId,
           poolTokenAmount: amount,
           receiveNative: effectiveReceiveNative,
         });
