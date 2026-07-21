@@ -4,20 +4,20 @@ import { NavLink } from "react-router-dom";
 import { NetworkBanner } from "../features/wallet/NetworkBanner";
 import { WalletButton } from "../features/wallet/WalletButton";
 import { PwaStatus } from "../features/pwa/PwaStatus";
+import { activityPath, portfolioPath, setsPath, swapPath } from "./routes";
 
 const navigation = [
-  { label: "Pool", to: "/pool" },
-  { label: "Swap", to: "/swap" },
-  { label: "Deposit", to: "/deposit" },
-  { label: "Withdraw", to: "/withdraw" },
-  { label: "Activity", to: "/activity" },
+  { label: "Sets", to: setsPath() },
+  { label: "Portfolio", to: portfolioPath() },
+  { label: "Swap", to: swapPath() },
+  { label: "Activity", to: activityPath() },
 ];
 
 export function AppShell({ children }: PropsWithChildren) {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <NavLink className="brand" to="/swap" aria-label="Setwise home">
+        <NavLink className="brand" to={setsPath()} aria-label="Setwise home">
           <img src="/setwise-mark.svg" alt="" width="32" height="32" />
           <span>Setwise</span>
         </NavLink>
@@ -35,7 +35,12 @@ export function AppShell({ children }: PropsWithChildren) {
 
       <nav className="desktop-nav" aria-label="Primary navigation">
         {navigation.map((item) => (
-          <NavLink key={item.to} to={item.to} className={({ isActive }) => isActive ? "nav-link is-active" : "nav-link"}>
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) => (isActive ? "nav-link is-active" : "nav-link")}
+            end={item.to === setsPath()}
+          >
             {item.label}
           </NavLink>
         ))}
@@ -45,7 +50,12 @@ export function AppShell({ children }: PropsWithChildren) {
 
       <nav className="mobile-nav" aria-label="Primary navigation">
         {navigation.map((item) => (
-          <NavLink key={item.to} to={item.to} className={({ isActive }) => isActive ? "nav-link is-active" : "nav-link"}>
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) => (isActive ? "nav-link is-active" : "nav-link")}
+            end={item.to === setsPath()}
+          >
             {item.label}
           </NavLink>
         ))}

@@ -14,7 +14,7 @@ export default defineConfig({
         name: "Setwise",
         short_name: "Setwise",
         description: "Setwise testnet trading and portfolio prototype",
-        start_url: "/swap",
+        start_url: "/sets",
         scope: "/",
         display: "standalone",
         background_color: "#090d18",
