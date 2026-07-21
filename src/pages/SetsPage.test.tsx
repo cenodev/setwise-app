@@ -11,10 +11,10 @@ const poolAddress = "0x1111111111111111111111111111111111111111";
 const lpAddress = "0x2222222222222222222222222222222222222222";
 const usdtAddress = "0x3333333333333333333333333333333333333333";
 
-function summary(id: string, chainId = 97): PoolSummary {
+function summary(id: string, chainId = 97, sortOrder = 0): PoolSummary {
   return {
     id,
-    display: { description: `Description for ${id}`, name: `Set ${id}`, sortOrder: 0 },
+    display: { description: `Description for ${id}`, name: `Set ${id}`, sortOrder },
     chain: { id: chainId, name: chainId === 97 ? "BSC Testnet" : "Ethereum" },
     contract: { address: poolAddress },
     lpToken: { symbol: "SETWISE", decimals: 18, address: lpAddress },
@@ -107,7 +107,7 @@ describe("SetsPage", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("registry down");
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByRole("heading", { name: "alpha-set" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Set alpha-set" })).toBeVisible();
   });
 
   it("shows an empty state when the registry returns no Sets", async () => {
@@ -125,24 +125,24 @@ describe("SetsPage", () => {
     mocks.getPoolState.mockResolvedValue(state("alpha-set"));
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "alpha-set" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "beta-set" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Set alpha-set" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Set beta-set" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Set directory" })).toBeVisible();
   });
 
-  it("sorts Sets deterministically by id", async () => {
+  it("sorts Sets by configured display order with a deterministic id fallback", async () => {
     mocks.getPools.mockResolvedValue([
-      summary("zeta-set"),
-      summary("alpha-set"),
-      summary("mid-set"),
+      summary("zeta-set", 97, 30),
+      summary("alpha-set", 97, 10),
+      summary("mid-set", 97, 20),
     ]);
     mocks.getPoolState.mockResolvedValue(state("alpha-set"));
     renderPage();
 
-    await screen.findByRole("heading", { name: "alpha-set" });
+    await screen.findByRole("heading", { name: "Set alpha-set" });
     const directory = screen.getByRole("region", { name: "Set directory" });
     const headings = within(directory).getAllByRole("heading", { level: 2 });
-    expect(headings.map((h) => h.textContent)).toEqual(["alpha-set", "mid-set", "zeta-set"]);
+    expect(headings.map((h) => h.textContent)).toEqual(["Set alpha-set", "Set mid-set", "Set zeta-set"]);
   });
 
   it("links every Set to its detail route", async () => {
@@ -150,7 +150,7 @@ describe("SetsPage", () => {
     mocks.getPoolState.mockResolvedValue(state("alpha-set"));
     renderPage();
 
-    await screen.findByRole("heading", { name: "alpha-set" });
+    await screen.findByRole("heading", { name: "Set alpha-set" });
     expect(screen.getByRole("link", { name: "View Set" })).toHaveAttribute(
       "href",
       "/sets/alpha-set/overview",
@@ -165,7 +165,7 @@ describe("SetsPage", () => {
     mocks.getPoolState.mockResolvedValue(state("alpha-set"));
     renderPage();
 
-    await screen.findByRole("heading", { name: "alpha-set" });
+    await screen.findByRole("heading", { name: "Set alpha-set" });
     const alphaCard = screen.getByRole("article", { name: "Set alpha-set" });
     expect(within(alphaCard).getByRole("link", { name: "Swap" })).toHaveAttribute(
       "href",
@@ -201,7 +201,7 @@ describe("SetsPage", () => {
     mocks.getPoolState.mockResolvedValue(state("alpha-set"));
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "alpha-set" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Set alpha-set" })).toBeVisible();
     expect(screen.queryByText(/connect wallet/i)).not.toBeInTheDocument();
   });
 
@@ -225,7 +225,7 @@ describe("sortSets", () => {
     };
   }
 
-  it("sorts alphabetically by id", () => {
+  it("uses id as the deterministic fallback when display orders match", () => {
     const sorted = sortSets([def("zeta"), def("alpha"), def("mid")]);
     expect(sorted.map((s) => s.id)).toEqual(["alpha", "mid", "zeta"]);
   });

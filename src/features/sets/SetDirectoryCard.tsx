@@ -1,19 +1,19 @@
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 
 import { setPath, swapPath } from "../../app/routes";
 import { TokenIcon, tokenDisplay } from "../../components/TokenIdentity";
-import { setQueryKeys } from "../../data/queryKeys";
-import { getPoolState } from "../../data/rfq/deposits";
+import type { SetDirectoryState } from "../../data/setDirectory";
 import type { SetDefinition } from "../../data/sets";
 import type { TokenMetadataIndex } from "../../data/tokens";
-import { useOnlineStatus } from "../../lib/useOnlineStatus";
 import { decimalRatio, formatDecimalRatio } from "../pool-analytics/model";
 
 export const SET_STATE_REFRESH_INTERVAL_MS = 30_000;
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 
 type SetDirectoryCardProps = {
+  loading: boolean;
+  onRetry: () => void;
+  result: SetDirectoryState | undefined;
   set: SetDefinition;
   tokenIndex: TokenMetadataIndex | undefined;
 };
@@ -38,29 +38,28 @@ export function isStaleSnapshot(timestamp: string, now: number = Date.now()): bo
   return now - snapshot.getTime() > STALE_THRESHOLD_MS;
 }
 
-export function SetDirectoryCard({ set, tokenIndex }: SetDirectoryCardProps) {
-  const online = useOnlineStatus();
-  const stateQuery = useQuery({
-    queryKey: setQueryKeys.state(set.id),
-    queryFn: ({ signal }) => getPoolState(set.id, signal),
-    enabled: set.supported,
-    staleTime: SET_STATE_REFRESH_INTERVAL_MS,
-    refetchInterval: online ? SET_STATE_REFRESH_INTERVAL_MS : false,
-    refetchOnReconnect: true,
-  });
-
-  const state = stateQuery.data;
+export function SetDirectoryCard({ loading, onRetry, result, set, tokenIndex }: SetDirectoryCardProps) {
+  const state = result?.status === "ready" ? result.state : undefined;
+  const error = result?.status === "error" ? result.error : undefined;
   const stale = state ? isStaleSnapshot(state.blockTimestamp) : false;
   const tradingPaused = state?.trading.paused ?? false;
+  const displayName = set.pool.display.name;
 
   return (
-    <article className="set-directory-card" aria-label={`Set ${set.id}`}>
+    <article className="set-directory-card" aria-label={displayName}>
       <div className="set-directory-header">
         <div>
           <p className="eyebrow">
-            {set.supported ? (set.chainName ?? "Supported chain") : "Unsupported chain"}
+            {set.pool.display.category ?? "Set"}
           </p>
-          <h2>{set.id}</h2>
+          <h2>{displayName}</h2>
+          <p className="set-directory-chain">
+            {set.supported
+              ? (set.chainName ?? `Chain ${set.chainId}`)
+              : `Unsupported · ${set.chainName ?? `chain ${set.chainId}`}`}
+          </p>
+          <p className="set-directory-description">{set.pool.display.description}</p>
+          <code className="set-directory-id">{set.id}</code>
         </div>
         {state && (
           <span
@@ -71,7 +70,7 @@ export function SetDirectoryCard({ set, tokenIndex }: SetDirectoryCardProps) {
         )}
       </div>
 
-      <ul className="set-directory-assets" aria-label={`${set.id} constituents`}>
+      <ul className="set-directory-assets" aria-label={`${displayName} constituents`}>
         {set.pool.assets.map((asset) => {
           const display = tokenDisplay(asset, set.chainId, tokenIndex);
           return (
@@ -88,16 +87,16 @@ export function SetDirectoryCard({ set, tokenIndex }: SetDirectoryCardProps) {
 
       {set.supported && (
         <div className="set-directory-state" aria-live="polite">
-          {stateQuery.isPending && (
+          {loading && !result && (
             <p className="set-directory-state__pending">Loading live state…</p>
           )}
-          {stateQuery.error && (
+          {error && (
             <p className="set-directory-state__error" role="alert">
-              Live state unavailable
+              Live state unavailable: {error.message}
               <button
                 className="inline-action"
                 type="button"
-                onClick={() => void stateQuery.refetch()}
+                onClick={onRetry}
               >
                 Retry
               </button>
@@ -136,7 +135,7 @@ export function SetDirectoryCard({ set, tokenIndex }: SetDirectoryCardProps) {
       </div>
 
       <p className="set-directory-note">
-        TVL and reserves reflect internal Set pool state, not external DEX liquidity.
+        TVL and reserves reflect the Set&apos;s underlying pool state, not external DEX liquidity.
       </p>
     </article>
   );

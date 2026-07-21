@@ -1,19 +1,30 @@
 import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { requiredChainId } from "../config/chains";
 import { setQueryKeys } from "../data/queryKeys";
+import {
+  loadSetDirectoryStates,
+  setDirectoryFingerprint,
+} from "../data/setDirectory";
+import { getPoolState } from "../data/rfq/deposits";
 import { getPools } from "../data/rfq/pools";
 import { toSetDefinition, type SetDefinition } from "../data/sets";
 import { useTokenMetadata } from "../data/tokens";
 import { SetDirectoryCard } from "../features/sets/SetDirectoryCard";
+import { SET_STATE_REFRESH_INTERVAL_MS } from "../features/sets/SetDirectoryCard";
+import { useOnlineStatus } from "../lib/useOnlineStatus";
 
 export function sortSets(sets: SetDefinition[]): SetDefinition[] {
-  return [...sets].sort((a, b) => a.id.localeCompare(b.id));
+  return [...sets].sort((a, b) => (
+    a.pool.display.sortOrder - b.pool.display.sortOrder || a.id.localeCompare(b.id)
+  ));
 }
 
 export function SetsPage() {
   const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+  const online = useOnlineStatus();
   const showLegacyNotice = searchParams.get("notice") === "legacy-redirect";
 
   const poolsQuery = useQuery({
@@ -27,6 +38,23 @@ export function SetsPage() {
   const sets = sortSets(
     (poolsQuery.data ?? []).map((pool) => toSetDefinition(pool, requiredChainId)),
   );
+  const fingerprint = setDirectoryFingerprint(sets);
+  const statesQuery = useQuery({
+    queryKey: setQueryKeys.directory(fingerprint),
+    enabled: poolsQuery.isSuccess && online,
+    queryFn: () => loadSetDirectoryStates({
+      definitions: sets,
+      loadState: (poolId) => queryClient.fetchQuery({
+        queryKey: setQueryKeys.state(poolId),
+        queryFn: ({ signal }) => getPoolState(poolId, signal),
+        staleTime: SET_STATE_REFRESH_INTERVAL_MS,
+      }),
+    }),
+    refetchInterval: online ? SET_STATE_REFRESH_INTERVAL_MS : false,
+    refetchOnReconnect: true,
+    refetchOnWindowFocus: true,
+    staleTime: SET_STATE_REFRESH_INTERVAL_MS,
+  });
 
   return (
     <div className="screen sets-screen">
@@ -41,6 +69,13 @@ export function SetsPage() {
           <strong>That link is no longer used.</strong>
           {" "}
           Choose a Set below. Deposit and withdraw now live on each Set's detail tabs.
+        </aside>
+      )}
+
+      {!online && (
+        <aside className="warning-panel" role="status">
+          <strong>You are offline.</strong>
+          {" "}Showing cached Set information where available. Live state refresh resumes when the connection returns.
         </aside>
       )}
 
@@ -69,7 +104,14 @@ export function SetsPage() {
       {sets.length > 0 && (
         <section className="sets-directory" aria-label="Set directory">
           {sets.map((set) => (
-            <SetDirectoryCard key={set.id} set={set} tokenIndex={tokenMetadata.data} />
+            <SetDirectoryCard
+              key={set.id}
+              loading={online && statesQuery.isPending}
+              onRetry={() => void statesQuery.refetch()}
+              result={statesQuery.data?.find((result) => result.poolId === set.id)}
+              set={set}
+              tokenIndex={tokenMetadata.data}
+            />
           ))}
         </section>
       )}

@@ -55,6 +55,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-vis
 }
 .set-directory-card h2 { margin: .25rem 0 .35rem; font-size: 1.05rem; }
 .set-directory-card p:not(.eyebrow):not(.set-directory-note) { margin: 0; color: var(--text-secondary); font-size: .9rem; }
+.set-directory-chain { font-weight: 700; }
+.set-directory-description { line-height: 1.45; }
+.set-directory-id { color: var(--text-tertiary); font-size: .7rem; overflow-wrap: anywhere; }
+.portfolio-set-heading code { color: var(--text-tertiary); font-size: .7rem; overflow-wrap: anywhere; }
 .set-directory-header { display: flex; align-items: start; justify-content: space-between; gap: .75rem; }
 .set-directory-assets { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; padding: 0; list-style: none; }
 .set-directory-asset {

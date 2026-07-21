@@ -15,7 +15,7 @@ import {
   portfolioRegistryFingerprint,
   type PortfolioSetSnapshotState,
 } from "../../data/portfolio";
-import { poolQueryKeys, setQueryKeys } from "../../data/queryKeys";
+import { setQueryKeys } from "../../data/queryKeys";
 import { getPool, getPoolState } from "../../data/rfq/deposits";
 import { getPools } from "../../data/rfq/pools";
 import { toSetDefinition } from "../../data/sets";
@@ -160,12 +160,12 @@ export function usePortfolio(): UsePortfolioResult {
       concurrency: PORTFOLIO_LOAD_CONCURRENCY,
       definitions,
       loadPool: (poolId) => queryClient.fetchQuery({
-        queryKey: poolQueryKeys.discovery(poolId),
+        queryKey: setQueryKeys.detail(poolId),
         queryFn: ({ signal }) => getPool(poolId, signal),
         staleTime: 60_000,
       }),
       loadState: (poolId) => queryClient.fetchQuery({
-        queryKey: poolQueryKeys.state(poolId),
+        queryKey: setQueryKeys.state(poolId),
         queryFn: ({ signal }) => getPoolState(poolId, signal),
         staleTime: 0,
       }),

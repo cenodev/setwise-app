@@ -27,6 +27,7 @@ export function PortfolioSetPositionCard({
   tokenIndex,
 }: PortfolioSetPositionCardProps) {
   const { definition } = set.snapshot;
+  const displayName = definition.pool.display.name;
   const hasState = set.snapshot.status === "ready" || set.snapshot.status === "stale";
   const status = setPositionStatus(set);
   const statusClass = set.snapshot.status === "error" || set.wallet?.status === "error"
@@ -42,7 +43,7 @@ export function PortfolioSetPositionCard({
         : "ready";
 
   return (
-    <article className="portfolio-set-card" aria-label={`Set ${definition.id} position`}>
+    <article className="portfolio-set-card" aria-label={`${displayName} position`}>
       <div className="portfolio-set-heading">
         <div>
           <p className="eyebrow">
@@ -50,12 +51,13 @@ export function PortfolioSetPositionCard({
               ? (definition.chainName ?? `Chain ${definition.chainId}`)
               : "Unsupported chain"}
           </p>
-          <h3>{definition.id}</h3>
+          <h3>{displayName}</h3>
+          <code>{definition.id}</code>
         </div>
         <span className={`portfolio-status portfolio-status--${statusClass}`}>{status}</span>
       </div>
 
-      <ul className="portfolio-set-assets" aria-label={`${definition.id} constituents`}>
+      <ul className="portfolio-set-assets" aria-label={`${displayName} constituents`}>
         {definition.pool.assets.map((asset) => {
           const display = tokenDisplay(asset, definition.chainId, tokenIndex);
           return (
@@ -103,7 +105,7 @@ export function PortfolioSetPositionCard({
             ? `Snapshot block ${set.snapshot.state.blockNumber}`
             : "No usable snapshot"}
         </span>
-        <nav className="portfolio-set-actions" aria-label={`${definition.id} actions`}>
+        <nav className="portfolio-set-actions" aria-label={`${displayName} actions`}>
           <Link className="secondary-link" to={setPath(definition.id, "overview")}>
             Overview
           </Link>

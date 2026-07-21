@@ -17,7 +17,7 @@ import { TokenIdentity, tokenDisplay } from "../../components/TokenIdentity";
 import { TokenSelector } from "../../components/TokenSelector";
 import { runtimeConfig } from "../../config/env";
 import { useTokenMetadata } from "../../data/tokens";
-import { poolQueryKeys, setQueryKeys } from "../../data/queryKeys";
+import { setQueryKeys } from "../../data/queryKeys";
 import { erc20Abi } from "../../data/chain/abis";
 import { getPool, getPoolState, RfqApiError } from "../../data/rfq/deposits";
 import { getPools } from "../../data/rfq/pools";
@@ -223,12 +223,12 @@ export function SwapPage() {
   }
 
   const poolQuery = useQuery({
-    queryKey: poolQueryKeys.discovery(resolvedPoolId),
+    queryKey: setQueryKeys.detail(resolvedPoolId),
     queryFn: ({ signal }) => getPool(resolvedPoolId, signal),
     staleTime: 60_000,
   });
   const poolStateQuery = useQuery({
-    queryKey: poolQueryKeys.state(resolvedPoolId),
+    queryKey: setQueryKeys.state(resolvedPoolId),
     queryFn: ({ signal }) => getPoolState(resolvedPoolId, signal),
     refetchInterval: online ? 15_000 : false,
   });
@@ -420,7 +420,7 @@ export function SwapPage() {
     const reset = window.setTimeout(() => {
       setFirmQuote(null);
       if (["review", "approval-wallet", "approval-confirming", "firm-quote"].includes(transaction.stage)) {
-        setTransaction({ stage: "error", error: "Wallet, network, connectivity, or pool state changed. Review again." });
+        setTransaction({ stage: "error", error: "Wallet, network, connectivity, or Set state changed. Review again." });
       }
     }, 0);
     return () => window.clearTimeout(reset);
@@ -939,7 +939,7 @@ export function SwapPage() {
               : "The executable quote is requested only after any required sequential token approval confirms."}</p>
           </div>
         )}
-        {tradingPaused && <div className="warning-panel">Trading is paused. Swaps are unavailable until the pool resumes.</div>}
+        {tradingPaused && <div className="warning-panel">Trading is paused. Swaps are unavailable until this Set resumes.</div>}
         {!online && <div className="warning-panel">Offline — reconnect to price or submit a swap.</div>}
         {insufficientGas && <div className="warning-panel">Insufficient BNB for the configured gas reserve.</div>}
         {quoteError && (

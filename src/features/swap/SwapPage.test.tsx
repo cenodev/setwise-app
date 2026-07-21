@@ -216,12 +216,12 @@ vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: { queryKey: readonly unknown[] }) => {
     const key = options.queryKey[0];
     const poolId = options.queryKey[1];
-    if (key === "sets") return { data: mocks.registryPools, error: null, isPending: false, refetch: vi.fn().mockResolvedValue({ data: mocks.registryPools }) };
-    if (key === "pool") {
+    if (key === "sets" && options.queryKey.length === 1) return { data: mocks.registryPools, error: null, isPending: false, refetch: vi.fn().mockResolvedValue({ data: mocks.registryPools }) };
+    if (key === "sets" && options.queryKey.length === 2) {
       const target = poolId === secondPool.id ? secondPool : pool;
       return { data: target, error: null, isPending: false, refetch: vi.fn().mockResolvedValue({ data: target }) };
     }
-    if (key === "pool-state") {
+    if (key === "sets" && options.queryKey[2] === "state") {
       if (poolId === secondPool.id) {
         return { data: secondPoolState(), error: null, isPending: false, refetch: mocks.poolStateRefetch };
       }
