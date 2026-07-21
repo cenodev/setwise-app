@@ -190,7 +190,7 @@ export function WithdrawPage() {
   );
   const tokenChainId = poolQuery.data?.chain.id ?? requiredChainId;
   const chainQuery = useQuery({
-    queryKey: ["withdraw-chain", address, poolQuery.data?.contract.address,
+    queryKey: ["withdraw-chain", poolQuery.data?.id, address, poolQuery.data?.contract.address,
       ...discoveredAssets.map((asset) => asset.address)],
     enabled: Boolean(address && publicClient && poolQuery.data),
     queryFn: async (): Promise<ChainWithdrawalState> => {

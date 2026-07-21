@@ -216,7 +216,7 @@ export function SwapPage() {
   const exactOutputSupported = Boolean(poolQuery.data?.capabilities?.swaps.exactOutput);
 
   const chainQuery = useQuery({
-    queryKey: ["swap-chain", address, poolQuery.data?.contract.address, ...assets.map((asset) => asset.address)],
+    queryKey: ["swap-chain", poolQuery.data?.id, address, poolQuery.data?.contract.address, ...assets.map((asset) => asset.address)],
     enabled: Boolean(address && publicClient && poolQuery.data),
     queryFn: async (): Promise<ChainSwapState> => {
       if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and pool are required");

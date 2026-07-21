@@ -274,7 +274,7 @@ export function DepositPage() {
   const tokenChainId = poolQuery.data?.chain.id ?? requiredChainId;
 
   const chainQuery = useQuery({
-    queryKey: ["deposit-chain", address, poolQuery.data?.contract.address,
+    queryKey: ["deposit-chain", poolQuery.data?.id, address, poolQuery.data?.contract.address,
       ...discoveredAssets.map((asset) => asset.address)],
     enabled: Boolean(address && publicClient && poolQuery.data),
     queryFn: async (): Promise<ChainDepositState & { orderedAssets: PoolAsset[] }> => {
