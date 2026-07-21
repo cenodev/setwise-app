@@ -344,7 +344,7 @@ export function WithdrawPage({ onBusyChange, pool, poolState, refreshPoolState }
       window.clearTimeout(requestTimer);
     };
   }, [amount, amountAtomic, amountError, assets, currentRequestKey, effectiveSelectedAssetId, mode,
-    online, pool.contract.address, pool.id, proportionalPaused, proportionalSupported, quoteRefresh,
+    online, pool.contract.address, pool.id, pool.lpToken, proportionalPaused, proportionalSupported, quoteRefresh,
     singleAssetPaused, singleAssetSupported]);
 
   useEffect(() => {
