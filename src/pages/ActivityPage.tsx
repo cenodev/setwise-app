@@ -49,7 +49,7 @@ function ActivityDetails({ record }: { record: ActivityRecord }) {
       <>
         <h2 id={`activity-${record.id}`}>{record.shares.symbol} → {record.outputs.map((amount) => amount.symbol).join(" + ")}</h2>
         <dl className="quote-details">
-          <div><dt>Set</dt><dd><SetLink setId={record.setId} /></dd></div>
+          {record.setId && <div><dt>Set</dt><dd><SetLink setId={record.setId} /></dd></div>}
           <div><dt>Mode</dt><dd>{modeLabel(record.mode)}</dd></div>
           <div><dt>Shares burned</dt><dd>{record.shares.amount} {record.shares.symbol}</dd></div>
           <div><dt>Assets received</dt><dd>{amountList(record.outputs)}</dd></div>

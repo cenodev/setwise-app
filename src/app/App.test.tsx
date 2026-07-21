@@ -8,6 +8,7 @@ import { runtimeConfig } from "../config/env";
 import type { Pool, PoolState } from "../data/rfq/deposits";
 import type { PoolSummary } from "../data/rfq/pools";
 import type { PoolPageProps } from "../features/pool-analytics/PoolPage";
+import type { WithdrawPageProps } from "../features/withdraw/WithdrawPage";
 
 const poolAddress = "0x1111111111111111111111111111111111111111";
 const lpAddress = "0x2222222222222222222222222222222222222222";
@@ -98,7 +99,12 @@ vi.mock("../features/deposit/DepositPage", () => ({
   ),
 }));
 vi.mock("../features/withdraw/WithdrawPage", () => ({
-  WithdrawPage: () => <section aria-label="Withdraw integration">Withdraw form</section>,
+  WithdrawPage: ({ onBusyChange, pool, poolState }: WithdrawPageProps) => (
+    <section aria-label="Withdraw integration">
+      Withdraw form for {pool.id} at block {poolState.blockNumber}
+      <button type="button" onClick={() => onBusyChange?.(true)}>Start withdrawal</button>
+    </section>
+  ),
 }));
 vi.mock("../features/swap/SwapPage", () => ({
   SwapPage: () => <section aria-label="Swap integration">Swap form</section>,
@@ -243,6 +249,33 @@ describe("Sets routes and navigation", () => {
     expect(await screen.findByRole("heading", { name: "Set second-set" })).toBeVisible();
     expect(await screen.findByLabelText("Set analytics integration")).toHaveTextContent("second-set: 2000");
     expect(screen.queryByText(`${runtimeConfig.defaultPoolId}: 1000`)).not.toBeInTheDocument();
+  });
+
+  it("passes each route-selected Set snapshot into its withdrawal flow", async () => {
+    const first = renderApp(`/sets/${runtimeConfig.defaultPoolId}/withdraw`);
+    expect(await screen.findByLabelText("Withdraw integration")).toHaveTextContent(
+      `Withdraw form for ${runtimeConfig.defaultPoolId} at block 101`,
+    );
+    first.unmount();
+
+    renderApp("/sets/second-set/withdraw");
+    expect(await screen.findByLabelText("Withdraw integration")).toHaveTextContent(
+      "Withdraw form for second-set at block 202",
+    );
+  });
+
+  it("prevents Set tab changes while a withdrawal is in progress", async () => {
+    renderApp(`/sets/${runtimeConfig.defaultPoolId}/withdraw`);
+    fireEvent.click(await screen.findByRole("button", { name: "Start withdrawal" }));
+
+    const tabs = screen.getByRole("navigation", { name: "Set sections" });
+    const overview = within(tabs).getByRole("link", { name: "Overview" });
+    expect(overview).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(overview);
+
+    expect(screen.getByRole("heading", { name: "Withdraw from this Set" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Set overview" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Keep this Set open/)).toBeVisible();
   });
 
   it("keeps public overview data visible but disables wallet and operations on unsupported chains", async () => {

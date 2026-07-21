@@ -28,6 +28,7 @@ export type SetOutletContext = {
   setNavigationLocked: (locked: boolean) => void;
   pool: Pool | undefined;
   poolState: PoolState | undefined;
+  refreshPoolState: () => Promise<PoolState | undefined>;
   refreshing: boolean;
   retry: () => void;
   unsupported: boolean;
@@ -168,18 +169,18 @@ export function SetDetailLayout() {
     void poolQuery.refetch();
     void poolStateQuery.refetch();
   };
+  const refreshPoolState = async () => (await poolStateQuery.refetch()).data;
 
   let globalOperationUnavailable: string | null = null;
   if (unsupported) {
     globalOperationUnavailable = "Transactions are unavailable because this Set is on an unsupported chain.";
-  } else if (paused) {
-    globalOperationUnavailable = "Transactions are unavailable while this Set is paused.";
   } else if (!hasSnapshot) {
     globalOperationUnavailable = error
       ? "Transactions are unavailable until a consistent live Set snapshot can be loaded."
       : "Transactions will be available after the live Set snapshot finishes loading.";
   }
   const depositUnavailable = globalOperationUnavailable
+    ?? (paused ? "Deposits are unavailable while this Set is paused." : null)
     ?? (consistentState?.trading.deposits === "paused" ? "Deposits are paused for this Set." : null);
 
   const status = unsupported
@@ -207,6 +208,7 @@ export function SetDetailLayout() {
     },
     pool: consistentPool,
     poolState: consistentState,
+    refreshPoolState,
     refreshing,
     retry,
     setNavigationLocked,
@@ -259,7 +261,7 @@ export function SetDetailLayout() {
       )}
       {paused && (
         <aside className="warning-panel" role="alert">
-          <strong>This Set is paused.</strong> Public data remains visible, but transactions are disabled.
+          <strong>This Set is paused.</strong> Public data remains visible. Deposits and single-asset trades are disabled; direct proportional withdrawals may remain available.
         </aside>
       )}
       {poolsQuery.error && poolsQuery.data && (
@@ -289,7 +291,6 @@ export function SetDetailLayout() {
           </NavLink>
         ))}
       </nav>
-
       {navigationLocked && (
         <p className="notice" role="status">
           Keep this Set open while the active wallet request finishes.

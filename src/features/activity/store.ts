@@ -37,7 +37,8 @@ export type WithdrawalActivityRecord = ActivityBase & {
   mode: "proportional" | "single-asset";
   operation: "withdrawal";
   outputs: ActivityAmount[];
-  setId: string;
+  /** Optional only so records written before multi-Set support remain readable. */
+  setId?: string;
   shares: ActivityAmount;
 };
 
@@ -84,7 +85,7 @@ function isActivityRecord(value: unknown): value is ActivityRecord {
   }
   if (record.operation === "withdrawal") {
     return (record.mode === "proportional" || record.mode === "single-asset")
-      && typeof record.setId === "string"
+      && (record.setId === undefined || typeof record.setId === "string")
       && isActivityAmount(record.shares)
       && Array.isArray(record.outputs)
       && record.outputs.length > 0
