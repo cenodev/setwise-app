@@ -84,7 +84,19 @@ vi.mock("../features/pool-analytics/PoolPage", () => ({
   ),
 }));
 vi.mock("../features/deposit/DepositPage", () => ({
-  DepositPage: () => <section aria-label="Deposit integration">Deposit form</section>,
+  DepositPage: ({
+    onNavigationLockChange,
+    pool,
+  }: {
+    onNavigationLockChange: (locked: boolean) => void;
+    pool: Pool;
+  }) => (
+    <section aria-label="Deposit integration">
+      Deposit form for {pool.id}
+      <button type="button" onClick={() => onNavigationLockChange(true)}>Start wallet request</button>
+      <button type="button" onClick={() => onNavigationLockChange(false)}>Finish wallet request</button>
+    </section>
+  ),
 }));
 vi.mock("../features/withdraw/WithdrawPage", () => ({
   WithdrawPage: ({ onBusyChange, pool, poolState }: WithdrawPageProps) => (
@@ -181,9 +193,31 @@ describe("Sets routes and navigation", () => {
     fireEvent.click(depositTab);
     expect(await screen.findByRole("heading", { name: "Deposit into this Set" })).toBeVisible();
     expect(screen.getByLabelText("Deposit integration")).toBeVisible();
+    expect(screen.getByLabelText("Deposit integration")).toHaveTextContent(runtimeConfig.defaultPoolId);
     expect(depositTab).toHaveAttribute("aria-current", "page");
 
     fireEvent.click(within(tabs).getByRole("link", { name: "Withdraw" }));
+    expect(await screen.findByRole("heading", { name: "Withdraw from this Set" })).toBeVisible();
+  });
+
+  it("prevents Set and tab navigation while a wallet request is active", async () => {
+    renderApp("/sets/second-set/deposit");
+    expect(await screen.findByRole("heading", { name: "Deposit into this Set" })).toBeVisible();
+    expect(screen.getByLabelText("Deposit integration")).toHaveTextContent("second-set");
+
+    fireEvent.click(screen.getByRole("button", { name: "Start wallet request" }));
+    expect(screen.getByText(/Keep this Set open/)).toBeVisible();
+    const tabs = screen.getByRole("navigation", { name: "Set sections" });
+    const withdrawTab = within(tabs).getByRole("link", { name: "Withdraw" });
+    expect(withdrawTab).toHaveAttribute("aria-disabled", "true");
+
+    fireEvent.click(withdrawTab);
+    expect(screen.getByRole("heading", { name: "Deposit into this Set" })).toBeVisible();
+    fireEvent.click(screen.getAllByRole("link", { name: "Sets" })[0]);
+    expect(screen.getByRole("heading", { name: "Deposit into this Set" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Finish wallet request" }));
+    fireEvent.click(withdrawTab);
     expect(await screen.findByRole("heading", { name: "Withdraw from this Set" })).toBeVisible();
   });
 
@@ -241,7 +275,7 @@ describe("Sets routes and navigation", () => {
 
     expect(screen.getByRole("heading", { name: "Withdraw from this Set" })).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Set overview" })).not.toBeInTheDocument();
-    expect(screen.getByText(/navigation is locked/i)).toBeVisible();
+    expect(screen.getByText(/Keep this Set open/)).toBeVisible();
   });
 
   it("keeps public overview data visible but disables wallet and operations on unsupported chains", async () => {
