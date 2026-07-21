@@ -98,19 +98,19 @@ export function PoolOverviewPage({
   if (!online && (!pool || !state)) {
     return (
       <section className="pool-card pool-status-card warning-panel" role="status">
-        <strong>No saved pool snapshot is available offline.</strong>
-        <span>Reconnect to load public pool reserves and wallet estimates.</span>
+        <strong>No saved Set snapshot is available offline.</strong>
+        <span>Reconnect to load public Set reserves and wallet estimates.</span>
       </section>
     );
   }
   if (loading && (!pool || !state)) {
-    return <section className="pool-card pool-status-card" aria-live="polite">Loading public pool overview…</section>;
+    return <section className="pool-card pool-status-card" aria-live="polite">Loading public Set overview…</section>;
   }
   if (!pool || !state || snapshotMismatch) {
     return (
       <section className="pool-card pool-status-card error-panel" role="alert">
-        <strong>Couldn’t load a consistent public pool snapshot.</strong>
-        <span>{error instanceof Error ? error.message : "The pool discovery and state data do not match."}</span>
+        <strong>Couldn’t load a consistent public Set snapshot.</strong>
+        <span>{error instanceof Error ? error.message : "The Set discovery and state data do not match."}</span>
         <button className="inline-action" disabled={!online} onClick={onRetry} type="button">Retry</button>
       </section>
     );
@@ -119,8 +119,8 @@ export function PoolOverviewPage({
     return (
       <section className="pool-card pool-status-card empty-card">
         <div className="empty-mark" aria-hidden="true">$</div>
-        <h2>No public pool data yet</h2>
-        <p>Liquidity metrics will appear when the pool publishes its first snapshot.</p>
+        <h2>No public Set data yet</h2>
+        <p>Liquidity metrics will appear when the Set publishes its first snapshot.</p>
       </section>
     );
   }
@@ -130,7 +130,7 @@ export function PoolOverviewPage({
 
   return (
     <div className="pool-overview">
-      {refreshing && <p className="pool-refreshing" role="status">Refreshing live pool data…</p>}
+      {refreshing && <p className="pool-refreshing" role="status">Refreshing live Set data…</p>}
       {driftedAssets.length > 0 && (
         <aside className="warning-panel" role="alert">
           <strong>Reserve balance drift detected.</strong> The table shows the server-provided usable balances for {driftedAssets.map(({ asset }) => asset.symbol).join(", ")}.
@@ -138,7 +138,7 @@ export function PoolOverviewPage({
       )}
       <section className="pool-card" aria-labelledby="pool-metrics-title">
         <div className="pool-section-heading">
-          <div><p className="eyebrow">Public pool</p><h2 id="pool-metrics-title">Pool metrics</h2></div>
+          <div><p className="eyebrow">Public Set</p><h2 id="pool-metrics-title">Set metrics</h2></div>
           <p>Updated {formatPoolTimestamp(state.blockTimestamp)} · Block {state.blockNumber}</p>
         </div>
         <dl className="pool-metrics">
@@ -149,12 +149,12 @@ export function PoolOverviewPage({
       </section>
       <section className="pool-card" aria-labelledby="pool-liquidity-title">
         <div className="pool-section-heading">
-          <div><p className="eyebrow">Reserve composition</p><h2 id="pool-liquidity-title">Pool liquidity</h2></div>
-          <p>Balances and reserve values are supplied by the pool server.</p>
+          <div><p className="eyebrow">Reserve composition</p><h2 id="pool-liquidity-title">Set liquidity</h2></div>
+          <p>Balances and reserve values are supplied by the Set&apos;s underlying liquidity pool.</p>
         </div>
-        <div className="pool-table-scroll" aria-label="Pool liquidity details" role="region" tabIndex={0}>
+        <div className="pool-table-scroll" aria-label="Set liquidity details" role="region" tabIndex={0}>
           <table className="pool-table">
-            <caption className="sr-only">Pool liquidity, allocations, and reserve health</caption>
+            <caption className="sr-only">Set liquidity, allocations, and reserve health</caption>
             <thead><tr><th scope="col">Asset</th><th scope="col">Usable balance</th><th scope="col">Midpoint price</th><th scope="col">Reserve value</th><th scope="col">Current</th><th scope="col">Target</th><th scope="col">Variance</th><th scope="col">Health</th></tr></thead>
             <tbody>{rows.map(({ asset, state: assetState }) => {
               const current = calculateCurrentAssetAllocation(assetState, state);

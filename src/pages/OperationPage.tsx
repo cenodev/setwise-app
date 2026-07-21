@@ -6,7 +6,7 @@ const pageCopy: Record<Operation, { eyebrow: string; title: string; description:
   swap: {
     eyebrow: "Trade",
     title: "Swap assets",
-    description: "Exchange BNB, stablecoins, and supported tokenized assets through the Setwise pool.",
+    description: "Exchange BNB, stablecoins, and supported tokenized assets through a Setwise Set.",
   },
   deposit: {
     eyebrow: "Portfolio",
@@ -16,7 +16,7 @@ const pageCopy: Record<Operation, { eyebrow: string; title: string; description:
   withdraw: {
     eyebrow: "Portfolio",
     title: "Withdraw assets",
-    description: "Burn Setwise shares for proportional pool assets or one selected asset.",
+    description: "Burn Setwise shares for proportional Set assets or one selected asset.",
   },
 };
 

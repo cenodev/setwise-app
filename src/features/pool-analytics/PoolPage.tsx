@@ -37,12 +37,12 @@ export function PoolPage() {
     <div className="pool-page">
       {!online && hasPublicSnapshot && (
         <aside className="warning-panel pool-stale-notice" role="status">
-          <strong>You’re offline.</strong> Showing the most recently saved pool snapshot and wallet estimate.
+          <strong>You’re offline.</strong> Showing the most recently saved Set snapshot and wallet estimate.
         </aside>
       )}
       {online && hasPublicSnapshot && error && (
         <aside className="warning-panel pool-stale-notice" role="status">
-          <strong>Live refresh failed.</strong> The last complete pool snapshot remains visible.
+          <strong>Live refresh failed.</strong> The last complete Set snapshot remains visible.
           <button className="inline-action" onClick={retry} type="button">Retry refresh</button>
         </aside>
       )}
@@ -56,8 +56,8 @@ export function PoolPage() {
         state={poolStateQuery.data}
       />
       <aside className="pool-liquidity-note" role="note">
-        <strong>Pool reserves are not market depth.</strong>
-        <span>Usable balances describe assets held by this pool. External venue liquidity and executable prices may differ.</span>
+        <strong>Set reserves are not market depth.</strong>
+        <span>Usable balances describe assets held by the Set&apos;s underlying liquidity pool. External venue liquidity and executable prices may differ.</span>
       </aside>
       <PoolUserPosition pool={poolQuery.data} poolState={poolStateQuery.data} />
     </div>

@@ -56,14 +56,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-vis
 .set-directory-card h2 { margin: .25rem 0 .35rem; font-size: 1.05rem; }
 .set-directory-card p:not(.eyebrow) { margin: 0; color: var(--text-secondary); font-size: .9rem; }
 .set-directory-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
-.secondary-link {
-  color: var(--info);
-  font-size: .85rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-.secondary-link:hover { text-decoration: underline; }
-.banner-actions { display: inline-flex; flex-wrap: wrap; gap: .75rem; margin-top: .75rem; }
 
 .set-tabs {
   display: grid;
@@ -91,18 +83,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-vis
 .set-tab-panel { display: grid; gap: 1rem; }
 .set-tab-header h2 { margin: .2rem 0 .45rem; font-size: 1.25rem; }
 .set-tab-header p:last-child { margin: 0; color: var(--text-secondary); line-height: 1.55; }
-.warning-panel {
-  display: grid;
-  gap: .35rem;
-  padding: .9rem 1rem;
-  border: 1px solid rgb(242 189 91 / 35%);
-  border-radius: .9rem;
-  background: rgb(242 189 91 / 10%);
-  color: #ffd78d;
-  font-size: .85rem;
-  line-height: 1.45;
-}
-.error-panel { border-color: rgb(255 119 136 / 35%); background: rgb(255 119 136 / 10%); color: #ffb7c0; }
 
 code {
   color: var(--text-primary);

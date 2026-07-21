@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { LegacyRedirect } from "./LegacyRedirect";
 import { AppShell } from "./AppShell";
 import { setsPath } from "./routes";
-import { SetDetailLayout, SetIndexRedirect } from "../features/sets/SetDetailLayout";
+import { SetDetailLayout } from "../features/sets/SetDetailLayout";
 import { SetDepositTab, SetOverviewTab, SetWithdrawTab } from "../features/sets/SetTabs";
 import { FaucetPage } from "../features/faucet/FaucetPage";
 import { SwapPage } from "../features/swap/SwapPage";
@@ -18,8 +18,8 @@ export function App() {
       <Routes>
         <Route path="/" element={<Navigate to={setsPath()} replace />} />
         <Route path="/sets" element={<SetsPage />} />
-        <Route path="/sets/:setId" element={<SetIndexRedirect />} />
         <Route path="/sets/:setId" element={<SetDetailLayout />}>
+          <Route index element={<Navigate to="overview" replace />} />
           <Route path="overview" element={<SetOverviewTab />} />
           <Route path="deposit" element={<SetDepositTab />} />
           <Route path="withdraw" element={<SetWithdrawTab />} />

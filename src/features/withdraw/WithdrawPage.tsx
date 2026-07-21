@@ -512,7 +512,7 @@ export function WithdrawPage() {
           {amount && amountError && <p className="field-error">{amountError}</p>}
           {insufficientShares && <p className="field-error">Insufficient unlocked SETWISE balance.</p>}
           {Boolean(chainQuery.data?.lockedShares) && (
-            <p className="notice">Locked shares are excluded from Max and cannot be withdrawn. <Link to="/deposit#locked-shares">View locked shares</Link>.</p>
+            <p className="notice">Locked shares are excluded from Max and cannot be withdrawn. <Link to={`/sets/${encodeURIComponent(runtimeConfig.defaultPoolId)}/deposit#locked-shares`}>View locked shares</Link>.</p>
           )}
         </div>
 

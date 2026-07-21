@@ -1,11 +1,11 @@
 import { Link, NavLink, Navigate, Outlet, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
-import { requiredChainId } from "../config/chains";
-import { setQueryKeys } from "../data/queryKeys";
-import { getPools } from "../data/rfq/pools";
-import { resolveSet } from "../data/sets";
-import { SET_TABS, setPath, setsPath } from "../app/routes";
+import { SET_TABS, setPath, setsPath } from "../../app/routes";
+import { requiredChainId } from "../../config/chains";
+import { setQueryKeys } from "../../data/queryKeys";
+import { getPools } from "../../data/rfq/pools";
+import { resolveSet } from "../../data/sets";
 
 export function SetDetailLayout() {
   const { setId: rawSetId } = useParams<{ setId: string }>();
@@ -100,10 +100,4 @@ export function SetDetailLayout() {
       <Outlet context={{ definition, unsupported }} />
     </div>
   );
-}
-
-export function SetIndexRedirect() {
-  const { setId: rawSetId } = useParams<{ setId: string }>();
-  if (!rawSetId) return <Navigate to={setsPath()} replace />;
-  return <Navigate to={setPath(decodeURIComponent(rawSetId), "overview")} replace />;
 }
