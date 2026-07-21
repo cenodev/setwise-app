@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useParams } from "react-router-dom";
 
 import { SET_TABS, setPath, setsPath } from "../../app/routes";
@@ -23,6 +24,8 @@ export type SetOutletContext = {
     deposit: string | null;
     withdraw: string | null;
   };
+  navigationLocked: boolean;
+  setNavigationLocked: (locked: boolean) => void;
   pool: Pool | undefined;
   poolState: PoolState | undefined;
   refreshing: boolean;
@@ -48,6 +51,24 @@ export function SetDetailLayout() {
   const { setId: rawSetId } = useParams<{ setId: string }>();
   const setId = rawSetId ? decodeURIComponent(rawSetId) : "";
   const online = useOnlineStatus();
+  const [navigationLocked, setNavigationLocked] = useState(false);
+
+  useEffect(() => {
+    if (!navigationLocked) return;
+    const preventNavigation = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      if (!(target instanceof HTMLAnchorElement) || target.target === "_blank") return;
+      const destination = new URL(target.href, window.location.href);
+      if (destination.href !== window.location.href) event.preventDefault();
+    };
+    const preventUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    document.addEventListener("click", preventNavigation, true);
+    window.addEventListener("beforeunload", preventUnload);
+    return () => {
+      document.removeEventListener("click", preventNavigation, true);
+      window.removeEventListener("beforeunload", preventUnload);
+    };
+  }, [navigationLocked]);
 
   const poolsQuery = useQuery({
     queryKey: setQueryKeys.list,
@@ -179,6 +200,7 @@ export function SetDetailLayout() {
     definition,
     error: error instanceof Error ? error : error ? new Error("Set data is unavailable") : null,
     loading,
+    navigationLocked,
     operationUnavailable: {
       deposit: depositUnavailable,
       withdraw: globalOperationUnavailable,
@@ -187,6 +209,7 @@ export function SetDetailLayout() {
     poolState: consistentState,
     refreshing,
     retry,
+    setNavigationLocked,
     unsupported,
   };
 
@@ -257,11 +280,21 @@ export function SetDetailLayout() {
             to={setPath(definition.id, tab)}
             className={({ isActive }) => (isActive ? "set-tab is-active" : "set-tab")}
             end
+            aria-disabled={navigationLocked || undefined}
+            onClick={(event) => {
+              if (navigationLocked) event.preventDefault();
+            }}
           >
             {label}
           </NavLink>
         ))}
       </nav>
+
+      {navigationLocked && (
+        <p className="notice" role="status">
+          Keep this Set open while the active wallet request finishes.
+        </p>
+      )}
 
       <Outlet context={outletContext} />
     </div>

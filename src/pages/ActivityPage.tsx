@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { setPath } from "../app/routes";
 import { runtimeConfig } from "../config/env";
 import {
   readActivity,
@@ -23,13 +24,17 @@ function timestampLabel(record: ActivityRecord): string {
   return submitted ? "Submitted" : "Attempted";
 }
 
+function SetLink({ setId }: { setId: string }) {
+  return <Link to={setPath(setId, "overview")}>{setId}</Link>;
+}
+
 function ActivityDetails({ record }: { record: ActivityRecord }) {
   if (record.operation === "deposit") {
     return (
       <>
         <h2 id={`activity-${record.id}`}>{record.deposits.map((amount) => amount.symbol).join(" + ")} → {record.shares.symbol}</h2>
         <dl className="quote-details">
-          <div><dt>Set</dt><dd>{record.setId}</dd></div>
+          <div><dt>Set</dt><dd><SetLink setId={record.setId} /></dd></div>
           <div><dt>Mode</dt><dd>{modeLabel(record.mode)}</dd></div>
           <div><dt>Deposited</dt><dd>{amountList(record.deposits)}</dd></div>
           <div><dt>Shares received</dt><dd>{record.shares.amount} {record.shares.symbol}</dd></div>
@@ -44,7 +49,7 @@ function ActivityDetails({ record }: { record: ActivityRecord }) {
       <>
         <h2 id={`activity-${record.id}`}>{record.shares.symbol} → {record.outputs.map((amount) => amount.symbol).join(" + ")}</h2>
         <dl className="quote-details">
-          <div><dt>Set</dt><dd>{record.setId}</dd></div>
+          <div><dt>Set</dt><dd><SetLink setId={record.setId} /></dd></div>
           <div><dt>Mode</dt><dd>{modeLabel(record.mode)}</dd></div>
           <div><dt>Shares burned</dt><dd>{record.shares.amount} {record.shares.symbol}</dd></div>
           <div><dt>Assets received</dt><dd>{amountList(record.outputs)}</dd></div>
@@ -57,7 +62,7 @@ function ActivityDetails({ record }: { record: ActivityRecord }) {
     <>
       <h2 id={`activity-${record.id}`}>{record.input.symbol} → {record.output.symbol}</h2>
       <dl className="quote-details">
-        {record.setId && <div><dt>Set</dt><dd>{record.setId}</dd></div>}
+        {record.setId && <div><dt>Set</dt><dd><SetLink setId={record.setId} /></dd></div>}
         <div><dt>Paid</dt><dd>{record.input.amount} {record.input.symbol}</dd></div>
         <div><dt>Received</dt><dd>{record.output.amount} {record.output.symbol}</dd></div>
         <div><dt>{timestampLabel(record)}</dt><dd><time dateTime={new Date(record.timestamp).toISOString()}>{new Date(record.timestamp).toLocaleString()}</time></dd></div>

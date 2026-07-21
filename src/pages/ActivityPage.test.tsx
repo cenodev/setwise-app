@@ -73,6 +73,10 @@ describe("ActivityPage", () => {
     expect(within(deposit).getByText("4.2 SETWISE")).toBeVisible();
     expect(within(deposit).getByText("30 days")).toBeVisible();
     expect(within(deposit).getByText("bstock-ai")).toBeVisible();
+    expect(within(deposit).getByRole("link", { name: "bstock-ai" })).toHaveAttribute(
+      "href",
+      "/sets/bstock-ai/overview",
+    );
     expect(within(deposit).getByRole("link", { name: /on explorer/ })).toHaveAttribute(
       "href",
       expect.stringContaining(hash),

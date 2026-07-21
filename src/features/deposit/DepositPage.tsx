@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Address, Hash } from "viem";
@@ -13,15 +13,12 @@ import {
   useWriteContract,
 } from "wagmi";
 
-import { requiredChainId } from "../../config/chains";
 import { TokenIdentity } from "../../components/TokenIdentity";
 import { TokenSelector } from "../../components/TokenSelector";
 import { runtimeConfig } from "../../config/env";
-import { poolQueryKeys } from "../../data/queryKeys";
+import { setQueryKeys } from "../../data/queryKeys";
 import { erc20Abi, setwisePoolAbi } from "../../data/chain/abis";
 import {
-  getPool,
-  getPoolState,
   requestDepositQuote,
   requestFirmDepositQuote,
   RfqApiError,
@@ -29,7 +26,9 @@ import {
   type DepositMode,
   type DepositQuote,
   type FirmDepositQuote,
+  type Pool,
   type PoolAsset,
+  type PoolState,
 } from "../../data/rfq/deposits";
 import {
   atomicToDecimal,
@@ -87,6 +86,12 @@ type TransactionView = {
   stage: TransactionStage;
 };
 
+type DepositPageProps = {
+  onNavigationLockChange?: (locked: boolean) => void;
+  pool: Pool;
+  poolState: PoolState;
+};
+
 function useOnlineStatus() {
   const [online, setOnline] = useState(() => navigator.onLine);
   useEffect(() => {
@@ -137,8 +142,13 @@ function depositValueUsd(quote: DepositQuote, assets: readonly PoolAsset[]): str
   return `$${atomicToDecimal(cents, 2)}`;
 }
 
-function validateIndicativeQuote(quote: DepositQuote, poolAddress: Address, assets: readonly PoolAsset[]) {
-  if (quote.stateSnapshot.chainId !== requiredChainId) throw new Error("Indicative quote targets the wrong chain");
+function validateIndicativeQuote(
+  quote: DepositQuote,
+  poolAddress: Address,
+  assets: readonly PoolAsset[],
+  chainId: number,
+) {
+  if (quote.stateSnapshot.chainId !== chainId) throw new Error("Indicative quote targets the wrong chain");
   if (!addressesMatch(quote.stateSnapshot.poolAddress, poolAddress)) {
     throw new Error("Indicative quote targets an unexpected pool");
   }
@@ -175,8 +185,9 @@ function validateFirmQuote(
   mode: DepositMode,
   assets: readonly PoolAsset[],
   lockDays: number,
+  chainId: number,
 ) {
-  if (firm.transaction.chainId !== requiredChainId) throw new Error("Firm quote targets the wrong chain");
+  if (firm.transaction.chainId !== chainId) throw new Error("Firm quote targets the wrong chain");
   if (!addressesMatch(firm.investor, address) || !addressesMatch(firm.requirements.sender, address)) {
     throw new Error("Firm quote requires a different sender");
   }
@@ -226,12 +237,13 @@ function transactionLabel(stage: TransactionStage, approvals: number, atomic: bo
   }
 }
 
-export function DepositPage() {
+export function DepositPage({ onNavigationLockChange, pool, poolState }: DepositPageProps) {
   const { address, connector } = useAccount();
-  const publicClient = usePublicClient({ chainId: requiredChainId });
+  const publicClient = usePublicClient({ chainId: pool.chain.id });
+  const queryClient = useQueryClient();
   const capabilityQuery = useCapabilities({
     account: address,
-    chainId: requiredChainId,
+    chainId: pool.chain.id,
     query: { enabled: Boolean(address), retry: false },
   });
   const { sendCallsAsync } = useSendCalls();
@@ -264,33 +276,23 @@ export function DepositPage() {
     query: { enabled: Boolean(batchId), retry: false },
   });
 
-  const poolQuery = useQuery({
-    queryKey: poolQueryKeys.discovery(runtimeConfig.defaultPoolId),
-    queryFn: ({ signal }) => getPool(runtimeConfig.defaultPoolId, signal),
-    staleTime: 60_000,
-  });
-  const poolStateQuery = useQuery({
-    queryKey: poolQueryKeys.state(runtimeConfig.defaultPoolId),
-    queryFn: ({ signal }) => getPoolState(runtimeConfig.defaultPoolId, signal),
-    refetchInterval: online ? 15_000 : false,
-  });
-
   const discoveredAssets = useMemo(
-    () => [...(poolQuery.data?.assets ?? [])].sort((left, right) => left.index - right.index),
-    [poolQuery.data?.assets],
+    () => [...pool.assets].sort((left, right) => left.index - right.index),
+    [pool.assets],
   );
-  const tokenChainId = poolQuery.data?.chain.id ?? requiredChainId;
+  const tokenChainId = pool.chain.id;
 
   const chainQuery = useQuery({
-    queryKey: ["deposit-chain", poolQuery.data?.id, address, poolQuery.data?.contract.address,
+    queryKey: ["deposit-chain", pool.id, address, pool.contract.address,
       ...discoveredAssets.map((asset) => asset.address)],
-    enabled: Boolean(address && publicClient && poolQuery.data),
+    enabled: Boolean(address && publicClient),
     queryFn: async (): Promise<ChainDepositState & { orderedAssets: PoolAsset[] }> => {
-      if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and pool are required");
-      if (poolQuery.data.id !== runtimeConfig.defaultPoolId || poolQuery.data.chain.id !== requiredChainId) {
-        throw new Error("Pool discovery does not match the configured pool and chain");
+      if (!address || !publicClient) throw new Error("Wallet and Set are required");
+      if (pool.id !== poolState.poolId || pool.chain.id !== poolState.chainId
+        || !addressesMatch(pool.contract.address, poolState.poolAddress)) {
+        throw new Error("Set detail does not match its live state");
       }
-      const poolAddress = poolQuery.data.contract.address;
+      const poolAddress = pool.contract.address;
       const assetCount = await publicClient.readContract({
         address: poolAddress, abi: setwisePoolAbi, functionName: "assetCount",
       });
@@ -331,9 +333,9 @@ export function DepositPage() {
   const effectiveSelectedAssetId = selectedAssetId || assets[0]?.id || "";
 
   const lockSelection = useMemo(() => allowedLockSelection(
-    poolQuery.data?.quotePolicy.allowedLockDays ?? [0],
+    pool.quotePolicy.allowedLockDays,
     chainQuery.data?.lockedShares ?? 0n,
-  ), [chainQuery.data?.lockedShares, poolQuery.data?.quotePolicy.allowedLockDays]);
+  ), [chainQuery.data?.lockedShares, pool.quotePolicy.allowedLockDays]);
   const effectiveLockDays = lockSelection.allowed.includes(lockDays) ? lockDays : lockSelection.selected;
 
   const form = useMemo(() => {
@@ -360,10 +362,10 @@ export function DepositPage() {
     return { errors, request };
   }, [amounts, assets, effectiveSelectedAssetId, mode]);
   const requestFingerprint = JSON.stringify(form.request);
-  const currentRequestKey = `${requestFingerprint}:${effectiveLockDays}`;
+  const currentRequestKey = `${pool.id}:${requestFingerprint}:${effectiveLockDays}`;
 
   useEffect(() => {
-    if (!online || !poolQuery.data || poolStateQuery.data?.trading.paused || form.request.length === 0
+    if (!online || poolState.trading.paused || form.request.length === 0
       || Object.keys(form.errors).length > 0 || !lockSelection.allowed.includes(effectiveLockDays)) {
       const resetTimer = window.setTimeout(() => {
         setQuoteLoading(false);
@@ -378,9 +380,9 @@ export function DepositPage() {
       setQuoteError(null);
     }, 0);
     const timer = window.setTimeout(() => {
-      void requestDepositQuote(runtimeConfig.defaultPoolId, form.request, effectiveLockDays, controller.signal)
+      void requestDepositQuote(pool.id, form.request, effectiveLockDays, controller.signal)
         .then((nextQuote) => {
-          validateIndicativeQuote(nextQuote, poolQuery.data.contract.address, assets);
+          validateIndicativeQuote(nextQuote, pool.contract.address, assets, pool.chain.id);
           setQuote(nextQuote);
           setQuoteRequestKey(requestedKey);
           const until = Date.parse(nextQuote.validUntil) - Date.now();
@@ -399,7 +401,7 @@ export function DepositPage() {
       controller.abort();
     };
   }, [assets, currentRequestKey, effectiveLockDays, form.errors, form.request, requestFingerprint,
-    lockSelection.allowed, online, poolQuery.data, poolStateQuery.data?.trading.paused, quoteRefresh]);
+    lockSelection.allowed, online, pool, poolState.trading.paused, quoteRefresh]);
 
   useEffect(() => {
     if (!quote && !firmQuote && !chainQuery.data?.lockedShares) return;
@@ -439,16 +441,26 @@ export function DepositPage() {
   const quoteFresh = Boolean(quote && Date.parse(quote.validUntil) > now);
   const quoteMatchesInput = quoteRequestKey === currentRequestKey;
   const busy = !["editing", "success", "error", "expired", "status-error"].includes(transaction.stage);
+  const claimBusy = !["editing", "success", "error", "expired", "status-error"].includes(claimTransaction.stage);
+  const navigationLocked = busy || claimBusy || Boolean(batchId);
   const canExecute = Boolean(
-    quote && quoteFresh && quoteMatchesInput && !quoteLoading && online && !poolStateQuery.data?.trading.paused
+    quote && quoteFresh && quoteMatchesInput && !quoteLoading && online && !poolState.trading.paused
     && shortfalls.length === 0 && address && publicClient && capabilitySettled && !busy,
   );
 
+  useEffect(() => {
+    onNavigationLockChange?.(navigationLocked);
+    return () => onNavigationLockChange?.(false);
+  }, [navigationLocked, onNavigationLockChange]);
+
   const refetchChain = chainQuery.refetch;
-  const refetchPoolState = poolStateQuery.refetch;
   const refreshAfterReceipt = useCallback(async () => {
-    await Promise.all([refetchChain(), refetchPoolState()]);
-  }, [refetchChain, refetchPoolState]);
+    await Promise.all([
+      refetchChain(),
+      queryClient.invalidateQueries({ exact: true, queryKey: setQueryKeys.state(pool.id) }),
+      queryClient.invalidateQueries({ queryKey: ["wallet-pool-position", pool.id] }),
+    ]);
+  }, [pool.id, queryClient, refetchChain]);
 
   useEffect(() => {
     if (!batchId || !atomicActivityId || !["confirming", "status-error"].includes(transaction.stage)
@@ -456,7 +468,7 @@ export function DepositPage() {
     const timer = window.setTimeout(() => {
       const result = atomicBatchResult({
         error: batchStatus.error,
-        expectedChainId: requiredChainId,
+        expectedChainId: pool.chain.id,
         status: batchStatus.data,
       });
       if (result.kind === "query-error") {
@@ -517,10 +529,10 @@ export function DepositPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [atomicActivityId, batchId, batchStatus.data, batchStatus.error, batchStatus.isFetching,
-    refreshAfterReceipt, transaction.stage]);
+    pool.chain.id, refreshAfterReceipt, transaction.stage]);
 
   async function executeDeposit() {
-    if (!canExecute || !quote || !address || !publicClient || !poolQuery.data) return;
+    if (!canExecute || !quote || !address || !publicClient) return;
     setTransaction({ stage: "allowance-check" });
     setFirmQuote(null);
     setBatchId(undefined);
@@ -550,13 +562,13 @@ export function DepositPage() {
           investor: address,
           lockDays: effectiveLockDays,
           mode,
-          poolId: runtimeConfig.defaultPoolId,
+          poolId: pool.id,
         });
-        validateFirmQuote(firm, quote, address, poolQuery.data.contract.address, mode, assets, effectiveLockDays);
+        validateFirmQuote(firm, quote, address, pool.contract.address, mode, assets, effectiveLockDays, pool.chain.id);
         const calls = buildAtomicDepositCalls({
           approvals: requiredApprovals,
           mustSubmitBy: firm.mustSubmitBy,
-          poolAddress: poolQuery.data.contract.address,
+          poolAddress: pool.contract.address,
           requirements: firm.requirements.approvals,
           transaction: firm.transaction,
         });
@@ -567,15 +579,15 @@ export function DepositPage() {
         }
 
         const activity = createDepositActivity({
-          chainId: requiredChainId,
+          chainId: pool.chain.id,
           deposits: quote.deposits.filter((deposit) => BigInt(deposit.atomicAmount) > 0n).map((deposit) => ({
             amount: deposit.amount,
             symbol: assets.find((asset) => asset.id === deposit.asset)?.symbol ?? deposit.asset,
           })),
           lockDays: firm.lockDays,
           mode: firm.mode,
-          setId: poolQuery.data.id,
-          shares: { amount: firm.shares.amount, symbol: poolQuery.data.lpToken.symbol },
+          setId: pool.id,
+          shares: { amount: firm.shares.amount, symbol: pool.lpToken.symbol },
           status: "pending",
         });
         activityId = activity.id;
@@ -590,7 +602,7 @@ export function DepositPage() {
           const result = await sendCallsAsync({
             account: address,
             calls,
-            chainId: requiredChainId,
+            chainId: pool.chain.id,
             forceAtomic: true,
           });
           markActivityPending(activity.id);
@@ -628,7 +640,7 @@ export function DepositPage() {
             address: approval.token,
             abi: erc20Abi,
             functionName: "approve",
-            args: [poolQuery.data.contract.address, approval.amount],
+            args: [pool.contract.address, approval.amount],
           });
         } catch (error) {
           setApprovalViews((current) => ({ ...current, [approval.assetId]: { stage: "failed" } }));
@@ -656,9 +668,9 @@ export function DepositPage() {
         investor: address,
         lockDays: effectiveLockDays,
         mode,
-        poolId: runtimeConfig.defaultPoolId,
+        poolId: pool.id,
       });
-      validateFirmQuote(firm, quote, address, poolQuery.data.contract.address, mode, assets, effectiveLockDays);
+      validateFirmQuote(firm, quote, address, pool.contract.address, mode, assets, effectiveLockDays, pool.chain.id);
       setFirmQuote(firm);
       if (Date.parse(firm.mustSubmitBy) <= currentTimestamp()) {
         setTransaction({ stage: "expired", error: "Executable quote expired. Refresh it before opening a new wallet request." });
@@ -666,15 +678,15 @@ export function DepositPage() {
       }
 
       const activity = createDepositActivity({
-        chainId: requiredChainId,
+        chainId: pool.chain.id,
         deposits: quote.deposits.filter((deposit) => BigInt(deposit.atomicAmount) > 0n).map((deposit) => ({
           amount: deposit.amount,
           symbol: assets.find((asset) => asset.id === deposit.asset)?.symbol ?? deposit.asset,
         })),
         lockDays: firm.lockDays,
         mode: firm.mode,
-        setId: poolQuery.data.id,
-        shares: { amount: firm.shares.amount, symbol: poolQuery.data.lpToken.symbol },
+        setId: pool.id,
+        shares: { amount: firm.shares.amount, symbol: pool.lpToken.symbol },
         status: "pending",
       });
       activityId = activity.id;
@@ -727,11 +739,11 @@ export function DepositPage() {
   }
 
   async function claimShares() {
-    if (!address || !publicClient || !poolQuery.data || !chainQuery.data?.canClaim) return;
+    if (!address || !publicClient || !chainQuery.data?.canClaim) return;
     setClaimTransaction({ stage: "wallet" });
     try {
       const hash = await writeContractAsync({
-        address: poolQuery.data.contract.address,
+        address: pool.contract.address,
         abi: setwisePoolAbi,
         functionName: "claimShares",
       });
@@ -746,10 +758,9 @@ export function DepositPage() {
   }
 
   function fillTargets() {
-    if (!poolStateQuery.data) return;
     try {
       const filled = fillByTargetWeights(targetUsd, assets.map((asset) => {
-        const market = poolStateQuery.data.assets.find((item) => item.asset === asset.id)?.market;
+        const market = poolState.assets.find((item) => item.asset === asset.id)?.market;
         if (!market) throw new Error(`No current price is available for ${asset.symbol}`);
         return {
           decimals: asset.decimals,
@@ -764,23 +775,23 @@ export function DepositPage() {
     }
   }
 
-  if (poolQuery.isPending || poolStateQuery.isPending || chainQuery.isPending) {
-    return <section className="deposit-card" aria-live="polite">Loading pool assets and wallet balances…</section>;
+  if (chainQuery.isPending) {
+    return <section className="deposit-card" aria-live="polite">Loading Set assets and wallet balances…</section>;
   }
-  const stateConfigurationError = poolQuery.data && poolStateQuery.data
-    && (poolStateQuery.data.poolId !== poolQuery.data.id
-      || poolStateQuery.data.chainId !== requiredChainId
-      || !addressesMatch(poolStateQuery.data.poolAddress, poolQuery.data.contract.address))
-    ? new Error("Pool state does not match the configured pool and chain")
+  const stateConfigurationError = poolState.poolId !== pool.id
+      || poolState.chainId !== pool.chain.id
+      || !addressesMatch(poolState.poolAddress, pool.contract.address)
+    ? new Error("Set state does not match the selected Set and chain")
     : null;
-  const loadError = poolQuery.error ?? poolStateQuery.error ?? chainQuery.error ?? stateConfigurationError;
+  const loadError = chainQuery.error ?? stateConfigurationError;
   if (loadError) {
     return (
       <section className="deposit-card error-panel" role="alert">
         <h2>Deposit data is unavailable</h2>
         <p>{errorMessage(loadError)}</p>
         <button className="secondary-button" type="button" onClick={() => {
-          void poolQuery.refetch(); void poolStateQuery.refetch(); void chainQuery.refetch();
+          void queryClient.invalidateQueries({ exact: true, queryKey: setQueryKeys.state(pool.id) });
+          void chainQuery.refetch();
         }}>Retry</button>
       </section>
     );
@@ -792,7 +803,7 @@ export function DepositPage() {
   const refreshAction = transaction.stage === "expired" || (transaction.stage === "error" && !quoteFresh);
   const actionEnabled = transaction.stage === "success"
     || (transaction.stage === "status-error" ? online && !batchStatus.isFetching
-      : refreshAction ? online && !poolStateQuery.data?.trading.paused : canExecute);
+      : refreshAction ? online && !poolState.trading.paused : canExecute);
   const capabilityLoading = mode === "portfolio" && approvals.length > 0 && !capabilitySettled;
   const atomicTransaction = atomicExperience || Boolean(batchId);
 
@@ -881,7 +892,7 @@ export function DepositPage() {
           </div>
         )}
 
-        {poolStateQuery.data?.trading.paused && <div className="warning-panel">Trading is paused. Both deposit modes are unavailable.</div>}
+        {poolState.trading.paused && <div className="warning-panel">Trading is paused. Both deposit modes are unavailable.</div>}
         {!online && <div className="warning-panel">Offline — reconnect to price or submit a deposit.</div>}
         {shortfalls.length > 0 && (
           <div className="warning-panel" role="alert"><strong>Wallet balance shortfall</strong>{shortfalls.map((item) => <span key={item}>{item}</span>)}<Link to="/faucet">Claim mock assets from the faucet</Link></div>
@@ -944,9 +955,9 @@ export function DepositPage() {
         ) : <p>{quoteLoading ? "Getting an indicative price…" : "Enter an amount to preview SETWISE shares."}</p>}
       </aside>
 
-      {chainQuery.data && chainQuery.data.lockedShares > 0n && poolQuery.data && (
+      {chainQuery.data && chainQuery.data.lockedShares > 0n && (
         <section className="deposit-card locked-card" id="locked-shares">
-          <div><p className="eyebrow">Locked shares</p><h2>{formatTokenAmount(chainQuery.data.lockedShares, poolQuery.data.lpToken.decimals)} {poolQuery.data.lpToken.symbol}</h2></div>
+          <div><p className="eyebrow">Locked shares</p><h2>{formatTokenAmount(chainQuery.data.lockedShares, pool.lpToken.decimals)} {pool.lpToken.symbol}</h2></div>
           <dl className="quote-details">
             <div><dt>Unlocks</dt><dd>{new Date(Number(chainQuery.data.lockedUntil) * 1_000).toLocaleString()} ({relativeUnlock(chainQuery.data.lockedUntil)})</dd></div>
             <div><dt>Status</dt><dd>{chainQuery.data.canClaim ? "Claimable" : "Locked"}</dd></div>
