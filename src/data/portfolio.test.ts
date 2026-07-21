@@ -16,6 +16,7 @@ function summary(id: string, chainId = 97): PoolSummary {
     assets: [{ address: address(3), decimals: 18, id: `${id}-asset`, index: 0, symbol: "A", weight: 100 }],
     chain: { id: chainId, name: `Chain ${chainId}` },
     contract: { address: address(Number(id.replace(/\D/g, "")) + 10) },
+    display: { description: `Description for ${id}`, name: `Set ${id}`, sortOrder: 0 },
     id,
     lpToken: { address: address(2), decimals: 18, symbol: "SET" },
   };
