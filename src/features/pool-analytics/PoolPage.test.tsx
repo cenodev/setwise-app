@@ -3,34 +3,14 @@ import type { Address } from "viem";
 
 import type { Pool, PoolState } from "../../data/rfq/deposits";
 import type { WalletPoolPositionHookState } from "../wallet/useWalletPoolPosition";
-import { POOL_STATE_REFRESH_INTERVAL_MS, PoolPage } from "./PoolPage";
+import { PoolPage, type PoolPageProps } from "./PoolPage";
 
-type PoolPageMocks = {
+const mocks = vi.hoisted<{
   online: boolean;
-  options: Array<Record<string, unknown>>;
-  poolError: Error | null;
-  poolFetching: boolean;
-  poolPending: boolean;
-  poolRefetch: ReturnType<typeof vi.fn>;
-  stateError: Error | null;
-  stateFetching: boolean;
-  statePending: boolean;
-  stateRefetch: ReturnType<typeof vi.fn>;
   switchChain: ReturnType<typeof vi.fn>;
   walletState: WalletPoolPositionHookState;
-};
-
-const mocks = vi.hoisted<PoolPageMocks>(() => ({
+}>(() => ({
   online: true,
-  options: [] as Array<Record<string, unknown>>,
-  poolError: null as Error | null,
-  poolFetching: false,
-  poolPending: false,
-  poolRefetch: vi.fn(),
-  stateError: null as Error | null,
-  stateFetching: false,
-  statePending: false,
-  stateRefetch: vi.fn(),
   switchChain: vi.fn(),
   walletState: { status: "disconnected" },
 }));
@@ -40,6 +20,7 @@ const poolAddress = "0x1111111111111111111111111111111111111111" as Address;
 const assetAddress = "0x2222222222222222222222222222222222222222" as Address;
 const pool = {
   id: "pool",
+  display: { name: "Test Set", description: "A test Set", sortOrder: 0 },
   chain: { id: 97, name: "BSC Testnet" },
   contract: { address: poolAddress },
   lpToken: { address: poolAddress, decimals: 18, symbol: "SET" },
@@ -62,25 +43,21 @@ const state = {
   ],
 } as PoolState;
 
-vi.mock("@tanstack/react-query", () => ({
-  useQuery: (options: Record<string, unknown>) => {
-    mocks.options.push(options);
-    const key = options.queryKey as readonly unknown[];
-    const isPool = key[0] === "pool";
-    return {
-      data: isPool ? pool : state,
-      error: isPool ? mocks.poolError : mocks.stateError,
-      isFetching: isPool ? mocks.poolFetching : mocks.stateFetching,
-      isPending: isPool ? mocks.poolPending : mocks.statePending,
-      refetch: isPool ? mocks.poolRefetch : mocks.stateRefetch,
-    };
-  },
-}));
 vi.mock("../wallet/useWalletPoolPosition", () => ({
   useWalletPoolPosition: () => ({ state: mocks.walletState }),
 }));
 vi.mock("@reown/appkit/react", () => ({ useAppKit: () => ({ open: vi.fn() }) }));
 vi.mock("wagmi", () => ({ useSwitchChain: () => ({ isPending: false, switchChain: mocks.switchChain }) }));
+
+const defaultProps: PoolPageProps = {
+  error: null,
+  loading: false,
+  onRetry: vi.fn(),
+  pool,
+  poolState: state,
+  refreshing: false,
+  showWalletPosition: true,
+};
 
 describe("PoolPage", () => {
   beforeAll(() => {
@@ -90,18 +67,11 @@ describe("PoolPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.online = true;
-    mocks.options.length = 0;
-    mocks.poolError = null;
-    mocks.poolFetching = false;
-    mocks.poolPending = false;
-    mocks.stateError = null;
-    mocks.stateFetching = false;
-    mocks.statePending = false;
     mocks.walletState = { status: "disconnected" };
   });
 
   it("keeps public reserves visible while the wallet is disconnected", () => {
-    render(<PoolPage />);
+    render(<PoolPage {...defaultProps} />);
 
     expect(screen.getAllByText("$1000.00")[0]).toBeVisible();
     expect(screen.getByText("1000 USDT")).toBeVisible();
@@ -121,12 +91,12 @@ describe("PoolPage", () => {
         shares: { canClaim: false, locked: 0n, lockedUntil: 0n, totalAttributed: 10n * 10n ** 18n, unlocked: 10n * 10n ** 18n },
       },
     };
-    const { rerender } = render(<PoolPage />);
+    const { rerender } = render(<PoolPage {...defaultProps} />);
     expect(screen.getAllByText("$1000.00")[0]).toBeVisible();
     expect(screen.getByText("~$100.00")).toBeVisible();
 
     mocks.walletState = { account, actualChainId: 1, expectedChainId: 97, status: "wrong-network" };
-    rerender(<PoolPage />);
+    rerender(<PoolPage {...defaultProps} />);
     expect(screen.getAllByText("$1000.00")[0]).toBeVisible();
     expect(screen.getByRole("heading", { name: "Switch to BSC Testnet" })).toBeVisible();
   });
@@ -140,29 +110,28 @@ describe("PoolPage", () => {
       error: new Error("RPC unavailable"),
       status: "rpc-error",
     };
-    render(<PoolPage />);
+    render(<PoolPage {...defaultProps} />);
 
     expect(screen.getByRole("status")).toHaveTextContent("Showing the most recently saved Set snapshot");
     expect(screen.getAllByText("$1000.00")[0]).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent("RPC unavailable");
   });
 
-  it("keeps a complete snapshot visible after a refresh failure and configures online refresh", () => {
-    mocks.stateError = new Error("State refresh failed");
-    render(<PoolPage />);
+  it("keeps a complete snapshot visible after a refresh failure and retries both shared queries", () => {
+    const retry = vi.fn();
+    render(<PoolPage {...defaultProps} error={new Error("State refresh failed")} onRetry={retry} />);
 
     expect(screen.getByRole("status")).toHaveTextContent("Live refresh failed");
     expect(screen.getAllByText("$1000.00")[0]).toBeVisible();
     screen.getByRole("button", { name: "Retry refresh" }).click();
-    expect(mocks.poolRefetch).toHaveBeenCalledOnce();
-    expect(mocks.stateRefetch).toHaveBeenCalledOnce();
+    expect(retry).toHaveBeenCalledOnce();
+  });
 
-    const stateOptions = mocks.options.find((options) => (options.queryKey as readonly unknown[])[0] === "pool-state");
-    expect(stateOptions).toMatchObject({
-      refetchInterval: POOL_STATE_REFRESH_INTERVAL_MS,
-      refetchOnReconnect: true,
-      refetchOnWindowFocus: true,
-      staleTime: POOL_STATE_REFRESH_INTERVAL_MS,
-    });
+  it("keeps public data visible while wallet reads are disabled for an unsupported chain", () => {
+    render(<PoolPage {...defaultProps} showWalletPosition={false} />);
+
+    expect(screen.getAllByText("$1000.00")[0]).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Wallet position unavailable on this chain" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Connect to view your balances" })).not.toBeInTheDocument();
   });
 });
