@@ -13,6 +13,7 @@ export type ActivityRecord = {
   input: { amount: string; symbol: string };
   operation: "swap";
   output: { amount: string; symbol: string };
+  setId?: string;
   status: ActivityStatus;
   timestamp: number;
 };

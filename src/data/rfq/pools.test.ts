@@ -7,6 +7,7 @@ const tokenAddress = "0x3333333333333333333333333333333333333333";
 function poolSummary(id: string, chainId = 97) {
   return {
     id,
+    display: { name: `Set ${id}`, description: `Description for ${id}`, sortOrder: 0 },
     chain: { id: chainId, name: "BSC Testnet" },
     contract: { address: poolAddress },
     lpToken: { symbol: "SETWISE", decimals: 18, address: lpAddress },

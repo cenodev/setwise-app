@@ -30,6 +30,7 @@ const SET_B = "set-beta-bsc-testnet";
 function poolFixture(id: string, contractAddress: Address, lp: Address, asset: Address): Pool {
   return {
     id,
+    display: { name: `Set ${id}`, description: `Description for ${id}`, sortOrder: 0 },
     chain: { id: 97, name: "BSC Testnet" },
     contract: { address: contractAddress },
     lpToken: { symbol: `LP-${id}`, decimals: 18, address: lp },
@@ -60,6 +61,7 @@ function poolStateFixture(poolId: string, poolAddress: Address, blockNumber: str
 function summaryFixture(id: string, contractAddress: Address, lp: Address, asset: Address): PoolSummary {
   return {
     id,
+    display: { name: `Set ${id}`, description: `Description for ${id}`, sortOrder: 0 },
     chain: { id: 97, name: "BSC Testnet" },
     contract: { address: contractAddress },
     lpToken: { symbol: `LP-${id}`, decimals: 18, address: lp },

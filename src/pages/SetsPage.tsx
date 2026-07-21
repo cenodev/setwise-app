@@ -1,11 +1,16 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
-import { setPath, swapPath } from "../app/routes";
 import { requiredChainId } from "../config/chains";
 import { setQueryKeys } from "../data/queryKeys";
 import { getPools } from "../data/rfq/pools";
-import { toSetDefinition } from "../data/sets";
+import { toSetDefinition, type SetDefinition } from "../data/sets";
+import { useTokenMetadata } from "../data/tokens";
+import { SetDirectoryCard } from "../features/sets/SetDirectoryCard";
+
+export function sortSets(sets: SetDefinition[]): SetDefinition[] {
+  return [...sets].sort((a, b) => a.id.localeCompare(b.id));
+}
 
 export function SetsPage() {
   const [searchParams] = useSearchParams();
@@ -17,7 +22,11 @@ export function SetsPage() {
     staleTime: 60_000,
   });
 
-  const sets = (poolsQuery.data ?? []).map((pool) => toSetDefinition(pool, requiredChainId));
+  const tokenMetadata = useTokenMetadata();
+
+  const sets = sortSets(
+    (poolsQuery.data ?? []).map((pool) => toSetDefinition(pool, requiredChainId)),
+  );
 
   return (
     <div className="screen sets-screen">
@@ -31,7 +40,7 @@ export function SetsPage() {
         <aside className="warning-panel" role="status">
           <strong>That link is no longer used.</strong>
           {" "}
-          Choose a Set below. Deposit and withdraw now live on each Set’s detail tabs.
+          Choose a Set below. Deposit and withdraw now live on each Set's detail tabs.
         </aside>
       )}
 
@@ -60,21 +69,7 @@ export function SetsPage() {
       {sets.length > 0 && (
         <section className="sets-directory" aria-label="Set directory">
           {sets.map((set) => (
-            <article className="set-directory-card" key={set.id}>
-              <div>
-                <p className="eyebrow">{set.supported ? set.chainName ?? "Supported chain" : "Unsupported chain"}</p>
-                <h2>{set.id}</h2>
-                <p>
-                  {set.pool.assets.map((asset) => asset.symbol).join(" · ")}
-                </p>
-              </div>
-              <div className="set-directory-actions">
-                <Link className="secondary-link" to={setPath(set.id, "overview")}>View Set</Link>
-                {set.supported && (
-                  <Link className="secondary-link" to={swapPath(set.id)}>Swap</Link>
-                )}
-              </div>
-            </article>
+            <SetDirectoryCard key={set.id} set={set} tokenIndex={tokenMetadata.data} />
           ))}
         </section>
       )}
