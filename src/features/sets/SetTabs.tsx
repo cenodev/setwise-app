@@ -48,7 +48,13 @@ export function SetOverviewTab() {
 }
 
 export function SetDepositTab() {
-  const { definition, operationUnavailable } = useSetOutlet();
+  const {
+    definition,
+    operationUnavailable,
+    pool,
+    poolState,
+    setNavigationLocked,
+  } = useSetOutlet();
 
   if (operationUnavailable.deposit) {
     return (
@@ -60,6 +66,10 @@ export function SetDepositTab() {
     );
   }
 
+  if (!pool || !poolState) {
+    return <section className="prototype-card" aria-live="polite">Loading Set deposit data…</section>;
+  }
+
   return (
     <div className="set-tab-panel">
       <header className="set-tab-header">
@@ -67,7 +77,14 @@ export function SetDepositTab() {
         <h2>Deposit into this Set</h2>
         <p>Deposit one asset or build the Set’s target portfolio and receive Setwise shares.</p>
       </header>
-      <WalletGate><DepositPage /></WalletGate>
+      <WalletGate>
+        <DepositPage
+          key={definition.id}
+          onNavigationLockChange={setNavigationLocked}
+          pool={pool}
+          poolState={poolState}
+        />
+      </WalletGate>
       <aside className="disclosure" role="note">
         <strong>Testnet only.</strong> Contracts are unaudited, tokenized assets carry issuer and market risk, and this is not investment advice.
       </aside>
