@@ -1,66 +1,38 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
-import { ActivityPage } from "../pages/ActivityPage";
-import { DepositPage } from "../features/deposit/DepositPage";
+import { LegacyRedirect } from "./LegacyRedirect";
+import { AppShell } from "./AppShell";
+import { setsPath } from "./routes";
+import { SetDetailLayout } from "../features/sets/SetDetailLayout";
+import { SetDepositTab, SetOverviewTab, SetWithdrawTab } from "../features/sets/SetTabs";
 import { FaucetPage } from "../features/faucet/FaucetPage";
 import { SwapPage } from "../features/swap/SwapPage";
-import { WithdrawPage } from "../features/withdraw/WithdrawPage";
-import { PoolPage } from "../features/pool-analytics/PoolPage";
 import { WalletGate } from "../features/wallet/WalletGate";
-import { AppShell } from "./AppShell";
+import { ActivityPage } from "../pages/ActivityPage";
+import { PortfolioPage } from "../pages/PortfolioPage";
+import { SetsPage } from "../pages/SetsPage";
 
 export function App() {
   return (
     <AppShell>
       <Routes>
-        <Route path="/" element={<Navigate to="/pool" replace />} />
-        <Route path="/pool" element={
-          <div className="screen pool-screen">
-            <header className="screen-header">
-              <p className="eyebrow">Public pool</p>
-              <h1>Pool overview</h1>
-              <p>Track the pool’s total value, LP supply, and usable reserve liquidity without connecting a wallet.</p>
-            </header>
-            <PoolPage />
-            <aside className="disclosure" role="note">
-              <strong>Testnet only.</strong> Reserve values are indicative and can change with market prices.
-            </aside>
-          </div>
-        } />
+        <Route path="/" element={<Navigate to={setsPath()} replace />} />
+        <Route path="/sets" element={<SetsPage />} />
+        <Route path="/sets/:setId" element={<SetDetailLayout />}>
+          <Route index element={<Navigate to="overview" replace />} />
+          <Route path="overview" element={<SetOverviewTab />} />
+          <Route path="deposit" element={<SetDepositTab />} />
+          <Route path="withdraw" element={<SetWithdrawTab />} />
+        </Route>
+        <Route path="/portfolio" element={<PortfolioPage />} />
         <Route path="/swap" element={
           <div className="screen swap-screen">
             <header className="screen-header">
               <p className="eyebrow">Trade</p>
               <h1>Swap assets</h1>
-              <p>Exchange supported pool assets using exact-input or exact-output quotes on BSC Testnet.</p>
+              <p>Exchange supported Set assets using exact-input or exact-output quotes on BSC Testnet.</p>
             </header>
             <WalletGate><SwapPage /></WalletGate>
-            <aside className="disclosure" role="note">
-              <strong>Testnet only.</strong> Contracts are unaudited, tokenized assets carry issuer and market risk, and this is not investment advice.
-            </aside>
-          </div>
-        } />
-        <Route path="/deposit" element={
-          <div className="screen deposit-screen">
-            <header className="screen-header">
-              <p className="eyebrow">Portfolio</p>
-              <h1>Deposit assets</h1>
-              <p>Deposit one asset or build the pool’s target portfolio and receive Setwise shares.</p>
-            </header>
-            <WalletGate><DepositPage /></WalletGate>
-            <aside className="disclosure" role="note">
-              <strong>Testnet only.</strong> Contracts are unaudited, tokenized assets carry issuer and market risk, and this is not investment advice.
-            </aside>
-          </div>
-        } />
-        <Route path="/withdraw" element={
-          <div className="screen withdraw-screen">
-            <header className="screen-header">
-              <p className="eyebrow">Portfolio</p>
-              <h1>Withdraw assets</h1>
-              <p>Burn unlocked Setwise shares for every pool asset or one selected asset.</p>
-            </header>
-            <WalletGate><WithdrawPage /></WalletGate>
             <aside className="disclosure" role="note">
               <strong>Testnet only.</strong> Contracts are unaudited, tokenized assets carry issuer and market risk, and this is not investment advice.
             </aside>
@@ -77,7 +49,13 @@ export function App() {
             <WalletGate><FaucetPage /></WalletGate>
           </div>
         } />
-        <Route path="*" element={<Navigate to="/pool" replace />} />
+
+        {/* Compatibility redirects for the retired single-pool URLs. */}
+        <Route path="/pool" element={<LegacyRedirect tab="overview" />} />
+        <Route path="/deposit" element={<LegacyRedirect tab="deposit" />} />
+        <Route path="/withdraw" element={<LegacyRedirect tab="withdraw" />} />
+
+        <Route path="*" element={<Navigate to={setsPath()} replace />} />
       </Routes>
     </AppShell>
   );

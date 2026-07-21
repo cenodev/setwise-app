@@ -142,7 +142,7 @@ describe("PoolPage", () => {
     };
     render(<PoolPage />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("Showing the most recently saved pool snapshot");
+    expect(screen.getByRole("status")).toHaveTextContent("Showing the most recently saved Set snapshot");
     expect(screen.getAllByText("$1000.00")[0]).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent("RPC unavailable");
   });

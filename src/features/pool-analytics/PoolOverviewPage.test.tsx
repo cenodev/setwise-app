@@ -57,8 +57,8 @@ describe("PoolOverviewPage", () => {
     expect(screen.getByText(/Block 120266420/)).toBeInTheDocument();
     expect(screen.getByText("$1.0002")).toBeInTheDocument();
     expect(screen.getByText("+5.00 pp")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Pool liquidity details" })).toHaveAttribute("tabindex", "0");
-    expect(screen.getByText("Pool liquidity, allocations, and reserve health")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Set liquidity details" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByText("Set liquidity, allocations, and reserve health")).toBeInTheDocument();
 
     const rows = screen.getAllByRole("row");
     expect(within(rows[1]).getByText("Mock Tether")).toBeInTheDocument();
@@ -82,16 +82,16 @@ describe("PoolOverviewPage", () => {
 
   it("defines loading, empty, stale, and API-error states", () => {
     const { rerender } = render(<PoolOverviewPage {...defaultProps} loading pool={undefined} state={undefined} />);
-    expect(screen.getByText(/Loading public pool overview/)).toBeInTheDocument();
+    expect(screen.getByText(/Loading public Set overview/)).toBeInTheDocument();
 
     rerender(<PoolOverviewPage {...defaultProps} error={new Error("Pool API unavailable")} pool={undefined} state={undefined} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Pool API unavailable");
 
     rerender(<PoolOverviewPage {...defaultProps} refreshing />);
-    expect(screen.getByRole("status")).toHaveTextContent(/Refreshing live pool data/);
+    expect(screen.getByRole("status")).toHaveTextContent(/Refreshing live Set data/);
 
     rerender(<PoolOverviewPage {...defaultProps} online={false} pool={undefined} state={undefined} />);
-    expect(screen.getByRole("status")).toHaveTextContent("No saved pool snapshot is available offline");
+    expect(screen.getByRole("status")).toHaveTextContent("No saved Set snapshot is available offline");
   });
 
   it("shows unavailable derived values and preserves long asset labels without numeric coercion", () => {

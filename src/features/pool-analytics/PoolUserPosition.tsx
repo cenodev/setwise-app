@@ -45,9 +45,9 @@ function ConnectPrompt() {
   const { open } = useAppKit();
   return (
     <section className="pool-user-card pool-user-card--prompt" aria-labelledby="pool-user-connect-title">
-      <p className="eyebrow">Your pool position</p>
+      <p className="eyebrow">Your Set position</p>
       <h2 id="pool-user-connect-title">Connect to view your balances</h2>
-      <p>Pool information remains available while your wallet is disconnected.</p>
+      <p>Set information remains available while your wallet is disconnected.</p>
       <button className="secondary-button" type="button" onClick={() => void open({ view: "Connect" })}>Connect wallet</button>
     </section>
   );
@@ -57,9 +57,9 @@ function WrongNetwork({ actualChainId, expectedChainId }: { actualChainId: numbe
   const switchChain = useSwitchChain();
   return (
     <section className="pool-user-card" aria-labelledby="pool-user-network-title">
-      <p className="eyebrow eyebrow--critical">Your pool position</p>
+      <p className="eyebrow eyebrow--critical">Your Set position</p>
       <h2 id="pool-user-network-title">Switch to BSC Testnet</h2>
-      <p>Your wallet is connected to chain {actualChainId}; this pool uses chain {expectedChainId}.</p>
+      <p>Your wallet is connected to chain {actualChainId}; this Set uses chain {expectedChainId}.</p>
       <button className="secondary-button" type="button" disabled={switchChain.isPending} onClick={() => switchChain.switchChain({ chainId: expectedChainId })}>
         {switchChain.isPending ? "Switching network…" : "Switch network"}
       </button>
@@ -70,9 +70,9 @@ function WrongNetwork({ actualChainId, expectedChainId }: { actualChainId: numbe
 function LoadingState() {
   return (
     <section className="pool-user-card" aria-busy="true" aria-label="Loading wallet position">
-      <p className="eyebrow">Your pool position</p>
+      <p className="eyebrow">Your Set position</p>
       <h2>Loading wallet balances…</h2>
-      <p>Reading your balances at the current pool snapshot.</p>
+      <p>Reading your balances at the current Set snapshot.</p>
     </section>
   );
 }
@@ -85,8 +85,8 @@ export function PoolUserPosition({ pool, poolState }: PoolUserPositionProps) {
   if (state.status === "loading") return <LoadingState />;
   if (state.status === "rpc-error" || state.status === "context-error") {
     return <section className="pool-user-card pool-user-card--error" role="alert" aria-labelledby="pool-user-error-title">
-      <p className="eyebrow eyebrow--critical">Your pool position</p><h2 id="pool-user-error-title">Wallet balances are unavailable</h2>
-      <p>{state.error.message}. Public pool data is still up to date.</p>
+      <p className="eyebrow eyebrow--critical">Your Set position</p><h2 id="pool-user-error-title">Wallet balances are unavailable</h2>
+      <p>{state.error.message}. Public Set data is still up to date.</p>
     </section>;
   }
   if (!pool || !poolState) return <LoadingState />;
@@ -101,10 +101,10 @@ export function PoolUserPosition({ pool, poolState }: PoolUserPositionProps) {
   const nativeMarket = wrappedNativeAsset ? stateByAsset.get(wrappedNativeAsset.id)?.market : undefined;
   const nativeValue = nativeMarket ? calculateWalletAssetUsdValue({ balanceAtomic: position.nativeBalance, market: nativeMarket, tokenDecimals: 18 }) : undefined;
 
-  return <section className="pool-user-section" aria-label="Your pool position and wallet balances">
+  return <section className="pool-user-section" aria-label="Your Set position and wallet balances">
     <article className="pool-user-card">
-      <div className="pool-user-heading"><div><p className="eyebrow">Your pool position</p><h2>Liquidity position</h2></div><span className="estimate-label">Estimated</span></div>
-      {state.status === "zero-balance" && <p className="pool-user-empty">You do not hold pool shares or supported assets in this wallet yet.</p>}
+      <div className="pool-user-heading"><div><p className="eyebrow">Your Set position</p><h2>Liquidity position</h2></div><span className="estimate-label">Estimated</span></div>
+      {state.status === "zero-balance" && <p className="pool-user-empty">You do not hold Set shares or supported assets in this wallet yet.</p>}
       <dl className="pool-user-metrics">
         <Metric label="Liquidity value" value={formatCalculation(liquidityValue, formatUsd)} />
         <Metric label="Ownership" value={formatCalculation(ownership, (value) => `${formatDecimalRatio(value, 4)}%`)} />
@@ -126,7 +126,7 @@ export function PoolUserPosition({ pool, poolState }: PoolUserPositionProps) {
         })}
         <li className="wallet-balance-list__native"><span>BNB <small>Gas</small></span><strong>{formatTokenAmount(position.nativeBalance, 18)}</strong><small>{nativeValue ? formatUsd(nativeValue) : "Price unavailable"}</small></li>
       </ul>
-      <p className="estimate-note">Wallet assets are separate from your pool liquidity. BNB receives a USD estimate only when a reliable wrapped-BNB pool price is available.</p>
+      <p className="estimate-note">Wallet assets are separate from your Set liquidity. BNB receives a USD estimate only when a reliable wrapped-BNB pool price is available.</p>
     </article>
   </section>;
 }
