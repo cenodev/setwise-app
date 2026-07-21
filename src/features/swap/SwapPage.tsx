@@ -29,7 +29,13 @@ import {
   type FirmSwapQuote,
   type SwapQuote,
 } from "../../data/rfq/swaps";
-import { createSwapActivity, saveActivity, updateActivity } from "../activity/store";
+import {
+  createSwapActivity,
+  markActivityFailed,
+  markActivityPending,
+  markActivitySuccessful,
+  saveActivity,
+} from "../activity/store";
 import { atomicToDecimal, decimalInputError, decimalToAtomic, formatTokenAmount } from "../../lib/decimal";
 import { truncateAddress } from "../../lib/format";
 import {
@@ -452,7 +458,7 @@ export function SwapPage() {
       setFirmQuote(null);
       if (result.kind === "success") {
         setTransaction({ stage: "success", hash: result.hash });
-        updateActivity(atomicActivityId, { hash: result.hash, status: "success" });
+        markActivitySuccessful(atomicActivityId, result.hash);
         setAtomicActivityId(undefined);
         void refreshAfterReceipt();
         return;
@@ -463,7 +469,7 @@ export function SwapPage() {
           ? "The wallet reported a non-atomic result for a swap that required atomic execution. Review the transaction before retrying."
           : "The completed atomic swap batch returned an invalid chain receipt. Review the wallet or explorer before retrying.";
       setTransaction({ stage: "error", hash: result.hash, error: message });
-      updateActivity(atomicActivityId, { error: message, hash: result.hash, status: "failed" });
+      markActivityFailed(atomicActivityId, message, result.hash);
       setAtomicActivityId(undefined);
       void refreshAfterReceipt();
     }, 0);
@@ -480,16 +486,6 @@ export function SwapPage() {
     let submittedHash: Hash | undefined;
     let approving = false;
     try {
-      const activity = createSwapActivity({
-        chainId: requiredChainId,
-        input: { amount: quote.input.amount, symbol: effectiveInputNative ? "BNB" : inputAsset.symbol },
-        output: { amount: quote.output.amount, symbol: effectiveOutputNative ? "BNB" : outputAsset.symbol },
-        setId: resolvedPoolId,
-        status: "pending",
-      });
-      activityId = activity.id;
-      saveActivity(activity);
-
       const [latestChain, latestPoolState] = await Promise.all([chainQuery.refetch(), poolStateQuery.refetch()]);
       if (!latestChain.data) throw new Error("Wallet balances are unavailable. Retry the chain read.");
       if (latestPoolState.data?.trading.paused) throw new Error("Trading is paused. Wait for swaps to resume.");
@@ -573,6 +569,15 @@ export function SwapPage() {
         if (Date.parse(firm.mustSubmitBy) <= Date.now()) {
           throw new Error("Executable quote expired before the atomic wallet request could open");
         }
+        const activity = createSwapActivity({
+          chainId: requiredChainId,
+          input: { amount: firm.input.amount, symbol: effectiveInputNative ? "BNB" : inputAsset.symbol },
+          output: { amount: firm.output.amount, symbol: effectiveOutputNative ? "BNB" : outputAsset.symbol },
+          setId: resolvedPoolId,
+          status: "pending",
+        });
+        activityId = activity.id;
+        saveActivity(activity);
         setAtomicActivityId(activity.id);
         setTransaction({ stage: "wallet" });
         try {
@@ -582,6 +587,7 @@ export function SwapPage() {
             chainId: requiredChainId,
             forceAtomic: true,
           });
+          markActivityPending(activity.id);
           setBatchId(result.id);
           setTransaction({ stage: "confirming" });
         } catch (error) {
@@ -599,7 +605,7 @@ export function SwapPage() {
           setAtomicActivityId(undefined);
           setFirmQuote(null);
           setTransaction({ stage: kind === "wallet-rejected" ? "rejected" : "error", error: message });
-          updateActivity(activity.id, { error: message, status: "failed" });
+          markActivityFailed(activity.id, message);
         }
         return;
       }
@@ -658,6 +664,15 @@ export function SwapPage() {
         setFirmQuote(null);
         throw new Error("Executable quote expired before a wallet request could open");
       }
+      const activity = createSwapActivity({
+        chainId: requiredChainId,
+        input: { amount: firm.input.amount, symbol: effectiveInputNative ? "BNB" : inputAsset.symbol },
+        output: { amount: firm.output.amount, symbol: effectiveOutputNative ? "BNB" : outputAsset.symbol },
+        setId: resolvedPoolId,
+        status: "pending",
+      });
+      activityId = activity.id;
+      saveActivity(activity);
       setTransaction({ stage: "wallet" });
       submittedHash = await sendTransactionAsync({
         account: address,
@@ -666,24 +681,24 @@ export function SwapPage() {
         value: BigInt(firm.transaction.value),
       });
       setFirmQuote(null);
-      updateActivity(activity.id, { hash: submittedHash, status: "pending" });
+      markActivityPending(activity.id, submittedHash);
       setTransaction({ stage: "confirming", hash: submittedHash });
       const receipt = await publicClient.waitForTransactionReceipt({ hash: submittedHash });
       if (receipt.status !== "success") {
         const message = "Swap reverted on chain. Review the explorer transaction before retrying.";
         setTransaction({ stage: "reverted", hash: submittedHash, error: message });
-        updateActivity(activity.id, { error: message, hash: submittedHash, status: "failed" });
+        markActivityFailed(activity.id, message, submittedHash);
         await refreshAfterReceipt();
         return;
       }
       setTransaction({ stage: "success", hash: submittedHash });
-      updateActivity(activity.id, { hash: submittedHash, status: "success" });
+      markActivitySuccessful(activity.id, submittedHash);
       await refreshAfterReceipt();
     } catch (error) {
       const message = errorMessage(error);
       setFirmQuote(null);
       setTransaction({ stage: stageForError(message, approving), hash: submittedHash, error: message });
-      if (activityId) updateActivity(activityId, { error: message, hash: submittedHash, status: "failed" });
+      if (activityId) markActivityFailed(activityId, message, submittedHash);
     }
   }
 

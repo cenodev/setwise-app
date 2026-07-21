@@ -23,6 +23,13 @@ import { atomicToDecimal, decimalInputError, decimalToAtomic, formatTokenAmount 
 import { truncateAddress } from "../../lib/format";
 import { orderAssetsByContract } from "../deposit/model";
 import {
+  createWithdrawalActivity,
+  markActivityFailed,
+  markActivityPending,
+  markActivitySuccessful,
+  saveActivity,
+} from "../activity/store";
+import {
   canReceiveNative,
   mapWithdrawalOutputs,
   relevantWithdrawalWarnings,
@@ -335,6 +342,7 @@ export function WithdrawPage() {
     if (!canExecute || !quote || !address || !publicClient || !poolQuery.data) return;
     setFirmQuote(null);
     let submittedHash: Hash | undefined;
+    let activityId: string | undefined;
     try {
       const [latestChain, latestPoolState] = await Promise.all([chainQuery.refetch(), poolStateQuery.refetch()]);
       if (!latestChain.data || amountAtomic > latestChain.data.unlockedShares) {
@@ -359,6 +367,19 @@ export function WithdrawPage() {
           return;
         }
         setTransaction({ stage: "wallet" });
+        const activity = createWithdrawalActivity({
+          chainId: requiredChainId,
+          mode,
+          outputs: quote.outputs.map((output) => ({
+            amount: output.amount,
+            symbol: assets.find((asset) => asset.id === output.asset)?.symbol ?? output.asset,
+          })),
+          setId: poolQuery.data.id,
+          shares: { amount: quote.input.amount, symbol: poolQuery.data.lpToken.symbol },
+          status: "pending",
+        });
+        activityId = activity.id;
+        saveActivity(activity);
         submittedHash = await writeContractAsync({
           account: address,
           address: poolQuery.data.contract.address,
@@ -392,6 +413,21 @@ export function WithdrawPage() {
           return;
         }
         setTransaction({ stage: "wallet" });
+        const activity = createWithdrawalActivity({
+          chainId: requiredChainId,
+          mode,
+          outputs: [{
+            amount: firm.output.amount,
+            symbol: effectiveReceiveNative
+              ? "BNB"
+              : assets.find((asset) => asset.id === firm.output.asset)?.symbol ?? firm.output.asset,
+          }],
+          setId: poolQuery.data.id,
+          shares: { amount: firm.shares.amount, symbol: poolQuery.data.lpToken.symbol },
+          status: "pending",
+        });
+        activityId = activity.id;
+        saveActivity(activity);
         // Once this external wallet request is open it cannot be revoked. Always reconcile a returned hash,
         // even if the firm countdown reaches zero while the wallet is still waiting for the user.
         submittedHash = await sendTransactionAsync({
@@ -402,18 +438,23 @@ export function WithdrawPage() {
         });
       }
 
+      markActivityPending(activityId, submittedHash);
       setTransaction({ stage: "confirming", hash: submittedHash });
       const receipt = await publicClient.waitForTransactionReceipt({ hash: submittedHash });
       if (receipt.status !== "success") {
-        setTransaction({ stage: "reverted", hash: submittedHash, error: "Withdrawal reverted on chain. Review the transaction before retrying." });
+        const message = "Withdrawal reverted on chain. Review the transaction before retrying.";
+        setTransaction({ stage: "reverted", hash: submittedHash, error: message });
+        markActivityFailed(activityId, message, submittedHash);
         await refreshAfterReceipt();
         return;
       }
       setTransaction({ stage: "success", hash: submittedHash });
+      markActivitySuccessful(activityId, submittedHash);
       await refreshAfterReceipt();
     } catch (error) {
       const message = errorMessage(error);
       setTransaction({ stage: stageForError(message), hash: submittedHash, error: message });
+      if (activityId) markActivityFailed(activityId, message, submittedHash);
     }
   }
 
@@ -448,7 +489,7 @@ export function WithdrawPage() {
   }
 
   if (poolQuery.isPending || poolStateQuery.isPending || chainQuery.isPending) {
-    return <section className="withdraw-card" aria-live="polite">Loading pool assets and unlocked shares…</section>;
+    return <section className="withdraw-card" aria-live="polite">Loading Set assets and unlocked shares…</section>;
   }
   const stateConfigurationError = poolQuery.data && poolStateQuery.data
     && (poolStateQuery.data.poolId !== poolQuery.data.id
@@ -489,7 +530,7 @@ export function WithdrawPage() {
 
         <div className="asset-input-card">
           <div className="amount-heading">
-            <label className="field-label" htmlFor="withdraw-amount">Pool shares</label>
+            <label className="field-label" htmlFor="withdraw-amount">Set shares</label>
             <span>Unlocked {formatTokenAmount(chainQuery.data?.unlockedShares ?? 0n, lpDecimals)} {poolQuery.data?.lpToken.symbol}</span>
           </div>
           <div className="amount-control withdraw-amount-control">
@@ -576,7 +617,7 @@ export function WithdrawPage() {
           <p className="transaction-link">Transaction <a href={`${runtimeConfig.explorerUrl}/tx/${transaction.hash}`}
             target="_blank" rel="noreferrer">{truncateAddress(transaction.hash)}</a></p>
         )}
-        <p className="quote-note">No token approval is needed. The pool burns unlocked SETWISE shares directly from your wallet.</p>
+        <p className="quote-note">No token approval is needed. The Set contract burns unlocked SETWISE shares directly from your wallet.</p>
       </section>
 
       <aside className="withdraw-card quote-card" aria-live="polite">

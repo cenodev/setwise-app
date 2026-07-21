@@ -1,4 +1,12 @@
-import { createSwapActivity, readActivity, saveActivity, updateActivity } from "./store";
+import {
+  createDepositActivity,
+  createSwapActivity,
+  createWithdrawalActivity,
+  markActivityFailed,
+  markActivitySuccessful,
+  readActivity,
+  saveActivity,
+} from "./store";
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -9,7 +17,7 @@ function memoryStorage() {
 }
 
 describe("local activity store", () => {
-  it("keeps atomic-safe display strings and updates a pending swap by id", () => {
+  it("preserves a legacy swap and updates it by id", () => {
     const storage = memoryStorage();
     const record = {
       chainId: 97,
@@ -22,30 +30,81 @@ describe("local activity store", () => {
     };
 
     saveActivity(record, storage);
-    updateActivity("swap-1", { hash: `0x${"a".repeat(64)}`, status: "success" }, storage);
+    markActivitySuccessful("swap-1", `0x${"a".repeat(64)}`, storage);
 
     expect(readActivity(storage)).toEqual([expect.objectContaining({
       hash: `0x${"a".repeat(64)}`,
       input: record.input,
       status: "success",
+      submitted: true,
     })]);
   });
 
-  it("ignores malformed persisted records", () => {
+  it("isolates malformed records without losing valid history", () => {
     const storage = memoryStorage();
-    storage.setItem("setwise.local-activity.v1", JSON.stringify([{ operation: "swap" }, null]));
-    expect(readActivity(storage)).toEqual([]);
-  });
-
-  it("creates a timestamped swap record", () => {
-    const record = createSwapActivity({
+    const valid = createSwapActivity({
       chainId: 97,
       input: { amount: "1", symbol: "USDT" },
       output: { amount: "2", symbol: "TOKEN" },
-      status: "failed",
+      status: "success",
     });
-    expect(record.id).toBeTruthy();
-    expect(record.operation).toBe("swap");
-    expect(record.timestamp).toBeGreaterThan(0);
+    storage.setItem("setwise.local-activity.v1", JSON.stringify([
+      { operation: "swap" },
+      valid,
+      { ...valid, id: "bad-hash", hash: "0x1234" },
+      null,
+    ]));
+
+    expect(readActivity(storage)).toEqual([valid]);
+  });
+
+  it("creates typed deposit and withdrawal records and shares failure updates", () => {
+    const storage = memoryStorage();
+    const deposit = createDepositActivity({
+      chainId: 97,
+      deposits: [{ amount: "1", symbol: "USDT" }],
+      lockDays: 30,
+      mode: "single-asset",
+      setId: "set-1",
+      shares: { amount: "0.99", symbol: "SETWISE" },
+      status: "pending",
+    });
+    const withdrawal = createWithdrawalActivity({
+      chainId: 97,
+      mode: "proportional",
+      outputs: [{ amount: "0.5", symbol: "USDT" }],
+      setId: "set-1",
+      shares: { amount: "1", symbol: "SETWISE" },
+      status: "pending",
+    });
+
+    saveActivity(deposit, storage);
+    saveActivity(withdrawal, storage);
+    markActivityFailed(withdrawal.id, "Rejected in wallet", undefined, storage);
+
+    expect(readActivity(storage)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ lockDays: 30, operation: "deposit" }),
+      expect.objectContaining({ error: "Rejected in wallet", operation: "withdrawal", status: "failed", submitted: false }),
+    ]));
+  });
+
+  it("sorts newest first and caps persisted history", () => {
+    const storage = memoryStorage();
+    for (let index = 0; index < 105; index += 1) {
+      saveActivity({
+        chainId: 97,
+        id: `swap-${index}`,
+        input: { amount: "1", symbol: "USDT" },
+        operation: "swap",
+        output: { amount: "2", symbol: "TOKEN" },
+        status: "success",
+        timestamp: index,
+      }, storage);
+    }
+
+    const records = readActivity(storage);
+    expect(records).toHaveLength(100);
+    expect(records[0]?.timestamp).toBe(104);
+    expect(records.at(-1)?.timestamp).toBe(5);
   });
 });

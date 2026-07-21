@@ -6,12 +6,17 @@ import { DepositPage } from "./DepositPage";
 const mocks = vi.hoisted(() => ({
   atomicStatus: "supported",
   chainRefetch: vi.fn(),
+  createActivity: vi.fn(),
   events: [] as string[],
+  markActivityFailed: vi.fn(),
+  markActivityPending: vi.fn(),
+  markActivitySuccessful: vi.fn(),
   poolStateRefetch: vi.fn(),
   requestDepositQuote: vi.fn(),
   requestFirmDepositQuote: vi.fn(),
   sendCalls: vi.fn(),
   sendTransaction: vi.fn(),
+  saveActivity: vi.fn(),
   waitForTransactionReceipt: vi.fn(),
   writeContract: vi.fn(),
 }));
@@ -144,6 +149,14 @@ vi.mock("../../data/rfq/deposits", (importOriginal) =>
     requestFirmDepositQuote: mocks.requestFirmDepositQuote,
   })));
 
+vi.mock("../activity/store", () => ({
+  createDepositActivity: mocks.createActivity,
+  markActivityFailed: mocks.markActivityFailed,
+  markActivityPending: mocks.markActivityPending,
+  markActivitySuccessful: mocks.markActivitySuccessful,
+  saveActivity: mocks.saveActivity,
+}));
+
 async function preparePortfolioDeposit() {
   render(<MemoryRouter><DepositPage /></MemoryRouter>);
   fireEvent.click(screen.getByRole("button", { name: "Portfolio" }));
@@ -155,6 +168,16 @@ describe("DepositPage atomic deposits", () => {
   beforeEach(() => {
     mocks.atomicStatus = "supported";
     mocks.events.length = 0;
+    mocks.createActivity.mockReset().mockImplementation((input: object) => ({
+      ...input,
+      id: "deposit-activity-1",
+      operation: "deposit",
+      timestamp: 1,
+    }));
+    mocks.markActivityFailed.mockReset();
+    mocks.markActivityPending.mockReset();
+    mocks.markActivitySuccessful.mockReset();
+    mocks.saveActivity.mockReset();
     mocks.chainRefetch.mockReset().mockResolvedValue({ data: chainData });
     mocks.poolStateRefetch.mockReset().mockResolvedValue({ data: poolState });
     mocks.requestDepositQuote.mockReset().mockResolvedValue(indicativeQuote);
@@ -193,6 +216,17 @@ describe("DepositPage atomic deposits", () => {
       chainId: 97,
       forceAtomic: true,
     }));
+    expect(mocks.createActivity).toHaveBeenCalledWith(expect.objectContaining({
+      deposits: [{ amount: "1", symbol: "USDT" }],
+      lockDays: 0,
+      mode: "portfolio",
+      setId: pool.id,
+      shares: { amount: "1", symbol: "SETWISE" },
+      status: "pending",
+    }));
+    expect(mocks.saveActivity).toHaveBeenCalledOnce();
+    expect(mocks.markActivityPending).toHaveBeenCalledWith("deposit-activity-1");
+    expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("deposit-activity-1", batchHash);
     expect(screen.getByRole("link", { name: /0xcccc/ })).toHaveAttribute("href", expect.stringContaining(batchHash));
     expect(mocks.chainRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(mocks.poolStateRefetch).toHaveBeenCalled();
@@ -212,6 +246,9 @@ describe("DepositPage atomic deposits", () => {
     expect(mocks.sendCalls).not.toHaveBeenCalled();
     expect(mocks.events).toEqual(["approval", "firm-quote", "deposit"]);
     expect(mocks.writeContract).toHaveBeenCalledOnce();
+    expect(mocks.saveActivity).toHaveBeenCalledOnce();
+    expect(mocks.markActivityPending).toHaveBeenCalledWith("deposit-activity-1", depositHash);
+    expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("deposit-activity-1", depositHash);
   });
 
   it("uses the sequential path only on an explicit retry after atomic-ready setup is rejected", async () => {
@@ -227,11 +264,35 @@ describe("DepositPage atomic deposits", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/setup for atomic execution was rejected/i);
     expect(mocks.writeContract).not.toHaveBeenCalled();
     expect(mocks.events).toEqual(["firm-quote", "send-calls"]);
+    expect(mocks.saveActivity).toHaveBeenCalledOnce();
+    expect(mocks.markActivityFailed).toHaveBeenCalledWith(
+      "deposit-activity-1",
+      expect.stringMatching(/setup for atomic execution was rejected/i),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Try deposit again" }));
 
     await screen.findByRole("button", { name: "New deposit" });
     expect(mocks.sendCalls).toHaveBeenCalledOnce();
     expect(mocks.events).toEqual(["firm-quote", "send-calls", "approval", "firm-quote", "deposit"]);
+    expect(mocks.saveActivity).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not create activity for an expired firm quote that never reaches the wallet", async () => {
+    mocks.atomicStatus = "unsupported";
+    mocks.requestFirmDepositQuote.mockReset().mockResolvedValue({
+      ...firmQuote,
+      mustSubmitBy: new Date(Date.now() - 1_000).toISOString(),
+    });
+    render(<MemoryRouter><DepositPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Portfolio" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "USDT amount" }), { target: { value: "1" } });
+    const action = await screen.findByRole("button", { name: "Approve 1 token & deposit" });
+    await waitFor(() => expect(action).toBeEnabled());
+
+    fireEvent.click(action);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/expired/i);
+    expect(mocks.saveActivity).not.toHaveBeenCalled();
   });
 });

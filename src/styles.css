@@ -386,6 +386,7 @@ code {
 .activity-card { display: grid; gap: .85rem; padding: 1rem; border: 1px solid var(--border-subtle); border-radius: 1rem; background: linear-gradient(145deg, rgb(25 33 54 / 92%), rgb(17 23 38 / 92%)); }
 .activity-card h2 { margin: .25rem 0 0; font-size: 1rem; }
 .activity-card > a { color: var(--info); font-size: .78rem; }
+.activity-card dd { overflow-wrap: anywhere; }
 .activity-heading { display: flex; align-items: start; justify-content: space-between; gap: .75rem; }
 .activity-status { padding: .25rem .5rem; border-radius: 999px; background: var(--bg-surface-raised); color: var(--text-secondary); font-size: .7rem; font-weight: 800; text-transform: capitalize; }
 .activity-status--success { background: rgb(93 213 167 / 12%); color: var(--success); }

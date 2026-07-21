@@ -22,6 +22,9 @@ const mocks = vi.hoisted(() => ({
   batchStatusRefetch: vi.fn(),
   capabilityRefetch: vi.fn(),
   createActivity: vi.fn(),
+  markActivityFailed: vi.fn(),
+  markActivityPending: vi.fn(),
+  markActivitySuccessful: vi.fn(),
   poolStateRefetch: vi.fn(),
   registryPools: [] as unknown[],
   requestFirmSwapQuote: vi.fn(),
@@ -31,7 +34,6 @@ const mocks = vi.hoisted(() => ({
   sendCalls: vi.fn<(input: { calls: AtomicTestCall[] }) => Promise<{ id: string }>>(),
   firmInputDelta: 0n,
   tradingPaused: false,
-  updateActivity: vi.fn(),
   waitForTransactionReceipt: vi.fn(),
   writeContract: vi.fn(),
 }));
@@ -259,8 +261,10 @@ vi.mock("../../data/rfq/swaps", (importOriginal) =>
 
 vi.mock("../activity/store", () => ({
   createSwapActivity: mocks.createActivity,
+  markActivityFailed: mocks.markActivityFailed,
+  markActivityPending: mocks.markActivityPending,
+  markActivitySuccessful: mocks.markActivitySuccessful,
   saveActivity: mocks.saveActivity,
-  updateActivity: mocks.updateActivity,
 }));
 
 async function enterAmount(value = "10") {
@@ -314,8 +318,10 @@ describe("SwapPage", () => {
     mocks.sendCalls.mockReset().mockResolvedValue({ id: "batch-1" });
     mocks.waitForTransactionReceipt.mockReset().mockResolvedValue({ status: "success" });
     mocks.createActivity.mockReset().mockImplementation((input: object) => ({ ...input, id: "activity-1", operation: "swap", timestamp: 1 }));
+    mocks.markActivityFailed.mockReset();
+    mocks.markActivityPending.mockReset();
+    mocks.markActivitySuccessful.mockReset();
     mocks.saveActivity.mockReset();
-    mocks.updateActivity.mockReset();
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -352,7 +358,7 @@ describe("SwapPage", () => {
     }));
     expect(mocks.writeContract.mock.invocationCallOrder[0]).toBeLessThan(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]);
     expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendTransaction.mock.invocationCallOrder[0]);
-    expect(mocks.updateActivity).toHaveBeenCalledWith("activity-1", expect.objectContaining({ hash: swapHash, status: "success" }));
+    expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("activity-1", swapHash);
     expect(mocks.chainRefetch.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(mocks.poolStateRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
@@ -378,7 +384,8 @@ describe("SwapPage", () => {
     expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendCalls.mock.invocationCallOrder[0]);
     expect(mocks.writeContract).not.toHaveBeenCalled();
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
-    expect(mocks.updateActivity).toHaveBeenCalledWith("activity-1", expect.objectContaining({ hash: swapHash, status: "success" }));
+    expect(mocks.markActivityPending).toHaveBeenCalledWith("activity-1");
+    expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("activity-1", swapHash);
   });
 
   it("approves the final firm input atomically when exact-output pricing moves", async () => {
@@ -428,7 +435,7 @@ describe("SwapPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/No approval or swap was applied/i);
     expect(mocks.writeContract).not.toHaveBeenCalled();
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
-    expect(mocks.updateActivity).toHaveBeenCalledWith("activity-1", expect.objectContaining({ status: "failed" }));
+    expect(mocks.markActivityFailed).toHaveBeenCalledWith("activity-1", expect.any(String), undefined);
   });
 
   it("retries status instead of falling back after a batch ID was returned", async () => {
@@ -538,6 +545,7 @@ describe("SwapPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/expired/i);
     expect(screen.getByRole("button", { name: "Refresh quote" })).toBeEnabled();
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
+    expect(mocks.saveActivity).not.toHaveBeenCalled();
   });
 
   it("never submits an expired firm quote as an atomic batch", async () => {
@@ -549,6 +557,7 @@ describe("SwapPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/expired/i);
     expect(mocks.sendCalls).not.toHaveBeenCalled();
     expect(mocks.writeContract).not.toHaveBeenCalled();
+    expect(mocks.saveActivity).not.toHaveBeenCalled();
   });
 
   it("offers recovery after wallet rejection and records the failed operation", async () => {
@@ -559,7 +568,7 @@ describe("SwapPage", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Rejected in wallet/i);
     expect(screen.getByRole("button", { name: "Try swap again" })).toBeEnabled();
-    expect(mocks.updateActivity).toHaveBeenCalledWith("activity-1", expect.objectContaining({ status: "failed" }));
+    expect(mocks.markActivityFailed).toHaveBeenCalledWith("activity-1", expect.any(String), undefined);
   });
 
   it("offers retry after an approval rejection without requesting a firm quote", async () => {
@@ -570,6 +579,7 @@ describe("SwapPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/Rejected in wallet/i);
     expect(screen.getByRole("button", { name: "Try swap again" })).toBeEnabled();
     expect(mocks.requestFirmSwapQuote).not.toHaveBeenCalled();
+    expect(mocks.saveActivity).not.toHaveBeenCalled();
   });
 
   it("handles an on-chain revert with an explorer-linked failed activity record", async () => {
@@ -581,7 +591,7 @@ describe("SwapPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/reverted on chain/i);
     expect(screen.getByRole("button", { name: "Try swap again" })).toBeEnabled();
     expect(screen.getByRole("link", { name: new RegExp(swapHash.slice(0, 6), "i") })).toHaveAttribute("href", expect.stringContaining(swapHash));
-    expect(mocks.updateActivity).toHaveBeenCalledWith("activity-1", expect.objectContaining({ status: "failed" }));
+    expect(mocks.markActivityFailed).toHaveBeenCalledWith("activity-1", expect.any(String), swapHash);
   });
 
   it("maps an RFQ failure to a single pricing retry action", async () => {
@@ -653,8 +663,10 @@ describe("SwapPage multi-Set", () => {
     mocks.sendCalls.mockReset().mockResolvedValue({ id: "batch-1" });
     mocks.waitForTransactionReceipt.mockReset().mockResolvedValue({ status: "success" });
     mocks.createActivity.mockReset().mockImplementation((input: object) => ({ ...input, id: "activity-1", operation: "swap", timestamp: 1 }));
+    mocks.markActivityFailed.mockReset();
+    mocks.markActivityPending.mockReset();
+    mocks.markActivitySuccessful.mockReset();
     mocks.saveActivity.mockReset();
-    mocks.updateActivity.mockReset();
   });
 
   afterEach(() => vi.restoreAllMocks());

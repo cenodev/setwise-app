@@ -5,10 +5,15 @@ import { WithdrawPage } from "./WithdrawPage";
 
 const mocks = vi.hoisted(() => ({
   chainRefetch: vi.fn(),
+  createActivity: vi.fn(),
+  markActivityFailed: vi.fn(),
+  markActivityPending: vi.fn(),
+  markActivitySuccessful: vi.fn(),
   poolStateRefetch: vi.fn(),
   requestFirmWithdrawalQuote: vi.fn(),
   requestWithdrawalQuote: vi.fn(),
   sendTransaction: vi.fn(),
+  saveActivity: vi.fn(),
   simulateContract: vi.fn(),
   tradingPaused: false,
   waitForTransactionReceipt: vi.fn(),
@@ -128,9 +133,17 @@ vi.mock("../../data/rfq/withdrawals", (importOriginal) =>
     requestWithdrawalQuote: mocks.requestWithdrawalQuote,
   })));
 
+vi.mock("../activity/store", () => ({
+  createWithdrawalActivity: mocks.createActivity,
+  markActivityFailed: mocks.markActivityFailed,
+  markActivityPending: mocks.markActivityPending,
+  markActivitySuccessful: mocks.markActivitySuccessful,
+  saveActivity: mocks.saveActivity,
+}));
+
 async function enterProportionalAmount() {
   render(<MemoryRouter><WithdrawPage /></MemoryRouter>);
-  fireEvent.change(screen.getByRole("textbox", { name: "Pool shares" }), { target: { value: "1" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Set shares" }), { target: { value: "1" } });
   const action = await screen.findByRole("button", { name: "Confirm withdrawal" });
   await waitFor(() => expect(action).toBeEnabled());
   return action;
@@ -140,7 +153,7 @@ async function enterNativeSingleAssetAmount() {
   render(<MemoryRouter><WithdrawPage /></MemoryRouter>);
   fireEvent.click(screen.getByRole("button", { name: "Single asset" }));
   fireEvent.click(screen.getByRole("checkbox", { name: "Receive native BNB" }));
-  fireEvent.change(screen.getByRole("textbox", { name: "Pool shares" }), { target: { value: "1" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Set shares" }), { target: { value: "1" } });
   const action = await screen.findByRole("button", { name: "Review withdrawal" });
   await waitFor(() => expect(action).toBeEnabled());
   return action;
@@ -149,6 +162,16 @@ async function enterNativeSingleAssetAmount() {
 describe("WithdrawPage", () => {
   beforeEach(() => {
     mocks.tradingPaused = false;
+    mocks.createActivity.mockReset().mockImplementation((input: object) => ({
+      ...input,
+      id: "withdrawal-activity-1",
+      operation: "withdrawal",
+      timestamp: 1,
+    }));
+    mocks.markActivityFailed.mockReset();
+    mocks.markActivityPending.mockReset();
+    mocks.markActivitySuccessful.mockReset();
+    mocks.saveActivity.mockReset();
     mocks.chainRefetch.mockReset().mockResolvedValue({ data: chainData });
     mocks.poolStateRefetch.mockReset().mockImplementation(() => Promise.resolve({ data: poolState() }));
     mocks.requestWithdrawalQuote.mockReset().mockImplementation(({ outputAsset }: { outputAsset?: string }) =>
@@ -176,6 +199,19 @@ describe("WithdrawPage", () => {
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
     expect(mocks.chainRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(mocks.poolStateRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(mocks.createActivity).toHaveBeenCalledWith(expect.objectContaining({
+      mode: "proportional",
+      outputs: [
+        { amount: "0.01", symbol: "WBNB" },
+        { amount: "5", symbol: "USDT" },
+      ],
+      setId: pool.id,
+      shares: { amount: "1", symbol: "SETWISE" },
+      status: "pending",
+    }));
+    expect(mocks.saveActivity).toHaveBeenCalledOnce();
+    expect(mocks.markActivityPending).toHaveBeenCalledWith("withdrawal-activity-1", directHash);
+    expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("withdrawal-activity-1", directHash);
   });
 
   it("requests and immediately submits a validated firm quote for native BNB output", async () => {
@@ -199,6 +235,13 @@ describe("WithdrawPage", () => {
     }));
     expect(mocks.simulateContract).not.toHaveBeenCalled();
     expect(mocks.writeContract).not.toHaveBeenCalled();
+    expect(mocks.createActivity).toHaveBeenCalledWith(expect.objectContaining({
+      mode: "single-asset",
+      outputs: [{ amount: "0.02", symbol: "BNB" }],
+      setId: pool.id,
+    }));
+    expect(mocks.saveActivity).toHaveBeenCalledOnce();
+    expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("withdrawal-activity-1", firmHash);
   });
 
   it("keeps proportional withdrawal available while trading is paused", async () => {
@@ -218,6 +261,7 @@ describe("WithdrawPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/expired/i);
     expect(screen.getByRole("button", { name: "Refresh quote" })).toBeEnabled();
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
+    expect(mocks.saveActivity).not.toHaveBeenCalled();
   });
 
   it("provides a retry after wallet rejection", async () => {
@@ -228,6 +272,12 @@ describe("WithdrawPage", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Rejected in wallet/);
     expect(screen.getByRole("button", { name: "Try withdrawal again" })).toBeEnabled();
+    expect(mocks.saveActivity).toHaveBeenCalledOnce();
+    expect(mocks.markActivityFailed).toHaveBeenCalledWith(
+      "withdrawal-activity-1",
+      "Rejected in wallet. You can try again when ready.",
+      undefined,
+    );
   });
 
   it("stops direct execution when simulation fails", async () => {
@@ -239,6 +289,7 @@ describe("WithdrawPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/Simulation failed/);
     expect(screen.getByRole("button", { name: "Retry simulation" })).toBeEnabled();
     expect(mocks.writeContract).not.toHaveBeenCalled();
+    expect(mocks.saveActivity).not.toHaveBeenCalled();
   });
 
   it("keeps the transaction link and retry action after an on-chain revert", async () => {
@@ -250,5 +301,10 @@ describe("WithdrawPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/reverted on chain/);
     expect(screen.getByRole("button", { name: "Try withdrawal again" })).toBeEnabled();
     expect(screen.getByRole("link", { name: /0xaaaa/ })).toHaveAttribute("href", expect.stringContaining(directHash));
+    expect(mocks.markActivityFailed).toHaveBeenCalledWith(
+      "withdrawal-activity-1",
+      expect.stringMatching(/reverted on chain/i),
+      directHash,
+    );
   });
 });
