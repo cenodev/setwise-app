@@ -18,6 +18,11 @@ function modeLabel(mode: string): string {
   return mode.replace("-", " ");
 }
 
+function timestampLabel(record: ActivityRecord): string {
+  const submitted = record.submitted ?? Boolean(record.hash || record.status === "success");
+  return submitted ? "Submitted" : "Attempted";
+}
+
 function ActivityDetails({ record }: { record: ActivityRecord }) {
   if (record.operation === "deposit") {
     return (
@@ -29,7 +34,7 @@ function ActivityDetails({ record }: { record: ActivityRecord }) {
           <div><dt>Deposited</dt><dd>{amountList(record.deposits)}</dd></div>
           <div><dt>Shares received</dt><dd>{record.shares.amount} {record.shares.symbol}</dd></div>
           <div><dt>Lock period</dt><dd>{record.lockDays === 0 ? "None" : `${record.lockDays} days`}</dd></div>
-          <div><dt>Submitted</dt><dd><time dateTime={new Date(record.timestamp).toISOString()}>{new Date(record.timestamp).toLocaleString()}</time></dd></div>
+          <div><dt>{timestampLabel(record)}</dt><dd><time dateTime={new Date(record.timestamp).toISOString()}>{new Date(record.timestamp).toLocaleString()}</time></dd></div>
         </dl>
       </>
     );
@@ -43,7 +48,7 @@ function ActivityDetails({ record }: { record: ActivityRecord }) {
           <div><dt>Mode</dt><dd>{modeLabel(record.mode)}</dd></div>
           <div><dt>Shares burned</dt><dd>{record.shares.amount} {record.shares.symbol}</dd></div>
           <div><dt>Assets received</dt><dd>{amountList(record.outputs)}</dd></div>
-          <div><dt>Submitted</dt><dd><time dateTime={new Date(record.timestamp).toISOString()}>{new Date(record.timestamp).toLocaleString()}</time></dd></div>
+          <div><dt>{timestampLabel(record)}</dt><dd><time dateTime={new Date(record.timestamp).toISOString()}>{new Date(record.timestamp).toLocaleString()}</time></dd></div>
         </dl>
       </>
     );
@@ -55,7 +60,7 @@ function ActivityDetails({ record }: { record: ActivityRecord }) {
         {record.setId && <div><dt>Set</dt><dd>{record.setId}</dd></div>}
         <div><dt>Paid</dt><dd>{record.input.amount} {record.input.symbol}</dd></div>
         <div><dt>Received</dt><dd>{record.output.amount} {record.output.symbol}</dd></div>
-        <div><dt>Submitted</dt><dd><time dateTime={new Date(record.timestamp).toISOString()}>{new Date(record.timestamp).toLocaleString()}</time></dd></div>
+        <div><dt>{timestampLabel(record)}</dt><dd><time dateTime={new Date(record.timestamp).toISOString()}>{new Date(record.timestamp).toLocaleString()}</time></dd></div>
       </dl>
     </>
   );

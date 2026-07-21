@@ -36,6 +36,7 @@ describe("local activity store", () => {
       hash: `0x${"a".repeat(64)}`,
       input: record.input,
       status: "success",
+      submitted: true,
     })]);
   });
 
@@ -83,7 +84,7 @@ describe("local activity store", () => {
 
     expect(readActivity(storage)).toEqual(expect.arrayContaining([
       expect.objectContaining({ lockDays: 30, operation: "deposit" }),
-      expect.objectContaining({ error: "Rejected in wallet", operation: "withdrawal", status: "failed" }),
+      expect.objectContaining({ error: "Rejected in wallet", operation: "withdrawal", status: "failed", submitted: false }),
     ]));
   });
 

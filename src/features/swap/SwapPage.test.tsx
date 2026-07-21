@@ -384,6 +384,7 @@ describe("SwapPage", () => {
     expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendCalls.mock.invocationCallOrder[0]);
     expect(mocks.writeContract).not.toHaveBeenCalled();
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
+    expect(mocks.markActivityPending).toHaveBeenCalledWith("activity-1");
     expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("activity-1", swapHash);
   });
 

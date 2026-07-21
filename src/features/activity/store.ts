@@ -12,6 +12,7 @@ type ActivityBase = {
   hash?: Hash;
   id: string;
   status: ActivityStatus;
+  submitted?: boolean;
   timestamp: number;
 };
 
@@ -41,7 +42,7 @@ export type WithdrawalActivityRecord = ActivityBase & {
 };
 
 export type ActivityRecord = SwapActivityRecord | DepositActivityRecord | WithdrawalActivityRecord;
-type ActivityUpdate = Partial<Pick<ActivityBase, "error" | "hash" | "status">>;
+type ActivityUpdate = Partial<Pick<ActivityBase, "error" | "hash" | "status" | "submitted">>;
 
 function isActivityAmount(value: unknown): value is ActivityAmount {
   if (!value || typeof value !== "object") return false;
@@ -57,6 +58,7 @@ function hasValidBase(record: Partial<ActivityBase>): boolean {
     && typeof record.timestamp === "number"
     && Number.isFinite(record.timestamp)
     && (record.error === undefined || typeof record.error === "string")
+    && (record.submitted === undefined || typeof record.submitted === "boolean")
     && (record.hash === undefined || /^0x[0-9a-fA-F]{64}$/.test(record.hash));
 }
 
@@ -124,7 +126,7 @@ export function markActivityPending(
   hash?: Hash,
   storage?: Pick<Storage, "getItem" | "setItem">,
 ): void {
-  updateActivity(id, { hash, status: "pending" }, storage);
+  updateActivity(id, { hash, status: "pending", submitted: true }, storage);
 }
 
 export function markActivitySuccessful(
@@ -132,7 +134,7 @@ export function markActivitySuccessful(
   hash?: Hash,
   storage?: Pick<Storage, "getItem" | "setItem">,
 ): void {
-  updateActivity(id, { hash, status: "success" }, storage);
+  updateActivity(id, { hash, status: "success", submitted: true }, storage);
 }
 
 export function markActivityFailed(
@@ -141,7 +143,7 @@ export function markActivityFailed(
   hash?: Hash,
   storage?: Pick<Storage, "getItem" | "setItem">,
 ): void {
-  updateActivity(id, { error, hash, status: "failed" }, storage);
+  updateActivity(id, { error, hash, status: "failed", ...(hash ? { submitted: true } : {}) }, storage);
 }
 
 export function createSwapActivity(
@@ -170,6 +172,7 @@ function createActivity<T extends ActivityRecord["operation"]>(
     ...input,
     id: crypto.randomUUID(),
     operation,
+    submitted: false,
     timestamp: Date.now(),
   } as Extract<ActivityRecord, { operation: T }>;
 }

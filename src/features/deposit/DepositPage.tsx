@@ -593,6 +593,7 @@ export function DepositPage() {
             chainId: requiredChainId,
             forceAtomic: true,
           });
+          markActivityPending(activity.id);
           setBatchId(result.id);
           setTransaction({ stage: "confirming" });
         } catch (error) {

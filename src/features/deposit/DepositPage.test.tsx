@@ -225,6 +225,7 @@ describe("DepositPage atomic deposits", () => {
       status: "pending",
     }));
     expect(mocks.saveActivity).toHaveBeenCalledOnce();
+    expect(mocks.markActivityPending).toHaveBeenCalledWith("deposit-activity-1");
     expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("deposit-activity-1", batchHash);
     expect(screen.getByRole("link", { name: /0xcccc/ })).toHaveAttribute("href", expect.stringContaining(batchHash));
     expect(mocks.chainRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);

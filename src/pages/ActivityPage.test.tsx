@@ -82,6 +82,7 @@ describe("ActivityPage", () => {
     expect(within(withdrawal).getByText("1 SETWISE")).toBeVisible();
     expect(within(withdrawal).getByText("5 USDT")).toBeVisible();
     expect(within(withdrawal).getByText("Rejected in wallet")).toBeVisible();
+    expect(within(withdrawal).getByText("Attempted")).toBeVisible();
 
     expect(screen.getByRole("article", { name: "USDT → TOKEN" })).toBeVisible();
   });
