@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   capabilityRefetch: vi.fn(),
   createActivity: vi.fn(),
   poolStateRefetch: vi.fn(),
+  registryPools: [] as unknown[],
   requestFirmSwapQuote: vi.fn(),
   requestSwapQuote: vi.fn(),
   saveActivity: vi.fn(),
@@ -63,6 +64,24 @@ const pool = {
   quotePolicy: { allowedLockDays: [0] },
 };
 
+const secondPoolAddress = "0x6000000000000000000000000000000000000000";
+const secondAssetAAddress = "0x7000000000000000000000000000000000000000";
+const secondAssetBAddress = "0x8000000000000000000000000000000000000000";
+const secondAssets = [
+  { address: secondAssetAAddress, decimals: 18, id: "ALPHA", index: 0, name: "Alpha Token", symbol: "ALPHA", weight: 50 },
+  { address: secondAssetBAddress, decimals: 18, id: "BETA", index: 1, name: "Beta Token", symbol: "BETA", weight: 50 },
+];
+const secondPool = {
+  assets: secondAssets,
+  capabilities: { nativeAsset: false, swaps: { exactInput: true, exactOutput: true, firm: true, indicative: true } },
+  chain: { id: 97, name: "BSC Testnet" },
+  contract: { address: secondPoolAddress },
+  id: "second-set-bsc-testnet",
+  lpToken: { address: secondPoolAddress, decimals: 18, symbol: "SETWISE-2" },
+  pairs: [{ assets: ["ALPHA", "BETA"], enabled: true, feeBps: 15 }],
+  quotePolicy: { allowedLockDays: [0] },
+};
+
 function poolState() {
   return {
     assets: assets.map((asset) => ({ asset: asset.id, index: asset.index, market: { askUsd: "1", bidUsd: "1" } })),
@@ -71,6 +90,17 @@ function poolState() {
     poolAddress,
     poolId: pool.id,
     trading: { deposits: "available", paused: mocks.tradingPaused, swaps: mocks.tradingPaused ? "paused" : "available" },
+  };
+}
+
+function secondPoolState() {
+  return {
+    assets: secondAssets.map((asset) => ({ asset: asset.id, index: asset.index, market: { askUsd: "1", bidUsd: "1" } })),
+    chainId: 97,
+    contract: { wrappedNativeToken: secondAssetAAddress },
+    poolAddress: secondPoolAddress,
+    poolId: secondPool.id,
+    trading: { deposits: "available", paused: false, swaps: "available" },
   };
 }
 
@@ -183,9 +213,18 @@ function firm(input: {
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: { queryKey: readonly unknown[] }) => {
     const key = options.queryKey[0];
-    if (key === "sets") return { data: [pool], error: null, isPending: false, refetch: vi.fn().mockResolvedValue({ data: [pool] }) };
-    if (key === "pool") return { data: pool, error: null, isPending: false, refetch: vi.fn().mockResolvedValue({ data: pool }) };
-    if (key === "pool-state") return { data: poolState(), error: null, isPending: false, refetch: mocks.poolStateRefetch };
+    const poolId = options.queryKey[1];
+    if (key === "sets") return { data: mocks.registryPools, error: null, isPending: false, refetch: vi.fn().mockResolvedValue({ data: mocks.registryPools }) };
+    if (key === "pool") {
+      const target = poolId === secondPool.id ? secondPool : pool;
+      return { data: target, error: null, isPending: false, refetch: vi.fn().mockResolvedValue({ data: target }) };
+    }
+    if (key === "pool-state") {
+      if (poolId === secondPool.id) {
+        return { data: secondPoolState(), error: null, isPending: false, refetch: mocks.poolStateRefetch };
+      }
+      return { data: poolState(), error: null, isPending: false, refetch: mocks.poolStateRefetch };
+    }
     return { data: chainData(), error: mocks.chainError, isPending: false, refetch: mocks.chainRefetch };
   },
 }));
@@ -242,6 +281,7 @@ describe("SwapPage", () => {
   beforeEach(() => {
     mocks.allowances = { TOKEN: 1_000n * 10n ** 18n, USDT: 0n, WBNB: 1_000n * 10n ** 18n };
     mocks.atomicCapability = "unsupported";
+    mocks.registryPools = [pool, secondPool];
     mocks.batchStatus = {
       atomic: true,
       chainId: 97,
@@ -584,5 +624,123 @@ describe("SwapPage", () => {
     expect(await screen.findByText(/Trading is paused. Swaps are unavailable/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review swap" })).toBeDisabled();
     expect(mocks.requestSwapQuote).not.toHaveBeenCalled();
+  });
+});
+
+describe("SwapPage multi-Set", () => {
+  beforeEach(() => {
+    mocks.allowances = { TOKEN: 1_000n * 10n ** 18n, USDT: 0n, WBNB: 1_000n * 10n ** 18n, ALPHA: 500n * 10n ** 18n, BETA: 500n * 10n ** 18n };
+    mocks.atomicCapability = "unsupported";
+    mocks.registryPools = [pool, secondPool];
+    mocks.batchStatus = { atomic: true, chainId: 97, receipts: [{ status: "success", transactionHash: swapHash }], status: "success" };
+    mocks.batchStatusError = null;
+    mocks.firmInputDelta = 0n;
+    mocks.chainError = null;
+    mocks.tradingPaused = false;
+    mocks.chainRefetch.mockReset().mockImplementation(() => Promise.resolve({ data: chainData() }));
+    mocks.poolStateRefetch.mockReset().mockImplementation(() => Promise.resolve({ data: poolState() }));
+    mocks.capabilityRefetch.mockReset().mockImplementation(() => Promise.resolve({ data: { atomic: { status: mocks.atomicCapability } } }));
+    mocks.batchStatusRefetch.mockReset().mockResolvedValue(undefined);
+    mocks.requestSwapQuote.mockReset().mockImplementation(({
+      inputAmount, inputAsset, outputAmount, outputAsset,
+    }: { inputAmount?: string; inputAsset: string; outputAmount?: string; outputAsset: string }) => {
+      const intent = inputAmount !== undefined ? "exact-input" : "exact-output";
+      return Promise.resolve(indicative(inputAsset, outputAsset, inputAmount ?? outputAmount ?? "", intent));
+    });
+    mocks.requestFirmSwapQuote.mockReset().mockImplementation((input: Parameters<typeof firm>[0]) => Promise.resolve(firm(input)));
+    mocks.writeContract.mockReset().mockResolvedValue(approvalHash);
+    mocks.sendTransaction.mockReset().mockResolvedValue(swapHash);
+    mocks.sendCalls.mockReset().mockResolvedValue({ id: "batch-1" });
+    mocks.waitForTransactionReceipt.mockReset().mockResolvedValue({ status: "success" });
+    mocks.createActivity.mockReset().mockImplementation((input: object) => ({ ...input, id: "activity-1", operation: "swap", timestamp: 1 }));
+    mocks.saveActivity.mockReset();
+    mocks.updateActivity.mockReset();
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("renders a Set selector populated from the registry", () => {
+    render(<MemoryRouter><SwapPage /></MemoryRouter>);
+    const select = screen.getByRole("combobox", { name: "Set" });
+    expect(select).toBeEnabled();
+    const options = within(select).getAllByRole("option");
+    expect(options).toHaveLength(2);
+    expect(options[0]).toHaveValue(pool.id);
+    expect(options[1]).toHaveValue(secondPool.id);
+  });
+
+  it("defaults to the configured pool when no ?set= param is present", () => {
+    render(<MemoryRouter><SwapPage /></MemoryRouter>);
+    const select = screen.getByRole("combobox", { name: "Set" });
+    expect(select).toHaveValue(pool.id);
+  });
+
+  it("restores the selected Set from the ?set= deep link", () => {
+    render(<MemoryRouter initialEntries={[`/swap?set=${secondPool.id}`]}><SwapPage /></MemoryRouter>);
+    const select = screen.getByRole("combobox", { name: "Set" });
+    expect(select).toHaveValue(secondPool.id);
+  });
+
+  it("restricts asset selectors to the selected Set's assets", () => {
+    render(<MemoryRouter initialEntries={[`/swap?set=${secondPool.id}`]}><SwapPage /></MemoryRouter>);
+    const inputSelector = screen.getByRole("combobox", { name: "You pay asset" });
+    expect(inputSelector).toHaveTextContent("ALPHA");
+    expect(inputSelector).not.toHaveTextContent("USDT");
+  });
+
+  it("shows an error for an unknown Set id with recovery", () => {
+    render(<MemoryRouter initialEntries={["/swap?set=nonexistent"]}><SwapPage /></MemoryRouter>);
+    expect(screen.getByRole("alert")).toHaveTextContent("Unknown Set");
+    expect(screen.getByText("nonexistent")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use default Set" })).toBeEnabled();
+  });
+
+  it("recovers from an unknown Set by switching to the default", () => {
+    render(<MemoryRouter initialEntries={["/swap?set=nonexistent"]}><SwapPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Use default Set" }));
+    expect(screen.getByRole("combobox", { name: "Set" })).toHaveValue(pool.id);
+  });
+
+  it("sends the selected Set's poolId on indicative quote requests", async () => {
+    render(<MemoryRouter initialEntries={[`/swap?set=${secondPool.id}`]}><SwapPage /></MemoryRouter>);
+    fireEvent.change(screen.getByRole("textbox", { name: "You pay amount" }), { target: { value: "5" } });
+    await waitFor(() => expect(mocks.requestSwapQuote).toHaveBeenCalledTimes(1), { timeout: 1_500 });
+    expect(mocks.requestSwapQuote).toHaveBeenCalledWith(expect.objectContaining({ poolId: secondPool.id }));
+  });
+
+  it("resets amount and quote state on Set change", async () => {
+    render(<MemoryRouter><SwapPage /></MemoryRouter>);
+    fireEvent.change(screen.getByRole("textbox", { name: "You pay amount" }), { target: { value: "10" } });
+    await waitFor(() => expect(mocks.requestSwapQuote).toHaveBeenCalledTimes(1), { timeout: 1_500 });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Set" }), { target: { value: secondPool.id } });
+    expect(screen.getByRole("textbox", { name: "You pay amount" })).toHaveValue("");
+  });
+
+  it("records Set identity in swap activity", async () => {
+    mocks.allowances = { USDT: 1_000n * 10n ** 18n, TOKEN: 1_000n * 10n ** 18n, WBNB: 1_000n * 10n ** 18n };
+    render(<MemoryRouter><SwapPage /></MemoryRouter>);
+    fireEvent.change(screen.getByRole("textbox", { name: "You pay amount" }), { target: { value: "10" } });
+    const review = await screen.findByRole("button", { name: "Review swap" });
+    await waitFor(() => expect(review).toBeEnabled());
+    fireEvent.click(review);
+    const confirm = await screen.findByRole("button", { name: /swap|atomically/i });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(mocks.createActivity).toHaveBeenCalledWith(expect.objectContaining({ setId: pool.id })));
+  });
+
+  it("disables the Set selector during wallet submission", async () => {
+    mocks.allowances = { USDT: 1_000n * 10n ** 18n, TOKEN: 1_000n * 10n ** 18n, WBNB: 1_000n * 10n ** 18n };
+    let resolveSend!: (value: string) => void;
+    mocks.sendTransaction.mockReset().mockReturnValue(new Promise((resolve) => { resolveSend = resolve; }));
+    render(<MemoryRouter><SwapPage /></MemoryRouter>);
+    fireEvent.change(screen.getByRole("textbox", { name: "You pay amount" }), { target: { value: "10" } });
+    const review = await screen.findByRole("button", { name: "Review swap" });
+    await waitFor(() => expect(review).toBeEnabled());
+    fireEvent.click(review);
+    const confirm = await screen.findByRole("button", { name: /swap|atomically/i });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Set" })).toBeDisabled());
+    resolveSend(swapHash);
   });
 });
