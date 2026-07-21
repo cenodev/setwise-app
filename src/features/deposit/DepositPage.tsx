@@ -14,6 +14,8 @@ import {
 } from "wagmi";
 
 import { requiredChainId } from "../../config/chains";
+import { TokenIdentity } from "../../components/TokenIdentity";
+import { TokenSelector } from "../../components/TokenSelector";
 import { runtimeConfig } from "../../config/env";
 import { poolQueryKeys } from "../../data/queryKeys";
 import { erc20Abi, setwisePoolAbi } from "../../data/chain/abis";
@@ -269,6 +271,7 @@ export function DepositPage() {
     () => [...(poolQuery.data?.assets ?? [])].sort((left, right) => left.index - right.index),
     [poolQuery.data?.assets],
   );
+  const tokenChainId = poolQuery.data?.chain.id ?? requiredChainId;
 
   const chainQuery = useQuery({
     queryKey: ["deposit-chain", address, poolQuery.data?.contract.address,
@@ -759,11 +762,9 @@ export function DepositPage() {
 
         {mode === "single-asset" ? (
           <div className="asset-input-card">
-            <label className="field-label" htmlFor="single-asset">Asset</label>
-            <select id="single-asset" value={effectiveSelectedAssetId} disabled={busy}
-              onChange={(event) => setSelectedAssetId(event.target.value)}>
-              {assets.map((asset) => <option value={asset.id} key={asset.id}>{asset.symbol} — {asset.name ?? asset.id}</option>)}
-            </select>
+            <span className="field-label">Asset</span>
+            <TokenSelector ariaLabel="Deposit asset" chainId={tokenChainId} options={assets} value={effectiveSelectedAssetId}
+              disabled={busy} onChange={setSelectedAssetId} />
             {selectedAsset && (
               <>
                 <div className="amount-heading">
@@ -804,7 +805,7 @@ export function DepositPage() {
               const balance = chainQuery.data?.assets[asset.id]?.balance ?? 0n;
               return (
                 <div className="portfolio-row" key={asset.id}>
-                  <div><strong>{asset.symbol}</strong><span>{asset.weight}% target · {formatTokenAmount(balance, asset.decimals)} available</span></div>
+                  <div><TokenIdentity asset={asset} chainId={tokenChainId} /><span>{asset.weight}% target · {formatTokenAmount(balance, asset.decimals)} available</span></div>
                   <input aria-label={`${asset.symbol} amount`} inputMode="decimal" placeholder="0" disabled={busy}
                     value={amounts[asset.id] ?? ""} onChange={(event) => {
                       if (/^\d*\.?\d*$/.test(event.target.value)) {
@@ -833,7 +834,7 @@ export function DepositPage() {
               const asset = assets.find((item) => item.id === approval.assetId);
               const view = approvalViews[approval.assetId];
               return <div className="approval-row" key={approval.assetId}>
-                <span>{index + 1}. {asset?.symbol ?? approval.assetId}</span>
+                <span>{index + 1}. {asset ? <TokenIdentity asset={asset} chainId={tokenChainId} compact /> : approval.assetId}</span>
                 <span>{view?.stage ?? "needed"}</span>
                 {view?.hash && <a href={`${runtimeConfig.explorerUrl}/tx/${view.hash}`} target="_blank" rel="noreferrer">View</a>}
               </div>;

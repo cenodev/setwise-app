@@ -13,7 +13,10 @@ import {
 } from "wagmi";
 
 import { requiredChainId } from "../../config/chains";
+import { TokenIdentity, tokenDisplay } from "../../components/TokenIdentity";
+import { TokenSelector } from "../../components/TokenSelector";
 import { runtimeConfig } from "../../config/env";
+import { useTokenMetadata } from "../../data/tokens";
 import { poolQueryKeys } from "../../data/queryKeys";
 import { erc20Abi } from "../../data/chain/abis";
 import { getPool, getPoolState, RfqApiError } from "../../data/rfq/deposits";
@@ -143,6 +146,7 @@ export function SwapPage() {
   const { sendTransactionAsync } = useSendTransaction();
   const { writeContractAsync } = useWriteContract();
   const online = useOnlineStatus();
+  const tokenMetadataQuery = useTokenMetadata();
   const [inputAssetId, setInputAssetId] = useState("");
   const [outputAssetId, setOutputAssetId] = useState("");
   const [inputNative, setInputNative] = useState(false);
@@ -187,6 +191,7 @@ export function SwapPage() {
     () => [...(poolQuery.data?.assets ?? [])].sort((left, right) => left.index - right.index),
     [poolQuery.data?.assets],
   );
+  const tokenChainId = poolQuery.data?.chain.id ?? requiredChainId;
 
   const defaultPair = useMemo(() => {
     const enabled = poolQuery.data?.pairs?.find((pair) => pair.enabled
@@ -199,6 +204,8 @@ export function SwapPage() {
   const effectiveOutputAssetId = outputAssetId || defaultPair[1];
   const inputAsset = assets.find((asset) => asset.id === effectiveInputAssetId);
   const outputAsset = assets.find((asset) => asset.id === effectiveOutputAssetId);
+  const inputDisplay = inputAsset ? tokenDisplay(inputAsset, tokenChainId, tokenMetadataQuery.data) : null;
+  const outputDisplay = outputAsset ? tokenDisplay(outputAsset, tokenChainId, tokenMetadataQuery.data) : null;
   const wrappedNativeToken = poolStateQuery.data?.contract?.wrappedNativeToken;
   const inputNativeEligible = Boolean(poolQuery.data?.capabilities?.nativeAsset
     && isWrappedNativeAsset(inputAsset, wrappedNativeToken));
@@ -735,7 +742,7 @@ export function SwapPage() {
   const actionReason = amountError
     ?? (!pairSupported ? "This pair is not supported" : null)
     ?? (insufficientGas ? "Insufficient BNB for gas" : null)
-    ?? (insufficientBalance ? `Insufficient ${effectiveInputNative ? "BNB after gas reserve" : inputAsset?.symbol ?? "input"} balance` : null)
+    ?? (insufficientBalance ? `Insufficient ${effectiveInputNative ? "BNB after gas reserve" : inputDisplay?.symbol ?? "input"} balance` : null)
     ?? (tradingPaused ? "Trading is paused" : null)
     ?? (!online ? "Offline — reconnect to continue" : null)
     ?? (quoteLoading || !quoteMatchesDraft ? "Refreshing the estimate" : null)
@@ -756,17 +763,12 @@ export function SwapPage() {
         <div className="swap-assets">
           <div className="asset-input-card">
             <div className="amount-heading">
-              <label className="field-label" htmlFor="swap-input-asset">You pay</label>
-              <span>Balance {formatTokenAmount(inputBalance, inputAsset?.decimals ?? 18)} {effectiveInputNative ? "BNB" : inputAsset?.symbol}</span>
+              <span className="field-label">You pay</span>
+              <span>Balance {formatTokenAmount(inputBalance, inputAsset?.decimals ?? 18)} {effectiveInputNative ? "BNB" : inputDisplay?.symbol}</span>
             </div>
-            <select id="swap-input-asset" value={effectiveInputAssetId} disabled={busy || transaction.stage === "review"}
-              onChange={(event) => chooseInput(event.target.value)}>
-              {assets.map((asset) => (
-                <option key={asset.id} value={asset.id} disabled={!isSupportedSwapPair(poolQuery.data?.pairs, asset.id, effectiveOutputAssetId)}>
-                  {asset.symbol} — {asset.name ?? asset.id}
-                </option>
-              ))}
-            </select>
+            <TokenSelector ariaLabel="You pay asset" chainId={tokenChainId} options={assets} value={effectiveInputAssetId}
+              disabled={busy || transaction.stage === "review"} onChange={chooseInput}
+              isOptionDisabled={(asset) => !assets.some((output) => isSupportedSwapPair(poolQuery.data?.pairs, asset.id, output.id))} />
             {inputNativeEligible && (
               <label className="native-toggle">
                 <input type="checkbox" checked={effectiveInputNative} disabled={busy || transaction.stage === "review"}
@@ -788,27 +790,22 @@ export function SwapPage() {
               </div>
             ) : (
               <div className="swap-output-amount" aria-label="You pay amount">
-                {displayQuote?.input.amount ?? "—"} <span>{effectiveInputNative ? "BNB" : inputAsset?.symbol}</span>
+                {displayQuote?.input.amount ?? "—"} <span>{effectiveInputNative ? "BNB" : inputDisplay?.symbol}</span>
               </div>
             )}
             {effectiveInputNative && <p className="quote-note">Gas reserved: {runtimeConfig.nativeGasReserveBnb} BNB.</p>}
             {intent === "exact-input" && amount && amountError && <p className="field-error">{amountError}</p>}
-            {insufficientBalance && <p className="field-error">Insufficient {effectiveInputNative ? "BNB after gas reserve" : inputAsset?.symbol} balance.</p>}
+            {insufficientBalance && <p className="field-error">Insufficient {effectiveInputNative ? "BNB after gas reserve" : inputDisplay?.symbol} balance.</p>}
           </div>
 
           <button className="reverse-button" type="button" aria-label="Reverse pair"
             disabled={busy || transaction.stage === "review" || !pairSupported || quoteLoading} onClick={reversePair}>⇅</button>
 
           <div className="asset-input-card">
-            <label className="field-label" htmlFor="swap-output-asset">You receive</label>
-            <select id="swap-output-asset" value={effectiveOutputAssetId} disabled={busy || transaction.stage === "review"}
-              onChange={(event) => chooseOutput(event.target.value)}>
-              {assets.map((asset) => (
-                <option key={asset.id} value={asset.id} disabled={!isSupportedSwapPair(poolQuery.data?.pairs, effectiveInputAssetId, asset.id)}>
-                  {asset.symbol} — {asset.name ?? asset.id}
-                </option>
-              ))}
-            </select>
+            <span className="field-label">You receive</span>
+            <TokenSelector ariaLabel="You receive asset" chainId={tokenChainId} options={assets} value={effectiveOutputAssetId}
+              disabled={busy || transaction.stage === "review"} onChange={chooseOutput}
+              isOptionDisabled={(asset) => !isSupportedSwapPair(poolQuery.data?.pairs, effectiveInputAssetId, asset.id)} />
             {outputNativeEligible && (
               <label className="native-toggle">
                 <input type="checkbox" checked={effectiveOutputNative} disabled={busy || transaction.stage === "review"}
@@ -828,7 +825,7 @@ export function SwapPage() {
               </div>
             ) : (
               <div className="swap-output-amount" aria-label="You receive amount">
-                {displayQuote?.output.amount ?? "—"} <span>{effectiveOutputNative ? "BNB" : outputAsset?.symbol}</span>
+                {displayQuote?.output.amount ?? "—"} <span>{effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</span>
               </div>
             )}
             {intent === "exact-output" && amount && amountError && <p className="field-error">{amountError}</p>}
@@ -837,7 +834,7 @@ export function SwapPage() {
 
         {transaction.stage === "review" && quote && (
           <div className="review-panel" role="status">
-            <div><p className="eyebrow">Review swap</p><strong>{quote.input.amount} {effectiveInputNative ? "BNB" : inputAsset?.symbol} → {quote.output.amount} {effectiveOutputNative ? "BNB" : outputAsset?.symbol}</strong></div>
+            <div><p className="eyebrow">Review swap</p><strong>{quote.input.amount} {effectiveInputNative ? "BNB" : inputDisplay?.symbol} → {quote.output.amount} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</strong></div>
             <button className="secondary-button" type="button" onClick={() => setTransaction({ stage: "editing" })}>Edit</button>
             <p>{atomicExperience
               ? "A fresh executable quote determines the exact approval, then approval and swap execute atomically in one wallet request."
@@ -864,7 +861,7 @@ export function SwapPage() {
           <div className="approval-list" aria-label="Approval requirement">
             <h3>Token approval</h3>
             <div className="approval-row">
-              <span>{inputAsset?.symbol}</span>
+              {inputAsset ? <TokenIdentity asset={inputAsset} chainId={tokenChainId} compact /> : <span>Input asset</span>}
               <span>{transaction.stage === "approval-wallet" ? "sequential wallet approval"
                 : transaction.stage === "approval-confirming" ? "confirming"
                   : needsApproval ? atomicExperience ? "atomic exact approval" : "sequential exact approval needed" : "sufficient"}</span>
@@ -898,15 +895,15 @@ export function SwapPage() {
           <>
             <div className="quote-share">
               <span>{intent === "exact-output" ? "Exact receive" : firmQuote ? "Quoted receive" : "Estimated receive"}</span>
-              <strong>{displayQuote.output.amount} {effectiveOutputNative ? "BNB" : outputAsset?.symbol}</strong>
+              <strong>{displayQuote.output.amount} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</strong>
             </div>
             {quote && <dl className="quote-details">
-              <div><dt>{intent === "exact-input" ? "Exact input" : "Required input"}</dt><dd>{displayQuote.input.amount} {effectiveInputNative ? "BNB" : inputAsset?.symbol} · ${quote.economics.inputValueUsd}</dd></div>
-              <div><dt>{intent === "exact-output" ? "Exact output" : "Estimated output"}</dt><dd>{displayQuote.output.amount} {effectiveOutputNative ? "BNB" : outputAsset?.symbol} · ${quote.economics.outputValueUsd}</dd></div>
-              <div><dt>Effective rate</dt><dd>1 {effectiveInputNative ? "BNB" : inputAsset?.symbol} = {quote.economics.effectiveRate} {effectiveOutputNative ? "BNB" : outputAsset?.symbol}</dd></div>
-              <div><dt>Fair rate</dt><dd>{quote.economics.fairRate} {effectiveOutputNative ? "BNB" : outputAsset?.symbol}</dd></div>
+              <div><dt>{intent === "exact-input" ? "Exact input" : "Required input"}</dt><dd>{displayQuote.input.amount} {effectiveInputNative ? "BNB" : inputDisplay?.symbol} · ${quote.economics.inputValueUsd}</dd></div>
+              <div><dt>{intent === "exact-output" ? "Exact output" : "Estimated output"}</dt><dd>{displayQuote.output.amount} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol} · ${quote.economics.outputValueUsd}</dd></div>
+              <div><dt>Effective rate</dt><dd>1 {effectiveInputNative ? "BNB" : inputDisplay?.symbol} = {quote.economics.effectiveRate} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</dd></div>
+              <div><dt>Fair rate</dt><dd>{quote.economics.fairRate} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</dd></div>
               <div className={quote.economics.priceImpactBps > 100 ? "is-warning" : ""}><dt>Price impact</dt><dd>{quote.economics.priceImpactBps / 100}%</dd></div>
-              <div><dt>Pool fee</dt><dd>{quote.economics.fee.bps / 100}% · {atomicToDecimal(BigInt(quote.economics.fee.indicativeAtomicAmount), inputAsset?.decimals ?? 18)} {inputAsset?.symbol}</dd></div>
+              <div><dt>Pool fee</dt><dd>{quote.economics.fee.bps / 100}% · {atomicToDecimal(BigInt(quote.economics.fee.indicativeAtomicAmount), inputAsset?.decimals ?? 18)} {inputDisplay?.symbol}</dd></div>
               <div><dt>Venue status</dt><dd>{quote.pricing.venues.length === 0 ? "Pool only" : quote.pricing.venues.some((venue) => venue.eligible) ? "External guard eligible" : "External guard unavailable"}</dd></div>
               <div><dt>Indicative freshness</dt><dd>{quoteFresh && quoteMatchesDraft ? `${indicativeSeconds ?? 0}s` : "Refreshing…"}</dd></div>
               {firmSeconds !== null && <div className={firmSeconds <= 3 ? "is-warning" : ""}><dt>Firm quote</dt><dd>Confirm within {firmSeconds}s</dd></div>}

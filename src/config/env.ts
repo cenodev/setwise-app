@@ -6,6 +6,7 @@ export type PublicRuntimeConfig = {
   poolId: string;
   reownProjectId: string | null;
   rfqApiUrl: string;
+  tokenListUrl: string;
   walletConfigured: boolean;
 };
 
@@ -16,7 +17,8 @@ type PublicEnv = Partial<Record<
   | "VITE_NATIVE_GAS_RESERVE_BNB"
   | "VITE_POOL_ID"
   | "VITE_REOWN_PROJECT_ID"
-  | "VITE_RFQ_API_URL",
+  | "VITE_RFQ_API_URL"
+  | "VITE_TOKEN_LIST_URL",
   string
 >>;
 
@@ -57,6 +59,10 @@ export function resolveRuntimeConfig(
     rfqApiUrl: normalizeUrl(
       env.VITE_RFQ_API_URL,
       "https://setwise-rfq-api.datadex.workers.dev",
+    ),
+    tokenListUrl: normalizeUrl(
+      env.VITE_TOKEN_LIST_URL,
+      "https://raw.githubusercontent.com/cenodev/setwise-token-list/main/data/token-list.json",
     ),
     walletConfigured: reownProjectId !== null,
   };

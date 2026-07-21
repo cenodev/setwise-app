@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { decodeFunctionData } from "viem";
 
@@ -447,7 +447,8 @@ describe("SwapPage", () => {
 
   it("skips approval for native input and submits the API's exact native transaction value", async () => {
     render(<MemoryRouter><SwapPage /></MemoryRouter>);
-    fireEvent.change(screen.getByLabelText("You pay"), { target: { value: "WBNB" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "You pay asset" }));
+    fireEvent.click(within(screen.getByRole("listbox", { name: "You pay asset" })).getByRole("button", { name: /WBNB.*Wrapped BNB/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Pay with native BNB" }));
     fireEvent.change(screen.getByRole("textbox", { name: "You pay amount" }), { target: { value: "0.1" } });
     const review = await screen.findByRole("button", { name: "Review swap" });
@@ -462,8 +463,10 @@ describe("SwapPage", () => {
 
   it("sets outputNative for a token-to-BNB swap", async () => {
     render(<MemoryRouter><SwapPage /></MemoryRouter>);
-    fireEvent.change(screen.getByLabelText("You pay"), { target: { value: "TOKEN" } });
-    fireEvent.change(screen.getByLabelText("You receive"), { target: { value: "WBNB" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "You pay asset" }));
+    fireEvent.click(within(screen.getByRole("listbox", { name: "You pay asset" })).getByRole("button", { name: /TOKEN.*Tokenized Asset/i }));
+    fireEvent.click(screen.getByRole("combobox", { name: "You receive asset" }));
+    fireEvent.click(within(screen.getByRole("listbox", { name: "You receive asset" })).getByRole("button", { name: /WBNB.*Wrapped BNB/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Receive native BNB" }));
     fireEvent.change(screen.getByRole("textbox", { name: "You pay amount" }), { target: { value: "1" } });
     const review = await screen.findByRole("button", { name: "Review swap" });
@@ -480,8 +483,8 @@ describe("SwapPage", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "You pay amount" }), { target: { value: "10" } });
     fireEvent.click(screen.getByRole("button", { name: "Reverse pair" }));
 
-    expect(screen.getByLabelText("You pay")).toHaveValue("TOKEN");
-    expect(screen.getByLabelText("You receive")).toHaveValue("USDT");
+    expect(screen.getByRole("combobox", { name: "You pay asset" })).toHaveTextContent("TOKEN");
+    expect(screen.getByRole("combobox", { name: "You receive asset" })).toHaveTextContent("USDT");
     expect(screen.getByRole("textbox", { name: "You pay amount" })).toHaveValue("");
   });
 
