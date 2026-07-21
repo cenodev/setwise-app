@@ -61,6 +61,18 @@ export function SetDetailLayout() {
     );
   }
 
+  if (resolution.status === "error") {
+    return (
+      <div className="screen set-detail-screen">
+        <section className="prototype-card error-panel" role="alert">
+          <h1>Set unavailable</h1>
+          <p>{resolution.error.message}</p>
+          <Link className="secondary-link" to={setsPath()}>Back to Sets</Link>
+        </section>
+      </div>
+    );
+  }
+
   const definition = resolution.definition;
   const unsupported = resolution.status === "unsupported-chain";
 

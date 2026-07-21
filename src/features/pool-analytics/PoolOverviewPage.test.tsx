@@ -82,13 +82,13 @@ describe("PoolOverviewPage", () => {
 
   it("defines loading, empty, stale, and API-error states", () => {
     const { rerender } = render(<PoolOverviewPage {...defaultProps} loading pool={undefined} state={undefined} />);
-    expect(screen.getByText(/Loading public pool overview/)).toBeInTheDocument();
+    expect(screen.getByText(/Loading public Set overview/)).toBeInTheDocument();
 
     rerender(<PoolOverviewPage {...defaultProps} error={new Error("Pool API unavailable")} pool={undefined} state={undefined} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Pool API unavailable");
 
     rerender(<PoolOverviewPage {...defaultProps} refreshing />);
-    expect(screen.getByRole("status")).toHaveTextContent(/Refreshing live pool data/);
+    expect(screen.getByRole("status")).toHaveTextContent(/Refreshing live Set data/);
 
     rerender(<PoolOverviewPage {...defaultProps} online={false} pool={undefined} state={undefined} />);
     expect(screen.getByRole("status")).toHaveTextContent("No saved Set snapshot is available offline");

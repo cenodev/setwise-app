@@ -39,7 +39,6 @@ export function AppShell({ children }: PropsWithChildren) {
             key={item.to}
             to={item.to}
             className={({ isActive }) => (isActive ? "nav-link is-active" : "nav-link")}
-            end={item.to === setsPath()}
           >
             {item.label}
           </NavLink>
@@ -54,7 +53,6 @@ export function AppShell({ children }: PropsWithChildren) {
             key={item.to}
             to={item.to}
             className={({ isActive }) => (isActive ? "nav-link is-active" : "nav-link")}
-            end={item.to === setsPath()}
           >
             {item.label}
           </NavLink>
