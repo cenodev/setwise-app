@@ -54,8 +54,34 @@ button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-vis
   background: linear-gradient(145deg, rgb(25 33 54 / 92%), rgb(17 23 38 / 92%));
 }
 .set-directory-card h2 { margin: .25rem 0 .35rem; font-size: 1.05rem; }
-.set-directory-card p:not(.eyebrow) { margin: 0; color: var(--text-secondary); font-size: .9rem; }
+.set-directory-card p:not(.eyebrow):not(.set-directory-note) { margin: 0; color: var(--text-secondary); font-size: .9rem; }
+.set-directory-header { display: flex; align-items: start; justify-content: space-between; gap: .75rem; }
+.set-directory-assets { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.set-directory-asset {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .4rem .65rem;
+  border-radius: .65rem;
+  background: rgb(9 13 24 / 35%);
+}
+.set-directory-asset__label { display: grid; gap: .05rem; }
+.set-directory-asset__label strong { font-size: .82rem; }
+.set-directory-asset__label small { color: var(--text-tertiary); font-size: .68rem; }
+.set-directory-state { display: grid; gap: .5rem; }
+.set-directory-state__pending { margin: 0; color: var(--text-tertiary); font-size: .8rem; }
+.set-directory-state__error { display: flex; align-items: center; gap: .55rem; margin: 0; color: #ffb7c0; font-size: .8rem; }
+.set-directory-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin: 0; }
+.set-directory-metrics div { display: grid; gap: .2rem; padding: .65rem; border-radius: .65rem; background: rgb(9 13 24 / 35%); }
+.set-directory-metrics dt { color: var(--text-tertiary); font-size: .7rem; }
+.set-directory-metrics dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88rem; font-variant-numeric: tabular-nums; }
+.set-directory-unsupported { margin: 0; color: var(--text-tertiary); font-size: .8rem; line-height: 1.5; }
+.set-directory-note { margin: 0; color: var(--text-tertiary); font-size: .7rem; font-style: italic; }
 .set-directory-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.set-status { flex-shrink: 0; padding: .25rem .55rem; border-radius: 999px; font-size: .7rem; font-weight: 800; }
+.set-status--active { background: rgb(93 213 167 / 12%); color: var(--success); }
+.set-status--paused { background: rgb(255 119 136 / 12%); color: var(--critical); }
+.set-status--stale { background: rgb(242 189 91 / 12%); color: var(--warning); }
 
 .set-tabs {
   display: grid;
@@ -657,6 +683,7 @@ code {
   .screen.sets-screen,
   .screen.set-detail-screen,
   .screen.portfolio-screen { max-width: none; }
+  .sets-directory { grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); }
   .deposit-layout { grid-template-columns: minmax(0, 1.45fr) minmax(17rem, .75fr); align-items: start; }
   .swap-layout { grid-template-columns: minmax(0, 1.25fr) minmax(18rem, .75fr); align-items: start; }
   .deposit-form { grid-row: span 2; }
