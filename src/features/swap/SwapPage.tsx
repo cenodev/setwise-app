@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { isAddressEqual, type Hash } from "viem";
 import {
   useAccount,
@@ -17,9 +17,11 @@ import { TokenIdentity, tokenDisplay } from "../../components/TokenIdentity";
 import { TokenSelector } from "../../components/TokenSelector";
 import { runtimeConfig } from "../../config/env";
 import { useTokenMetadata } from "../../data/tokens";
-import { poolQueryKeys } from "../../data/queryKeys";
+import { poolQueryKeys, setQueryKeys } from "../../data/queryKeys";
 import { erc20Abi } from "../../data/chain/abis";
 import { getPool, getPoolState, RfqApiError } from "../../data/rfq/deposits";
+import { getPools } from "../../data/rfq/pools";
+import { resolveSet } from "../../data/sets";
 import {
   createSwapIdempotencyKey,
   requestFirmSwapQuote,
@@ -147,6 +149,18 @@ export function SwapPage() {
   const { writeContractAsync } = useWriteContract();
   const online = useOnlineStatus();
   const tokenMetadataQuery = useTokenMetadata();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlSetId = searchParams.get("set") ?? "";
+  const selectedSetId = urlSetId || runtimeConfig.defaultPoolId;
+
+  const registryQuery = useQuery({
+    queryKey: setQueryKeys.list,
+    queryFn: ({ signal }) => getPools(signal),
+    staleTime: 60_000,
+  });
+  const setResolution = resolveSet(selectedSetId, registryQuery.data, requiredChainId);
+  const resolvedPoolId = setResolution.status === "ready" ? setResolution.definition.id : selectedSetId;
+
   const [inputAssetId, setInputAssetId] = useState("");
   const [outputAssetId, setOutputAssetId] = useState("");
   const [inputNative, setInputNative] = useState(false);
@@ -177,14 +191,39 @@ export function SwapPage() {
     connectionRef.current = { address, chainId, online };
   }, [address, chainId, online]);
 
+  const previousSetId = useRef(selectedSetId);
+  useEffect(() => {
+    if (previousSetId.current === selectedSetId) return;
+    previousSetId.current = selectedSetId;
+    quoteSequence.current += 1;
+    setInputAssetId("");
+    setOutputAssetId("");
+    setInputNative(false);
+    setOutputNative(false);
+    setAmount("");
+    setQuote(null);
+    setQuoteRequestKey("");
+    setQuoteLoading(false);
+    setQuoteError(null);
+    setFirmQuote(null);
+    setTransaction({ stage: "editing" });
+    setBatchId(undefined);
+    setAtomicActivityId(undefined);
+  }, [selectedSetId]);
+
+  function chooseSet(nextSetId: string) {
+    if (nextSetId === selectedSetId) return;
+    setSearchParams(nextSetId === runtimeConfig.defaultPoolId ? {} : { set: nextSetId }, { replace: true });
+  }
+
   const poolQuery = useQuery({
-    queryKey: poolQueryKeys.discovery(runtimeConfig.defaultPoolId),
-    queryFn: ({ signal }) => getPool(runtimeConfig.defaultPoolId, signal),
+    queryKey: poolQueryKeys.discovery(resolvedPoolId),
+    queryFn: ({ signal }) => getPool(resolvedPoolId, signal),
     staleTime: 60_000,
   });
   const poolStateQuery = useQuery({
-    queryKey: poolQueryKeys.state(runtimeConfig.defaultPoolId),
-    queryFn: ({ signal }) => getPoolState(runtimeConfig.defaultPoolId, signal),
+    queryKey: poolQueryKeys.state(resolvedPoolId),
+    queryFn: ({ signal }) => getPoolState(resolvedPoolId, signal),
     refetchInterval: online ? 15_000 : false,
   });
   const assets = useMemo(
@@ -220,8 +259,8 @@ export function SwapPage() {
     enabled: Boolean(address && publicClient && poolQuery.data),
     queryFn: async (): Promise<ChainSwapState> => {
       if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and pool are required");
-      if (poolQuery.data.id !== runtimeConfig.defaultPoolId || poolQuery.data.chain.id !== requiredChainId) {
-        throw new Error("Pool discovery does not match the configured pool and chain");
+      if (poolQuery.data.id !== resolvedPoolId || poolQuery.data.chain.id !== requiredChainId) {
+        throw new Error("Pool discovery does not match the selected Set and chain");
       }
       const poolAddress = poolQuery.data.contract.address;
       const [nativeBalance, tokenStates] = await Promise.all([
@@ -313,7 +352,7 @@ export function SwapPage() {
         ...amountRequest,
         inputAsset: inputAsset.id,
         outputAsset: outputAsset.id,
-        poolId: runtimeConfig.defaultPoolId,
+        poolId: resolvedPoolId,
         signal: controller.signal,
       }).then((nextQuote) => {
         if (sequence !== quoteSequence.current || controller.signal.aborted) return;
@@ -343,7 +382,7 @@ export function SwapPage() {
       window.clearTimeout(requestTimer);
     };
   }, [amount, amountAtomic, amountError, busy, currentRequestKey, inputAsset, intent, online, outputAsset, pairSupported,
-    poolQuery.data, quoteRefresh, tradingPaused]);
+    poolQuery.data, quoteRefresh, resolvedPoolId, tradingPaused]);
 
   useEffect(() => {
     if (!quote && !firmQuote) return;
@@ -445,6 +484,7 @@ export function SwapPage() {
         chainId: requiredChainId,
         input: { amount: quote.input.amount, symbol: effectiveInputNative ? "BNB" : inputAsset.symbol },
         output: { amount: quote.output.amount, symbol: effectiveOutputNative ? "BNB" : outputAsset.symbol },
+        setId: resolvedPoolId,
         status: "pending",
       });
       activityId = activity.id;
@@ -486,7 +526,7 @@ export function SwapPage() {
           outputAsset: outputAsset.id,
           outputNative: effectiveOutputNative,
           payer: address,
-          poolId: runtimeConfig.defaultPoolId,
+          poolId: resolvedPoolId,
           recipient: address,
         });
       };
@@ -712,14 +752,43 @@ export function SwapPage() {
     clearExecutable();
   }
 
-  if (poolQuery.isPending || poolStateQuery.isPending || chainQuery.isPending) {
+  if (registryQuery.isPending || poolQuery.isPending || poolStateQuery.isPending || chainQuery.isPending) {
     return <section className="swap-card" aria-live="polite">Loading supported assets and wallet balances…</section>;
   }
+
+  const availableSets = (registryQuery.data ?? [])
+    .map((pool) => resolveSet(pool.id, registryQuery.data, requiredChainId))
+    .filter((r): r is Extract<typeof r, { status: "ready" }> => r.status === "ready")
+    .map((r) => r.definition);
+
+  if (setResolution.status === "not-found") {
+    return (
+      <section className="swap-card error-panel" role="alert">
+        <h2>Unknown Set</h2>
+        <p>No Set with id <code>{selectedSetId}</code> appears in the registry.</p>
+        <button className="secondary-button" type="button" onClick={() => chooseSet(runtimeConfig.defaultPoolId)}>
+          Use default Set
+        </button>
+      </section>
+    );
+  }
+  if (setResolution.status === "unsupported-chain") {
+    return (
+      <section className="swap-card error-panel" role="alert">
+        <h2>Unsupported chain</h2>
+        <p>The Set <code>{selectedSetId}</code> is not on the supported chain.</p>
+        <button className="secondary-button" type="button" onClick={() => chooseSet(runtimeConfig.defaultPoolId)}>
+          Use default Set
+        </button>
+      </section>
+    );
+  }
+
   const stateConfigurationError = poolQuery.data && poolStateQuery.data
     && (poolStateQuery.data.poolId !== poolQuery.data.id
       || poolStateQuery.data.chainId !== requiredChainId
       || !isAddressEqual(poolStateQuery.data.poolAddress, poolQuery.data.contract.address))
-    ? new Error("Pool state does not match the configured pool and chain")
+    ? new Error("Pool state does not match the selected Set and chain")
     : null;
   const loadError = poolQuery.error ?? poolStateQuery.error ?? chainQuery.error ?? stateConfigurationError;
   if (loadError) {
@@ -755,6 +824,18 @@ export function SwapPage() {
   return (
     <div className="swap-layout">
       <section className="swap-card swap-form" aria-labelledby="swap-form-title">
+        <div className="set-selector">
+          <label className="field-label" htmlFor="swap-set-select">Set</label>
+          <select id="swap-set-select" value={selectedSetId} disabled={busy || transaction.stage === "review"}
+            onChange={(event) => chooseSet(event.target.value)}>
+            {availableSets.map((set) => (
+              <option key={set.id} value={set.id}>{set.id}</option>
+            ))}
+            {!availableSets.some((set) => set.id === selectedSetId) && (
+              <option value={selectedSetId}>{selectedSetId}</option>
+            )}
+          </select>
+        </div>
         <div className="mode-tabs" aria-label="Swap amount mode">
           <button type="button" className={intent === "exact-input" ? "is-active" : ""}
             disabled={busy || transaction.stage === "review"} onClick={() => chooseIntent("exact-input")}>Exact input</button>

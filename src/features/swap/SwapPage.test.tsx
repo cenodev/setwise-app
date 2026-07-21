@@ -183,6 +183,7 @@ function firm(input: {
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: { queryKey: readonly unknown[] }) => {
     const key = options.queryKey[0];
+    if (key === "sets") return { data: [pool], error: null, isPending: false, refetch: vi.fn().mockResolvedValue({ data: [pool] }) };
     if (key === "pool") return { data: pool, error: null, isPending: false, refetch: vi.fn().mockResolvedValue({ data: pool }) };
     if (key === "pool-state") return { data: poolState(), error: null, isPending: false, refetch: mocks.poolStateRefetch };
     return { data: chainData(), error: mocks.chainError, isPending: false, refetch: mocks.chainRefetch };
