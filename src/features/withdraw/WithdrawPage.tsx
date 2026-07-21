@@ -5,6 +5,8 @@ import { isAddressEqual, type Address, type Hash } from "viem";
 import { useAccount, usePublicClient, useSendTransaction, useWriteContract } from "wagmi";
 
 import { requiredChainId } from "../../config/chains";
+import { TokenIdentity } from "../../components/TokenIdentity";
+import { TokenSelector } from "../../components/TokenSelector";
 import { bscTestnetDeployment } from "../../config/deployment";
 import { runtimeConfig } from "../../config/env";
 import { poolQueryKeys } from "../../data/queryKeys";
@@ -186,6 +188,7 @@ export function WithdrawPage() {
     () => [...(poolQuery.data?.assets ?? [])].sort((left, right) => left.index - right.index),
     [poolQuery.data?.assets],
   );
+  const tokenChainId = poolQuery.data?.chain.id ?? requiredChainId;
   const chainQuery = useQuery({
     queryKey: ["withdraw-chain", address, poolQuery.data?.contract.address,
       ...discoveredAssets.map((asset) => asset.address)],
@@ -513,16 +516,14 @@ export function WithdrawPage() {
 
         {mode === "single-asset" && (
           <div className="asset-input-card">
-            <label className="field-label" htmlFor="withdraw-asset">Output asset</label>
-            <select id="withdraw-asset" value={effectiveSelectedAssetId} disabled={busy}
-              onChange={(event) => {
-                setSelectedAssetId(event.target.value);
+            <span className="field-label">Output asset</span>
+            <TokenSelector ariaLabel="Withdrawal asset" chainId={tokenChainId} options={assets} value={effectiveSelectedAssetId} disabled={busy}
+              onChange={(nextAssetId) => {
+                setSelectedAssetId(nextAssetId);
                 setReceiveNative(false);
                 setFirmQuote(null);
                 setTransaction({ stage: "editing" });
-              }}>
-              {assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.symbol} — {asset.name ?? asset.id}</option>)}
-            </select>
+              }} />
             {nativeEligible && (
               <label className="native-toggle">
                 <input type="checkbox" checked={effectiveReceiveNative} disabled={busy}
@@ -587,7 +588,9 @@ export function WithdrawPage() {
             <div className="withdraw-outputs">
               {mappedOutputs.map(({ asset, output }) => (
                 <div className="withdraw-output" key={asset.id}>
-                  <div><strong>{effectiveReceiveNative && asset.id === effectiveSelectedAssetId ? "BNB" : asset.symbol}</strong><span>{asset.name ?? asset.id}</span></div>
+                  {effectiveReceiveNative && asset.id === effectiveSelectedAssetId
+                    ? <div><strong>BNB</strong><span>Native BNB</span></div>
+                    : <TokenIdentity asset={asset} chainId={tokenChainId} />}
                   <div><strong>{output.amount}</strong><span>{outputUsd(quote, output) ?? "USD estimate unavailable"}</span></div>
                 </div>
               ))}

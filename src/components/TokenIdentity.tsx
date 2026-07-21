@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { enrichTokenDisplay, type TokenMetadataIndex, useTokenMetadata } from "../data/tokens";
 
@@ -16,10 +16,9 @@ function initials(symbol: string): string {
 }
 
 export function TokenIcon({ logoURI, symbol }: TokenIconProps) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [logoURI]);
-  if (!logoURI || failed) return <span className="token-icon token-icon--fallback" aria-hidden="true">{initials(symbol)}</span>;
-  return <img className="token-icon" src={logoURI} alt="" loading="lazy" onError={() => setFailed(true)} />;
+  const [failedLogo, setFailedLogo] = useState<string>();
+  if (!logoURI || failedLogo === logoURI) return <span className="token-icon token-icon--fallback" aria-hidden="true">{initials(symbol)}</span>;
+  return <img className="token-icon" src={logoURI} alt="" loading="lazy" onError={() => setFailedLogo(logoURI)} />;
 }
 
 export function tokenDisplay(asset: TokenIdentityAsset, chainId: number, index?: TokenMetadataIndex) {

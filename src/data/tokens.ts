@@ -69,7 +69,9 @@ export function enrichTokenDisplay(
   chainId: number,
   index?: TokenMetadataIndex,
 ): TokenDisplay {
-  const token = index?.get(tokenMetadataKey(chainId, asset.address));
+  const token = index && typeof index.get === "function"
+    ? index.get(tokenMetadataKey(chainId, asset.address))
+    : undefined;
   return {
     assetType: token?.assetType,
     logoURI: token?.logoURI,
