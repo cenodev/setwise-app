@@ -313,6 +313,7 @@ export function SwapPage() {
         ...amountRequest,
         inputAsset: inputAsset.id,
         outputAsset: outputAsset.id,
+        poolId: runtimeConfig.poolId,
         signal: controller.signal,
       }).then((nextQuote) => {
         if (sequence !== quoteSequence.current || controller.signal.aborted) return;
@@ -485,6 +486,7 @@ export function SwapPage() {
           outputAsset: outputAsset.id,
           outputNative: effectiveOutputNative,
           payer: address,
+          poolId: runtimeConfig.poolId,
           recipient: address,
         });
       };

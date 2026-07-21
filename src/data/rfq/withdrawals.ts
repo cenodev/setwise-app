@@ -103,14 +103,15 @@ async function requestJson<T>(
 }
 
 export function requestWithdrawalQuote(input: {
-  poolTokenAmount: string;
   outputAsset?: string;
+  poolId: string;
+  poolTokenAmount: string;
   signal?: AbortSignal;
 }): Promise<WithdrawalQuote> {
   return requestJson("/v1/quotes/withdrawals", withdrawalQuoteSchema, {
     method: "POST",
     body: JSON.stringify({
-      poolId: runtimeConfig.poolId,
+      poolId: input.poolId,
       poolTokenAmount: input.poolTokenAmount,
       ...(input.outputAsset ? { outputAsset: input.outputAsset } : {}),
     }),
@@ -122,6 +123,7 @@ export function requestFirmWithdrawalQuote(input: {
   idempotencyKey: string;
   investor: Address;
   outputAsset: string;
+  poolId: string;
   poolTokenAmount: string;
   receiveNative: boolean;
 }): Promise<FirmWithdrawalQuote> {
@@ -129,7 +131,7 @@ export function requestFirmWithdrawalQuote(input: {
     method: "POST",
     headers: { "Idempotency-Key": input.idempotencyKey },
     body: JSON.stringify({
-      poolId: runtimeConfig.poolId,
+      poolId: input.poolId,
       investor: input.investor,
       poolTokenAmount: input.poolTokenAmount,
       outputAsset: input.outputAsset,

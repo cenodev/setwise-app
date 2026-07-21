@@ -196,29 +196,31 @@ export function getPoolState(poolId: string, signal?: AbortSignal): Promise<Pool
 }
 
 export function requestDepositQuote(
+  poolId: string,
   amounts: DepositAmount[],
   lockDays: number,
   signal?: AbortSignal,
 ): Promise<DepositQuote> {
   return requestJson("/v1/quotes/deposits", depositQuoteSchema, {
     method: "POST",
-    body: JSON.stringify({ poolId: runtimeConfig.poolId, amounts, lockDays }),
+    body: JSON.stringify({ poolId, amounts, lockDays }),
     signal,
   });
 }
 
 export function requestFirmDepositQuote(input: {
   amounts: DepositAmount[];
+  idempotencyKey: string;
   investor: Address;
   lockDays: number;
   mode: DepositMode;
-  idempotencyKey: string;
+  poolId: string;
 }): Promise<FirmDepositQuote> {
   return requestJson("/v1/firm-quotes/deposits", firmDepositQuoteSchema, {
     method: "POST",
     headers: { "Idempotency-Key": input.idempotencyKey },
     body: JSON.stringify({
-      poolId: runtimeConfig.poolId,
+      poolId: input.poolId,
       investor: input.investor,
       mode: input.mode,
       lockDays: input.lockDays,

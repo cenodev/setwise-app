@@ -370,7 +370,7 @@ export function DepositPage() {
       setQuoteError(null);
     }, 0);
     const timer = window.setTimeout(() => {
-      void requestDepositQuote(form.request, effectiveLockDays, controller.signal)
+      void requestDepositQuote(runtimeConfig.poolId, form.request, effectiveLockDays, controller.signal)
         .then((nextQuote) => {
           validateIndicativeQuote(nextQuote, poolQuery.data.contract.address, assets);
           setQuote(nextQuote);
@@ -522,10 +522,11 @@ export function DepositPage() {
         setTransaction({ stage: "firm-quote" });
         const firm = await requestFirmDepositQuote({
           amounts: form.request,
+          idempotencyKey: `deposit:${address.toLowerCase()}:${crypto.randomUUID()}`,
           investor: address,
           lockDays: effectiveLockDays,
           mode,
-          idempotencyKey: `deposit:${address.toLowerCase()}:${crypto.randomUUID()}`,
+          poolId: runtimeConfig.poolId,
         });
         validateFirmQuote(firm, quote, address, poolQuery.data.contract.address, mode, assets, effectiveLockDays);
         const calls = buildAtomicDepositCalls({
@@ -611,10 +612,11 @@ export function DepositPage() {
       setTransaction({ stage: "firm-quote" });
       const firm = await requestFirmDepositQuote({
         amounts: form.request,
+        idempotencyKey: `deposit:${address.toLowerCase()}:${crypto.randomUUID()}`,
         investor: address,
         lockDays: effectiveLockDays,
         mode,
-        idempotencyKey: `deposit:${address.toLowerCase()}:${crypto.randomUUID()}`,
+        poolId: runtimeConfig.poolId,
       });
       validateFirmQuote(firm, quote, address, poolQuery.data.contract.address, mode, assets, effectiveLockDays);
       setFirmQuote(firm);

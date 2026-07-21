@@ -275,6 +275,7 @@ export function WithdrawPage() {
     }, 0);
     const requestTimer = window.setTimeout(() => {
       void requestWithdrawalQuote({
+        poolId: runtimeConfig.poolId,
         poolTokenAmount: amount,
         ...(mode === "single-asset" ? { outputAsset: effectiveSelectedAssetId } : {}),
         signal: controller.signal,
@@ -371,6 +372,7 @@ export function WithdrawPage() {
           idempotencyKey: `withdraw:${address.toLowerCase()}:${crypto.randomUUID()}`,
           investor: address,
           outputAsset: effectiveSelectedAssetId,
+          poolId: runtimeConfig.poolId,
           poolTokenAmount: amount,
           receiveNative: effectiveReceiveNative,
         });
