@@ -40,6 +40,23 @@ describe("local activity store", () => {
     })]);
   });
 
+  it("preserves withdrawal records written before Set identity was recorded", () => {
+    const storage = memoryStorage();
+    const legacyWithdrawal = {
+      chainId: 97,
+      id: "legacy-withdrawal",
+      mode: "proportional",
+      operation: "withdrawal",
+      outputs: [{ amount: "0.5", symbol: "USDT" }],
+      shares: { amount: "1", symbol: "SETWISE" },
+      status: "success",
+      timestamp: 1,
+    };
+    storage.setItem("setwise.local-activity.v1", JSON.stringify([legacyWithdrawal]));
+
+    expect(readActivity(storage)).toEqual([legacyWithdrawal]);
+  });
+
   it("isolates malformed records without losing valid history", () => {
     const storage = memoryStorage();
     const valid = createSwapActivity({

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
+import type { Pool, PoolState } from "../../data/rfq/deposits";
 import { WithdrawPage } from "./WithdrawPage";
 
 const mocks = vi.hoisted(() => ({
@@ -9,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   markActivityFailed: vi.fn(),
   markActivityPending: vi.fn(),
   markActivitySuccessful: vi.fn(),
-  poolStateRefetch: vi.fn(),
+  queryInvalidation: vi.fn(),
   requestFirmWithdrawalQuote: vi.fn(),
   requestWithdrawalQuote: vi.fn(),
   sendTransaction: vi.fn(),
@@ -27,33 +28,63 @@ const tokenAddress = "0x4000000000000000000000000000000000000000";
 const directHash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const firmHash = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-const assets = [
+const assets: Pool["assets"] = [
   { address: wrappedNative, decimals: 18, id: "WBNB", index: 0, name: "Wrapped BNB", symbol: "WBNB", weight: 50 },
   { address: tokenAddress, decimals: 6, id: "USDT", index: 1, name: "Tether USD", symbol: "USDT", weight: 50 },
 ];
 
-const pool = {
+const pool: Pool = {
   assets,
   chain: { id: 97, name: "BSC Testnet" },
   contract: { address: poolAddress },
+  display: { description: "A test Set", name: "Test Set", sortOrder: 0 },
   id: "bstock-ai-no-bnb-bsc-testnet",
   lpToken: { address: poolAddress, decimals: 18, symbol: "SETWISE" },
   quotePolicy: { allowedLockDays: [0] },
+  capabilities: {
+    nativeAsset: true,
+    swaps: { exactInput: true, exactOutput: true, firm: true, indicative: true },
+    withdrawals: { firm: true, proportional: true, singleAsset: true },
+  },
 };
 
-function poolState() {
+function poolState(): PoolState {
   return {
-    assets: assets.map((asset) => ({ asset: asset.id, index: asset.index, market: { askUsd: "1", bidUsd: "1" } })),
+    assets: assets.map((asset) => ({
+      actualAtomicBalance: "1000000000000000000",
+      amount: "1",
+      asset: asset.id,
+      atomicAmount: "1000000000000000000",
+      balanceStatus: "synced" as const,
+      decimals: asset.decimals,
+      index: asset.index,
+      market: { askUsd: "1", bidUsd: "1", observedAt: "2026-07-21T12:00:00.000Z" },
+      multiplier: "1",
+      recordedAtomicBalance: "1000000000000000000",
+      valueUsd: "1",
+    })),
+    blockNumber: "123",
+    blockTimestamp: "2026-07-21T12:00:00.000Z",
     chainId: 97,
+    contract: { wrappedNativeToken: wrappedNative },
     poolAddress,
     poolId: pool.id,
-    trading: { deposits: "available", paused: mocks.tradingPaused },
+    totalSupply: { amount: "10", atomicAmount: "10000000000000000000", decimals: 18 },
+    totalValueUsd: "10",
+    trading: {
+      deposits: "available",
+      paused: mocks.tradingPaused,
+      proportionalWithdrawals: "available",
+      singleAssetWithdrawals: mocks.tradingPaused ? "paused" : "available",
+    },
   };
 }
 
 const chainData = {
   assetBalances: { USDT: 1_000_000n, WBNB: 1_000_000_000_000_000_000n },
+  canClaim: false,
   lockedShares: 2_000_000_000_000_000_000n,
+  lockedUntil: 1_800_000_000n,
   orderedAssets: assets,
   unlockedShares: 10_000_000_000_000_000_000n,
 };
@@ -104,14 +135,8 @@ function firm(mustSubmitBy = new Date(Date.now() + 60_000).toISOString()) {
 }
 
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: (options: { queryKey: readonly unknown[] }) => {
-    const key = options.queryKey[0];
-    if (key === "pool") return {
-      data: pool, error: null, isPending: false, refetch: vi.fn().mockResolvedValue({ data: pool }),
-    };
-    if (key === "pool-state") return {
-      data: poolState(), error: null, isPending: false, refetch: mocks.poolStateRefetch,
-    };
+  useQueryClient: () => ({ invalidateQueries: mocks.queryInvalidation }),
+  useQuery: () => {
     return { data: chainData, error: null, isPending: false, refetch: mocks.chainRefetch };
   },
 }));
@@ -142,7 +167,7 @@ vi.mock("../activity/store", () => ({
 }));
 
 async function enterProportionalAmount() {
-  render(<MemoryRouter><WithdrawPage /></MemoryRouter>);
+  render(<MemoryRouter><WithdrawPage pool={pool} poolState={poolState()} /></MemoryRouter>);
   fireEvent.change(screen.getByRole("textbox", { name: "Set shares" }), { target: { value: "1" } });
   const action = await screen.findByRole("button", { name: "Confirm withdrawal" });
   await waitFor(() => expect(action).toBeEnabled());
@@ -150,7 +175,7 @@ async function enterProportionalAmount() {
 }
 
 async function enterNativeSingleAssetAmount() {
-  render(<MemoryRouter><WithdrawPage /></MemoryRouter>);
+  render(<MemoryRouter><WithdrawPage pool={pool} poolState={poolState()} /></MemoryRouter>);
   fireEvent.click(screen.getByRole("button", { name: "Single asset" }));
   fireEvent.click(screen.getByRole("checkbox", { name: "Receive native BNB" }));
   fireEvent.change(screen.getByRole("textbox", { name: "Set shares" }), { target: { value: "1" } });
@@ -173,7 +198,7 @@ describe("WithdrawPage", () => {
     mocks.markActivitySuccessful.mockReset();
     mocks.saveActivity.mockReset();
     mocks.chainRefetch.mockReset().mockResolvedValue({ data: chainData });
-    mocks.poolStateRefetch.mockReset().mockImplementation(() => Promise.resolve({ data: poolState() }));
+    mocks.queryInvalidation.mockReset().mockResolvedValue(undefined);
     mocks.requestWithdrawalQuote.mockReset().mockImplementation(({ outputAsset }: { outputAsset?: string }) =>
       Promise.resolve(indicative(outputAsset ? "single-asset" : "proportional")));
     mocks.requestFirmWithdrawalQuote.mockReset().mockResolvedValue(firm());
@@ -196,9 +221,9 @@ describe("WithdrawPage", () => {
     expect(mocks.simulateContract).toHaveBeenCalledWith(expect.objectContaining({ functionName: "withdrawPortfolio" }));
     expect(mocks.writeContract).toHaveBeenCalledWith(expect.objectContaining({ functionName: "withdrawPortfolio" }));
     expect(mocks.requestFirmWithdrawalQuote).not.toHaveBeenCalled();
+    expect(mocks.requestWithdrawalQuote).toHaveBeenCalledWith(expect.objectContaining({ poolId: pool.id }));
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
     expect(mocks.chainRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(mocks.poolStateRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(mocks.createActivity).toHaveBeenCalledWith(expect.objectContaining({
       mode: "proportional",
       outputs: [
@@ -212,6 +237,13 @@ describe("WithdrawPage", () => {
     expect(mocks.saveActivity).toHaveBeenCalledOnce();
     expect(mocks.markActivityPending).toHaveBeenCalledWith("withdrawal-activity-1", directHash);
     expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("withdrawal-activity-1", directHash);
+    expect(mocks.queryInvalidation).toHaveBeenCalledWith({
+      exact: true,
+      queryKey: ["sets", pool.id, "state"],
+    });
+    expect(mocks.queryInvalidation).toHaveBeenCalledWith({
+      queryKey: ["wallet-pool-position", pool.id],
+    });
   });
 
   it("requests and immediately submits a validated firm quote for native BNB output", async () => {
@@ -224,6 +256,7 @@ describe("WithdrawPage", () => {
     expect(mocks.requestFirmWithdrawalQuote).toHaveBeenCalledWith(expect.objectContaining({
       investor,
       outputAsset: "WBNB",
+      poolId: pool.id,
       poolTokenAmount: "1",
       receiveNative: true,
     }));
@@ -306,5 +339,60 @@ describe("WithdrawPage", () => {
       expect.stringMatching(/reverted on chain/i),
       directHash,
     );
+  });
+
+  it("rejects an indicative quote belonging to another Set", async () => {
+    mocks.requestWithdrawalQuote.mockReset().mockResolvedValue({
+      ...indicative("proportional"),
+      stateSnapshot: { ...indicative("proportional").stateSnapshot, poolId: "another-set" },
+    });
+    render(<MemoryRouter><WithdrawPage pool={pool} poolState={poolState()} /></MemoryRouter>);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Set shares" }), { target: { value: "1" } });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/wrong Set/i);
+    expect(screen.getByRole("button", { name: "Confirm withdrawal" })).toBeDisabled();
+  });
+
+  it("uses the selected Set's withdrawal capabilities", () => {
+    render(
+      <MemoryRouter>
+        <WithdrawPage
+          pool={{
+            ...pool,
+            capabilities: {
+              nativeAsset: false,
+              swaps: { exactInput: true, exactOutput: true, firm: true, indicative: true },
+              withdrawals: { firm: false, proportional: true, singleAsset: false },
+            },
+          }}
+          poolState={poolState()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "Proportional" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Single asset" })).toBeDisabled();
+  });
+
+  it("does not offer native output when the selected Set disables it", () => {
+    render(
+      <MemoryRouter>
+        <WithdrawPage
+          pool={{
+            ...pool,
+            capabilities: {
+              nativeAsset: false,
+              swaps: { exactInput: true, exactOutput: true, firm: true, indicative: true },
+              withdrawals: { firm: true, proportional: true, singleAsset: true },
+            },
+          }}
+          poolState={poolState()}
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Single asset" }));
+    expect(screen.queryByRole("checkbox", { name: "Receive native BNB" })).not.toBeInTheDocument();
   });
 });

@@ -17,6 +17,7 @@ function poolSummary(id: string, chainId = 97) {
     capabilities: {
       nativeAsset: true,
       swaps: { exactInput: true, exactOutput: true, firm: true, indicative: true },
+      withdrawals: { firm: true, proportional: true, singleAsset: true },
     },
   };
 }
@@ -42,6 +43,11 @@ describe("pool discovery client", () => {
     expect(pools).toHaveLength(2);
     expect(pools[0]?.id).toBe("pool-a");
     expect(pools[1]?.id).toBe("pool-b");
+    expect(pools[0]?.capabilities?.withdrawals).toEqual({
+      firm: true,
+      proportional: true,
+      singleAsset: true,
+    });
     const url = fetchMock.mock.calls[0]?.[0] as string;
     expect(url).toContain("/v1/pools");
   });

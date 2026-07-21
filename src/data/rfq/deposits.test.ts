@@ -88,7 +88,14 @@ describe("deposit RFQ client", () => {
   it("requires the analytics fields on a pool-state response", async () => {
     const validState = {
       poolId: "pool", chainId: 97, poolAddress, blockNumber: "1", blockTimestamp: at,
-      trading: { paused: false, deposits: "available" }, totalValueUsd: "10",
+      trading: {
+        paused: false,
+        deposits: "available",
+        proportionalWithdrawals: "available",
+        singleAssetWithdrawals: "paused",
+      },
+      contract: { wrappedNativeToken: tokenAddress },
+      totalValueUsd: "10",
       totalSupply: { amount: "10", atomicAmount: "10000000000000000000", decimals: 18 },
       assets: [{
         asset: "USDT", amount: "10", atomicAmount: "10000000", decimals: 6, index: 0,
@@ -97,7 +104,12 @@ describe("deposit RFQ client", () => {
       }],
     };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(validState)));
-    await expect(getPoolState("pool")).resolves.toMatchObject({ blockNumber: "1", totalValueUsd: "10" });
+    await expect(getPoolState("pool")).resolves.toMatchObject({
+      blockNumber: "1",
+      contract: { wrappedNativeToken: tokenAddress },
+      trading: { proportionalWithdrawals: "available", singleAssetWithdrawals: "paused" },
+      totalValueUsd: "10",
+    });
 
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ ...validState, totalSupply: undefined })));
     await expect(getPoolState("pool")).rejects.toMatchObject({ code: "INVALID_RESPONSE" });
