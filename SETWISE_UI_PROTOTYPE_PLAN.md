@@ -1,5 +1,9 @@
 # Setwise UI prototype plan
 
+> Historical single-Set planning document. The current product supports multiple user-facing **Sets**, each backed by
+> an internal RFQ/on-chain **pool**. See `docs/architecture/multi-set.md` for the current route, cache, and terminology
+> contract; references to pool below describe protocol internals or the original prototype scope.
+
 ## 1. Prototype outcome
 
 Build an installable, mobile-first React PWA for the existing Setwise BSC Testnet pool. A user should be able to:

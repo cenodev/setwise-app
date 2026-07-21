@@ -1,5 +1,8 @@
 # Setwise UI design
 
+> Historical single-Set design baseline. Current UI copy uses **Set**; **pool** below refers to the protocol backing a
+> Set or the original prototype. Current multi-Set behavior is documented in `docs/architecture/multi-set.md`.
+
 This document is the visual and interaction design specification for the Setwise PWA described in `SETWISE_UI_PROTOTYPE_PLAN.md`. It translates the information architecture, screens, flows, and shared transaction model from that plan into:
 
 - design tokens and a base visual system;
