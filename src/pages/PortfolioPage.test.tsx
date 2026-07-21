@@ -66,6 +66,7 @@ function setData(id: string, offset: number, chainId = 97, paused = false) {
     ],
     chain: { id: chainId, name: chainId === 97 ? "BSC Testnet" : "Ethereum" },
     contract: { address: address(offset + 1) },
+    display: { description: `Description for ${id}`, name: `Set ${id}`, sortOrder: offset },
     id,
     lpToken: { address: address(offset + 2), decimals: 6, symbol: "SET" },
   } as PoolSummary;
@@ -293,7 +294,7 @@ describe("PortfolioPage", () => {
     expect(screen.getByText("Stale snapshot")).toBeVisible();
     expect(screen.getAllByText("Unsupported chain").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Connect wallet" })).toBeVisible();
-    expect(screen.getByRole("navigation", { name: "set-eth actions" }).querySelectorAll("a")).toHaveLength(1);
+    expect(screen.getByRole("navigation", { name: "Set set-eth actions" }).querySelectorAll("a")).toHaveLength(1);
   });
 
   it("announces loading and offers retry when the portfolio fails", () => {
@@ -346,7 +347,7 @@ describe("PortfolioPage", () => {
     expect(screen.getByRole("region", { name: "Your Set liquidity" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Set positions" })).toBeVisible();
 
-    const actions = screen.getByRole("navigation", { name: "set-alpha actions" });
+    const actions = screen.getByRole("navigation", { name: "Set set-alpha actions" });
     const links = within(actions).getAllByRole("link");
     expect(links).toHaveLength(3);
     for (const link of links) {

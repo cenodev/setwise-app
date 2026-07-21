@@ -21,7 +21,7 @@ export type WalletPoolPositionHookResult = {
 };
 
 function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error("Unable to read the wallet pool position", { cause: error });
+  return error instanceof Error ? error : new Error("Unable to read the wallet Set position", { cause: error });
 }
 
 /**
@@ -58,7 +58,7 @@ export function useWalletPoolPosition(
     staleTime: 0,
     queryFn: async () => {
       if (!pool || !poolState || !publicClient || connection.status !== "connected" || !address) {
-        throw new PoolPositionContextError("The wallet pool-position query is missing its read context");
+        throw new PoolPositionContextError("The wallet Set-position query is missing its read context");
       }
       return readWalletPoolPosition({
         client: publicClient,

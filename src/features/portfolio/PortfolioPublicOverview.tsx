@@ -64,7 +64,7 @@ export function PortfolioPublicOverview({ view }: PortfolioPublicOverviewProps) 
       </div>
 
       <p className="portfolio-liquidity-note">
-        Set reserves and Setwise TVL reflect internal Set pool state.
+        Set reserves and Setwise TVL reflect each Set&apos;s underlying pool state.
         External DEX liquidity is deduplicated across venues and kept visually separate so it is never mistaken for Set TVL.
       </p>
     </section>

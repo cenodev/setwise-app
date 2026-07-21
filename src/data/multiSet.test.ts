@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 
-import { poolQueryKeys, setQueryKeys } from "./queryKeys";
+import { setQueryKeys } from "./queryKeys";
 import type { Pool, PoolState } from "./rfq/deposits";
 import { requestDepositQuote, requestFirmDepositQuote } from "./rfq/deposits";
 import { requestSwapQuote, requestFirmSwapQuote } from "./rfq/swaps";
@@ -201,14 +201,10 @@ describe("two-Set isolation", () => {
   });
 
   describe("query keys", () => {
-    it("produces distinct discovery and state keys per Set", () => {
-      expect(poolQueryKeys.discovery(SET_A)).not.toEqual(poolQueryKeys.discovery(SET_B));
-      expect(poolQueryKeys.state(SET_A)).not.toEqual(poolQueryKeys.state(SET_B));
-    });
-
-    it("produces distinct Set-scoped keys per Set", () => {
+    it("produces one canonical set of distinct detail and state keys per Set", () => {
       expect(setQueryKeys.detail(SET_A)).not.toEqual(setQueryKeys.detail(SET_B));
       expect(setQueryKeys.state(SET_A)).not.toEqual(setQueryKeys.state(SET_B));
+      expect(setQueryKeys.detail(SET_A)).not.toEqual(setQueryKeys.state(SET_A));
     });
 
     it("produces distinct wallet-position keys per Set", () => {

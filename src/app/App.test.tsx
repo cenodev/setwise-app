@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 
 import { App } from "./App";
 import { runtimeConfig } from "../config/env";
@@ -122,6 +122,16 @@ vi.mock("../features/portfolio/usePortfolio", () => ({
   usePortfolio: () => ({ error: null, loading: true, refreshing: false, retry: vi.fn(), view: undefined }),
 }));
 
+function HistoryControls() {
+  const navigate = useNavigate();
+  return (
+    <div>
+      <button type="button" onClick={() => void navigate(-1)}>History back</button>
+      <button type="button" onClick={() => void navigate(1)}>History forward</button>
+    </div>
+  );
+}
+
 function renderApp(path: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -130,6 +140,7 @@ function renderApp(path: string) {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <App />
+        <HistoryControls />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -171,7 +182,7 @@ describe("Sets routes and navigation", () => {
   it("loads /sets as the default landing content", async () => {
     renderApp("/");
     expect(await screen.findByRole("heading", { name: "Sets" })).toBeVisible();
-    expect(await screen.findByRole("heading", { name: runtimeConfig.defaultPoolId })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: `Set ${runtimeConfig.defaultPoolId}` })).toBeVisible();
   });
 
   it("redirects /sets/:setId to the overview tab", async () => {
@@ -198,6 +209,19 @@ describe("Sets routes and navigation", () => {
 
     fireEvent.click(within(tabs).getByRole("link", { name: "Withdraw" }));
     expect(await screen.findByRole("heading", { name: "Withdraw from this Set" })).toBeVisible();
+  });
+
+  it("restores the selected Set tab through browser back and forward history", async () => {
+    renderApp(`/sets/${runtimeConfig.defaultPoolId}/overview`);
+    const tabs = await screen.findByRole("navigation", { name: "Set sections" });
+    fireEvent.click(within(tabs).getByRole("link", { name: "Deposit" }));
+    expect(await screen.findByRole("heading", { name: "Deposit into this Set" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "History back" }));
+    expect(await screen.findByRole("heading", { name: "Set overview" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "History forward" }));
+    expect(await screen.findByRole("heading", { name: "Deposit into this Set" })).toBeVisible();
   });
 
   it("prevents Set and tab navigation while a wallet request is active", async () => {

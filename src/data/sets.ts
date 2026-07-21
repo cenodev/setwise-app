@@ -23,6 +23,22 @@ export class SetSnapshotMismatchError extends Error {
   }
 }
 
+export function validateSetState(
+  definition: SetDefinition,
+  state: PoolState,
+): SetSnapshotMismatchError | null {
+  if (state.poolId !== definition.id) {
+    return new SetSnapshotMismatchError("The live state belongs to a different Set.");
+  }
+  if (state.chainId !== definition.chainId) {
+    return new SetSnapshotMismatchError("The live state belongs to a different chain.");
+  }
+  if (state.poolAddress.toLowerCase() !== definition.pool.contract.address.toLowerCase()) {
+    return new SetSnapshotMismatchError("The live state belongs to a different Set contract.");
+  }
+  return null;
+}
+
 export function toSetDefinition(pool: PoolSummary, supportedChainId: number): SetDefinition {
   return {
     chainId: pool.chain.id,
@@ -66,11 +82,19 @@ export function validateSetSnapshot(
   if (pool.id !== definition.id || state.poolId !== definition.id) {
     return new SetSnapshotMismatchError("The Set detail or live state belongs to a different Set.");
   }
-  if (pool.chain.id !== definition.chainId || state.chainId !== definition.chainId) {
+  if (pool.chain.id !== definition.chainId) {
     return new SetSnapshotMismatchError("The Set registry, detail, and live state chain IDs do not match.");
   }
-  if (detailAddress !== registryAddress || stateAddress !== registryAddress) {
+  if (detailAddress !== registryAddress) {
     return new SetSnapshotMismatchError("The Set registry, detail, and live state contract addresses do not match.");
   }
-  return null;
+  const stateError = validateSetState(definition, state);
+  if (!stateError) return null;
+  if (state.chainId !== definition.chainId) {
+    return new SetSnapshotMismatchError("The Set registry, detail, and live state chain IDs do not match.");
+  }
+  if (stateAddress !== registryAddress) {
+    return new SetSnapshotMismatchError("The Set registry, detail, and live state contract addresses do not match.");
+  }
+  return stateError;
 }
