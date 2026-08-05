@@ -269,7 +269,7 @@ export function SwapPage() {
     queryFn: async (): Promise<ChainSwapState> => {
       if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and pool are required");
       if (poolQuery.data.id !== resolvedPoolId || poolQuery.data.chain.id !== requiredChainId) {
-        throw new Error("Pool discovery does not match the selected Set and chain");
+        throw new Error("Set discovery does not match the selected Set and chain");
       }
       const [nativeBalance, tokenStates] = await Promise.all([
         publicClient.getBalance({ address }),
@@ -807,7 +807,7 @@ export function SwapPage() {
     && (poolStateQuery.data.poolId !== poolQuery.data.id
       || poolStateQuery.data.chainId !== requiredChainId
       || !isAddressEqual(poolStateQuery.data.poolAddress, poolQuery.data.contract.address))
-    ? new Error("Pool state does not match the selected Set and chain")
+    ? new Error("Set state does not match the selected Set and chain")
     : null;
   const loadError = poolQuery.error ?? poolStateQuery.error ?? chainQuery.error ?? stateConfigurationError;
   if (loadError) {
@@ -1006,7 +1006,7 @@ export function SwapPage() {
               <div><dt>Fair rate</dt><dd>{quote.economics.fairRate} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</dd></div>
               <div className={quote.economics.priceImpactBps > 100 ? "is-warning" : ""}><dt>Price impact</dt><dd>{quote.economics.priceImpactBps / 100}%</dd></div>
               <div><dt>Pool fee</dt><dd>{quote.economics.fee.bps / 100}% · {atomicToDecimal(BigInt(quote.economics.fee.indicativeAtomicAmount), inputAsset?.decimals ?? 18)} {inputDisplay?.symbol}</dd></div>
-              <div><dt>Venue status</dt><dd>{quote.pricing.venues.length === 0 ? "Pool only" : quote.pricing.venues.some((venue) => venue.eligible) ? "External guard eligible" : "External guard unavailable"}</dd></div>
+              <div><dt>Venue status</dt><dd>{quote.pricing.venues.length === 0 ? "Set only" : quote.pricing.venues.some((venue) => venue.eligible) ? "External guard eligible" : "External guard unavailable"}</dd></div>
               <div><dt>Indicative freshness</dt><dd>{quoteFresh && quoteMatchesDraft ? `${indicativeSeconds ?? 0}s` : "Refreshing…"}</dd></div>
               {firmSeconds !== null && <div className={firmSeconds <= 3 ? "is-warning" : ""}><dt>Firm quote</dt><dd>Confirm within {firmSeconds}s</dd></div>}
             </dl>}
