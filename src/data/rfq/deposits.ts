@@ -88,7 +88,10 @@ export const poolStateSchema = z.object({
   totalValueUsd: decimalSchema,
   totalSupply: balanceAmountSchema,
   externalLiquiditySources: z.array(externalLiquiditySourceSchema).optional(),
-  contract: z.object({ wrappedNativeToken: addressSchema }).passthrough().optional(),
+  contract: z.object({
+    quoteSigner: addressSchema.optional(),
+    wrappedNativeToken: addressSchema,
+  }).passthrough().optional(),
   assets: z.array(z.object({
     asset: z.string().min(1),
     amount: decimalSchema,

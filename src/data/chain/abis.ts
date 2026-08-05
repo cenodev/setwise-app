@@ -22,6 +22,37 @@ export const erc20Abi = [
   },
 ] as const;
 
+export const setwiseRouterAbi = [
+  {
+    type: "function",
+    name: "swapSetwise",
+    stateMutability: "payable",
+    inputs: [
+      {
+        name: "swap",
+        type: "tuple",
+        components: [
+          { name: "pool", type: "address" },
+          { name: "assetIn", type: "address" },
+          { name: "assetOut", type: "address" },
+          { name: "nativeIn", type: "bool" },
+          { name: "nativeOut", type: "bool" },
+          { name: "amountIn", type: "uint256" },
+          { name: "amountOut", type: "uint256" },
+          { name: "quoteId", type: "bytes32" },
+          { name: "deadline", type: "uint256" },
+          { name: "recipient", type: "address" },
+          { name: "signature", type: "bytes" },
+          { name: "auxiliaryData", type: "bytes" },
+        ],
+      },
+      { name: "funder", type: "address" },
+      { name: "routerSignature", type: "bytes" },
+    ],
+    outputs: [],
+  },
+] as const;
+
 export const faucetAbi = [
   {
     type: "function",

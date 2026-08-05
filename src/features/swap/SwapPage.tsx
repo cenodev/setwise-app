@@ -491,6 +491,8 @@ export function SwapPage() {
       const [latestChain, latestPoolState] = await Promise.all([chainQuery.refetch(), poolStateQuery.refetch()]);
       if (!latestChain.data) throw new Error("Wallet balances are unavailable. Retry the chain read.");
       if (latestPoolState.data?.trading.paused) throw new Error("Trading is paused. Wait for swaps to resume.");
+      const quoteSigner = latestPoolState.data?.contract?.quoteSigner;
+      if (!quoteSigner) throw new Error("The Set quote signer is unavailable. Executable swaps are disabled.");
       const latestBalance = effectiveInputNative
         ? latestChain.data.nativeBalance
         : (latestChain.data.assets[inputAsset.id]?.balance ?? 0n);
@@ -541,7 +543,7 @@ export function SwapPage() {
           }
           throw new Error(`Insufficient ${inputAsset.symbol} balance`);
         }
-        validateFirmSwap({
+        await validateFirmSwap({
           address,
           allowance: latestAllowance,
           balance: latestBalance,
@@ -555,6 +557,7 @@ export function SwapPage() {
           plannedApprovalAmount: firmInputAtomic,
           poolAddress: poolQuery.data.contract.address,
           poolId: poolQuery.data.id,
+          quoteSigner,
           routerAddress,
         });
         const calls = buildAtomicSwapCalls({
@@ -613,36 +616,19 @@ export function SwapPage() {
         return;
       }
 
-      if (!effectiveInputNative && latestAllowance < quotedInputAtomic) {
-        approving = true;
-        setTransaction({ stage: "approval-wallet" });
-        const approvalHash = await writeContractAsync({
-          account: address,
-          address: inputAsset.address,
-          abi: erc20Abi,
-          functionName: "approve",
-          args: [routerAddress, quotedInputAtomic],
-        });
-        setTransaction({ stage: "approval-confirming", approvalHash });
-        const approvalReceipt = await publicClient.waitForTransactionReceipt({ hash: approvalHash });
-        if (approvalReceipt.status !== "success") throw new Error("Token approval reverted on chain");
-        const approvedChain = await chainQuery.refetch();
-        latestAllowance = approvedChain.data?.assets[inputAsset.id]?.allowance ?? 0n;
-        if (latestAllowance < quotedInputAtomic) throw new Error("Approval confirmed, but the required allowance is not available yet. Retry the chain read.");
-        approving = false;
-      }
-
       const firm = await requestFirm();
       const firmInputAtomic = BigInt(firm.input.atomicAmount);
-      if (intent === "exact-output"
-        && (firmInputAtomic > maximumSwapInput(latestBalance, effectiveInputNative, gasReserve)
-          || (!effectiveInputNative && firmInputAtomic > latestAllowance))) {
-        setQuote(null);
-        setQuoteRequestKey("");
-        setQuoteRefresh((value) => value + 1);
-        throw new Error("The required input changed while preparing the exact-output swap. Review the refreshed estimate.");
+      if (firmInputAtomic > maximumSwapInput(latestBalance, effectiveInputNative, gasReserve)) {
+        if (intent === "exact-output") {
+          setQuote(null);
+          setQuoteRequestKey("");
+          setQuoteRefresh((value) => value + 1);
+          throw new Error("The required input changed while preparing the exact-output swap. Review the refreshed estimate.");
+        }
+        throw new Error(`Insufficient ${effectiveInputNative ? "BNB after gas reserve" : inputAsset.symbol} balance`);
       }
-      validateFirmSwap({
+      const needsFirmApproval = !effectiveInputNative && latestAllowance < firmInputAtomic;
+      await validateFirmSwap({
         address,
         allowance: latestAllowance,
         balance: latestBalance,
@@ -653,10 +639,48 @@ export function SwapPage() {
         inputNative: effectiveInputNative,
         outputAsset,
         outputNative: effectiveOutputNative,
+        plannedApprovalAmount: needsFirmApproval ? firmInputAtomic : undefined,
         poolAddress: poolQuery.data.contract.address,
         poolId: poolQuery.data.id,
+        quoteSigner,
         routerAddress,
       });
+
+      if (needsFirmApproval) {
+        approving = true;
+        setTransaction({ stage: "approval-wallet" });
+        const approvalHash = await writeContractAsync({
+          account: address,
+          address: inputAsset.address,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [routerAddress, firmInputAtomic],
+        });
+        setTransaction({ stage: "approval-confirming", approvalHash });
+        const approvalReceipt = await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+        if (approvalReceipt.status !== "success") throw new Error("Token approval reverted on chain");
+        const approvedChain = await chainQuery.refetch();
+        latestAllowance = approvedChain.data?.assets[inputAsset.id]?.allowance ?? 0n;
+        if (latestAllowance < firmInputAtomic) throw new Error("Approval confirmed, but the required allowance is not available yet. Retry the chain read.");
+        approving = false;
+
+        await validateFirmSwap({
+          address,
+          allowance: latestAllowance,
+          balance: latestBalance,
+          chainId: requiredChainId,
+          firm,
+          indicative: quote,
+          inputAsset,
+          inputNative: effectiveInputNative,
+          outputAsset,
+          outputNative: effectiveOutputNative,
+          poolAddress: poolQuery.data.contract.address,
+          poolId: poolQuery.data.id,
+          quoteSigner,
+          routerAddress,
+        });
+      }
       setFirmQuote(firm);
 
       const beforeWallet = connectionRef.current;
