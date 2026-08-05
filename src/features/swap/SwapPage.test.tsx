@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { decodeFunctionData } from "viem";
 
 import { erc20Abi } from "../../data/chain/abis";
+import { trustedRouterAddress } from "../../data/rfq/swaps";
 import { SwapPage } from "./SwapPage";
 
 type AtomicTestCall = { data: `0x${string}`; to: `0x${string}`; value: bigint };
@@ -171,19 +172,47 @@ function firm(input: {
   const outputMetadata = assets.find((asset) => asset.id === input.outputAsset)!;
   const deadline = Math.floor(Date.now() / 1_000) + (expired ? -1 : 60);
   const quoteId = `0x${"1".repeat(64)}`;
+  const routerSwap = {
+    amountIn: finalInputAtomic,
+    amountOut: preview.output.atomicAmount,
+    assetIn: inputMetadata.address,
+    assetOut: outputMetadata.address,
+    deadline: "123",
+    nativeIn: input.inputNative,
+    nativeOut: input.outputNative,
+    pool: poolAddress,
+    quoteId,
+    recipient: input.payer,
+  };
   return {
     authorization: {
       digest: quoteId,
+      keyVersion: "current",
+      router: {
+        address: trustedRouterAddress,
+        digest: quoteId,
+        funder: input.payer,
+        signature: "0x5678",
+        signatureType: "eoa",
+        typedData: {
+          domain: { chainId: 97, name: "SetwiseRouter", verifyingContract: trustedRouterAddress, version: "1" },
+          message: { ...routerSwap, chainId: 97, funder: input.payer, router: trustedRouterAddress },
+          primaryType: "SetwiseAuthorization",
+          types: {},
+        },
+      },
       signature: "0x1234",
+      signatureType: "eoa",
       signer: tokenAddress,
       typedData: {
         domain: { chainId: 97, name: "SetwisePool", verifyingContract: poolAddress, version: "2.0.0" },
-        message: { deadline: "123", inputAmount: finalInputAtomic, inputAsset: inputMetadata.address, outputAmount: preview.output.atomicAmount, outputAsset: outputMetadata.address, payer: input.payer, quoteId, recipient: input.payer },
+        message: { deadline: "123", inputAmount: finalInputAtomic, inputAsset: inputMetadata.address, outputAmount: preview.output.atomicAmount, outputAsset: outputMetadata.address, payer: trustedRouterAddress, quoteId, recipient: input.payer },
         primaryType: "SwapQuote",
         types: {},
       },
     },
     createdAt: new Date((deadline - 10) * 1_000).toISOString(),
+    execution: "router",
     executionDeadline: String(deadline),
     firmQuoteId: quoteId,
     guard: { inputTolerancePpm: "5000", maximumInputBalance: "1", minimumOutputBalance: "1", offchainInputBalance: "1", offchainOutputBalance: "1", outputTolerancePpm: "5000", packedDeadline: "123" },
@@ -195,16 +224,17 @@ function firm(input: {
     persisted: true,
     quoteType: "firm",
     requirements: {
-      approvals: input.inputNative ? [] : [{ minimumAtomicAmount: finalInputAtomic, spender: poolAddress, token: inputMetadata.address }],
+      approvals: input.inputNative ? [] : [{ minimumAtomicAmount: finalInputAtomic, spender: trustedRouterAddress, token: inputMetadata.address }],
       sender: input.payer,
     },
     stateSnapshot: { blockHash: `0x${"2".repeat(64)}`, blockNumber: "1", blockTimestamp: "1", chainId: 97, poolAddress, poolId: pool.id },
     status: "executable",
     transaction: {
+      adapter: { funder: input.payer, swap: { ...routerSwap, auxiliaryData: "0x", signature: "0x1234" } },
       chainId: 97,
       data: "0x1234",
-      method: input.inputNative ? "swapExactNativeForAsset" : input.outputNative ? "swapExactAssetForNative" : "swapExactAssetForAsset",
-      to: poolAddress,
+      method: "swapSetwise",
+      to: trustedRouterAddress,
       value: input.inputNative ? finalInputAtomic : "0",
     },
     venues: [],
@@ -353,7 +383,7 @@ describe("SwapPage", () => {
 
     await screen.findByRole("button", { name: "New swap" });
     expect(mocks.writeContract).toHaveBeenCalledWith(expect.objectContaining({
-      args: [poolAddress, 10n * 10n ** 18n],
+      args: [trustedRouterAddress, 10n * 10n ** 18n],
       functionName: "approve",
     }));
     expect(mocks.writeContract.mock.invocationCallOrder[0]).toBeLessThan(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]);
@@ -377,10 +407,10 @@ describe("SwapPage", () => {
     const calls = mocks.sendCalls.mock.calls[0]?.[0].calls;
     expect(calls).toHaveLength(2);
     expect(decodeFunctionData({ abi: erc20Abi, data: calls[0].data })).toEqual({
-      args: [poolAddress, 10n * 10n ** 18n],
+      args: [trustedRouterAddress, 10n * 10n ** 18n],
       functionName: "approve",
     });
-    expect(calls[1]).toEqual({ data: "0x1234", to: poolAddress, value: 0n });
+    expect(calls[1]).toEqual({ data: "0x1234", to: trustedRouterAddress, value: 0n });
     expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendCalls.mock.invocationCallOrder[0]);
     expect(mocks.writeContract).not.toHaveBeenCalled();
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
@@ -401,7 +431,7 @@ describe("SwapPage", () => {
     await screen.findByRole("button", { name: "New swap" });
     const calls = mocks.sendCalls.mock.calls[0]?.[0].calls;
     expect(decodeFunctionData({ abi: erc20Abi, data: calls[0].data })).toEqual({
-      args: [poolAddress, 11n * 10n ** 18n],
+      args: [trustedRouterAddress, 11n * 10n ** 18n],
       functionName: "approve",
     });
     expect(mocks.writeContract).not.toHaveBeenCalled();
@@ -486,7 +516,7 @@ describe("SwapPage", () => {
 
     await screen.findByRole("button", { name: "New swap" });
     expect(mocks.writeContract).toHaveBeenCalledWith(expect.objectContaining({
-      args: [poolAddress, 10n * 10n ** 18n],
+      args: [trustedRouterAddress, 10n * 10n ** 18n],
     }));
     expect(mocks.requestFirmSwapQuote).toHaveBeenCalledWith(expect.objectContaining({ outputAmount: "20" }));
     expect(mocks.requestFirmSwapQuote.mock.calls[0]?.[0]).not.toHaveProperty("inputAmount");

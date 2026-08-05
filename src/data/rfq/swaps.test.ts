@@ -1,9 +1,12 @@
-import { requestFirmSwapQuote, requestSwapQuote } from "./swaps";
+import liveRouterFirmQuote from "./fixtures/router-firm-quote.json";
+import type { Address } from "viem";
+import { firmSwapQuoteSchema, requestFirmSwapQuote, requestSwapQuote, trustedRouterAddress } from "./swaps";
 
 const poolAddress = "0x1000000000000000000000000000000000000000";
 const inputAddress = "0x2000000000000000000000000000000000000000";
 const outputAddress = "0x3000000000000000000000000000000000000000";
 const payer = "0x4000000000000000000000000000000000000000";
+const routerAddress = trustedRouterAddress;
 const quoteId = `0x${"1".repeat(64)}`;
 const at = "2026-07-19T12:00:00.000Z";
 const until = "2026-07-19T12:00:10.000Z";
@@ -76,16 +79,46 @@ function firm() {
   return {
     authorization: {
       digest: quoteId,
+      keyVersion: "current",
+      router: {
+        address: routerAddress,
+        digest: quoteId,
+        funder: payer,
+        signature: "0x5678",
+        signatureType: "eoa",
+        typedData: {
+          domain: { chainId: 97, name: "SetwiseRouter", verifyingContract: routerAddress, version: "1" },
+          message: {
+            amountIn: venue.input.atomicAmount,
+            amountOut: venue.output.atomicAmount,
+            assetIn: inputAddress,
+            assetOut: outputAddress,
+            chainId: 97,
+            deadline: "1",
+            funder: payer,
+            nativeIn: false,
+            nativeOut: false,
+            pool: poolAddress,
+            quoteId,
+            recipient: payer,
+            router: routerAddress,
+          },
+          primaryType: "SetwiseAuthorization",
+          types: { SetwiseAuthorization: [{ name: "chainId", type: "uint256" }] },
+        },
+      },
       signature: "0x1234",
+      signatureType: "eoa",
       signer: inputAddress,
       typedData: {
         domain: { chainId: 97, name: "SetwisePool", verifyingContract: poolAddress, version: "2.0.0" },
-        message: { deadline: "1", inputAmount: venue.input.atomicAmount, inputAsset: inputAddress, outputAmount: venue.output.atomicAmount, outputAsset: outputAddress, payer, quoteId, recipient: payer },
+        message: { deadline: "1", inputAmount: venue.input.atomicAmount, inputAsset: inputAddress, outputAmount: venue.output.atomicAmount, outputAsset: outputAddress, payer: routerAddress, quoteId, recipient: payer },
         primaryType: "SwapQuote",
         types: { SwapQuote: [{ name: "payer", type: "address" }] },
       },
     },
     createdAt: at,
+    execution: "router",
     executionDeadline: "1784462410",
     firmQuoteId: quoteId,
     guard: { inputTolerancePpm: "5000", maximumInputBalance: "1", minimumOutputBalance: "1", offchainInputBalance: "1", offchainOutputBalance: "1", outputTolerancePpm: "5000", packedDeadline: "1" },
@@ -96,10 +129,33 @@ function firm() {
     output: venue.output,
     persisted: true,
     quoteType: "firm",
-    requirements: { approvals: [{ minimumAtomicAmount: venue.input.atomicAmount, spender: poolAddress, token: inputAddress }], sender: payer },
+    requirements: { approvals: [{ minimumAtomicAmount: venue.input.atomicAmount, spender: routerAddress, token: inputAddress }], sender: payer },
     stateSnapshot: { ...stateSnapshot, blockTimestamp: "1784462400" },
     status: "executable",
-    transaction: { chainId: 97, data: "0x1234", method: "swapExactAssetForAsset", to: poolAddress, value: "0" },
+    transaction: {
+      adapter: {
+        funder: payer,
+        swap: {
+          amountIn: venue.input.atomicAmount,
+          amountOut: venue.output.atomicAmount,
+          assetIn: inputAddress,
+          assetOut: outputAddress,
+          auxiliaryData: "0x",
+          deadline: "1",
+          nativeIn: false,
+          nativeOut: false,
+          pool: poolAddress,
+          quoteId,
+          recipient: payer,
+          signature: "0x1234",
+        },
+      },
+      chainId: 97,
+      data: "0x1234",
+      method: "swapSetwise",
+      to: routerAddress,
+      value: "0",
+    },
     venues: [venue],
     warnings: ["test warning"],
   };
@@ -108,6 +164,19 @@ function firm() {
 function response(json: unknown) {
   return new Response(JSON.stringify(json), { status: 200, headers: { "content-type": "application/json" } });
 }
+
+const firmRequest = (overrides: Record<string, unknown> = {}) => ({
+  idempotencyKey: "swap:test",
+  inputAmount: "10",
+  inputAsset: "USDT",
+  inputNative: false,
+  outputAsset: "TOKEN",
+  outputNative: false,
+  payer: payer as Address,
+  poolId: "pool-a",
+  recipient: payer as Address,
+  ...overrides,
+});
 
 describe("swap RFQ client", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -152,24 +221,31 @@ describe("swap RFQ client", () => {
     expect(JSON.parse(init.body)).not.toHaveProperty("inputAmount");
   });
 
-  it("sends native flags, both wallet roles, and a fresh idempotency header for firm quotes", async () => {
+  it("requests router execution with the trusted Router address for firm quotes", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response(firm()));
     vi.stubGlobal("fetch", fetchMock);
 
-    await requestFirmSwapQuote({ idempotencyKey: "swap:test", inputAmount: "10", inputAsset: "USDT", inputNative: false, outputAsset: "TOKEN", outputNative: false, payer, poolId: "pool-a", recipient: payer });
+    await requestFirmSwapQuote(firmRequest());
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.cache).toBe("no-store");
     expect(new Headers(init.headers).get("Idempotency-Key")).toBe("swap:test");
     if (typeof init.body !== "string") throw new Error("Expected a JSON request body");
-    expect(JSON.parse(init.body)).toMatchObject({ inputNative: false, outputNative: false, payer, recipient: payer });
+    expect(JSON.parse(init.body)).toMatchObject({
+      execution: "router",
+      inputNative: false,
+      outputNative: false,
+      payer,
+      recipient: payer,
+      router: routerAddress,
+    });
   });
 
   it("sends the fixed output amount for exact-output firm quotes", async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ ...firm(), intent: "exact-output" }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await requestFirmSwapQuote({ idempotencyKey: "swap:output", inputAsset: "USDT", inputNative: false, outputAmount: "2", outputAsset: "TOKEN", outputNative: false, payer, poolId: "pool-a", recipient: payer });
+    await requestFirmSwapQuote(firmRequest({ idempotencyKey: "swap:output", inputAmount: undefined, outputAmount: "2" }));
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     if (typeof init.body !== "string") throw new Error("Expected a JSON request body");
@@ -185,7 +261,55 @@ describe("swap RFQ client", () => {
 
     await expect(requestSwapQuote({ inputAmount: "10", inputAsset: "USDT", outputAsset: "TOKEN", poolId: "pool-a" }))
       .rejects.toMatchObject({ code: "INVALID_RESPONSE" });
-    await expect(requestFirmSwapQuote({ idempotencyKey: "swap:test", inputAmount: "10", inputAsset: "USDT", inputNative: false, outputAsset: "TOKEN", outputNative: false, payer, poolId: "pool-a", recipient: payer }))
+    await expect(requestFirmSwapQuote(firmRequest()))
       .rejects.toMatchObject({ code: "INVALID_RESPONSE" });
+  });
+});
+
+describe("router firm-quote response contract", () => {
+  it("parses a current live Router firm-quote fixture", () => {
+    expect(firmSwapQuoteSchema.safeParse(liveRouterFirmQuote).success).toBe(true);
+  });
+
+  it("parses the router request/response fixture shape", () => {
+    expect(firmSwapQuoteSchema.safeParse(firm()).success).toBe(true);
+  });
+
+  it("never parses direct-format responses as router execution", () => {
+    const routerQuote = firm();
+    const direct = {
+      ...routerQuote,
+      authorization: {
+        digest: quoteId,
+        signature: "0x1234",
+        signer: inputAddress,
+        typedData: routerQuote.authorization.typedData,
+      },
+      execution: undefined,
+      transaction: { chainId: 97, data: "0x1234", method: "swapExactAssetForAsset", to: poolAddress, value: "0" },
+    };
+    expect(firmSwapQuoteSchema.safeParse(direct).success).toBe(false);
+  });
+
+  it.each([
+    ["unknown execution", (quote: ReturnType<typeof firm>) => ({ ...quote, execution: "direct" })],
+    ["missing execution", (quote: ReturnType<typeof firm>) => ({ ...quote, execution: undefined })],
+    ["wrong Router address in authorization", (quote: ReturnType<typeof firm>) => ({ ...quote, authorization: { ...quote.authorization, router: { ...quote.authorization.router, address: poolAddress } } })],
+    ["wrong Router address in the authorization message", (quote: ReturnType<typeof firm>) => ({ ...quote, authorization: { ...quote.authorization, router: { ...quote.authorization.router, typedData: { ...quote.authorization.router.typedData, message: { ...quote.authorization.router.typedData.message, router: poolAddress } } } } })],
+    ["wrong Router domain verifying contract", (quote: ReturnType<typeof firm>) => ({ ...quote, authorization: { ...quote.authorization, router: { ...quote.authorization.router, typedData: { ...quote.authorization.router.typedData, domain: { ...quote.authorization.router.typedData.domain, verifyingContract: poolAddress } } } } })],
+    ["missing router authorization", (quote: ReturnType<typeof firm>) => ({ ...quote, authorization: { ...quote.authorization, router: undefined } })],
+    ["malformed router authorization signature", (quote: ReturnType<typeof firm>) => ({ ...quote, authorization: { ...quote.authorization, router: { ...quote.authorization.router, signature: "1234" } } })],
+    ["malformed router authorization digest", (quote: ReturnType<typeof firm>) => ({ ...quote, authorization: { ...quote.authorization, router: { ...quote.authorization.router, digest: `0x${"z".repeat(64)}` } } })],
+    ["missing key version", (quote: ReturnType<typeof firm>) => ({ ...quote, authorization: { ...quote.authorization, keyVersion: undefined } })],
+    ["missing signature type", (quote: ReturnType<typeof firm>) => ({ ...quote, authorization: { ...quote.authorization, signatureType: undefined } })],
+    ["transaction to a wrong Router address", (quote: ReturnType<typeof firm>) => ({ ...quote, transaction: { ...quote.transaction, to: poolAddress } })],
+    ["malformed transaction destination", (quote: ReturnType<typeof firm>) => ({ ...quote, transaction: { ...quote.transaction, to: "0x123" } })],
+    ["non-swapSetwise transaction method", (quote: ReturnType<typeof firm>) => ({ ...quote, transaction: { ...quote.transaction, method: "swapExactAssetForAsset" } })],
+    ["malformed swapSetwise calldata", (quote: ReturnType<typeof firm>) => ({ ...quote, transaction: { ...quote.transaction, data: "0x123" } })],
+    ["missing router adapter metadata", (quote: ReturnType<typeof firm>) => ({ ...quote, transaction: { ...quote.transaction, adapter: undefined } })],
+    ["malformed adapter swap quote id", (quote: ReturnType<typeof firm>) => ({ ...quote, transaction: { ...quote.transaction, adapter: { ...quote.transaction.adapter, swap: { ...quote.transaction.adapter.swap, quoteId: "not-hex" } } } })],
+    ["malformed adapter auxiliary data", (quote: ReturnType<typeof firm>) => ({ ...quote, transaction: { ...quote.transaction, adapter: { ...quote.transaction.adapter, swap: { ...quote.transaction.adapter.swap, auxiliaryData: "0xzz" } } } })],
+  ])("rejects a firm response with %s", (_name, mutate) => {
+    expect(firmSwapQuoteSchema.safeParse(mutate(firm())).success).toBe(false);
   });
 });
