@@ -31,6 +31,14 @@ disappear before new reads settle. For each test Set, obtain a quote but review 
 contract, and chain before approving. Exercise one deposit, proportional withdrawal, and swap where test funds permit;
 confirm exactly one Set-specific Activity record and explorer link per attempt. Do not use mainnet funds.
 
+For swaps, open `/swap?set=<poolId>` and confirm the review panel shows the Set ID, input/output amounts, the verified
+Set Router address (shortened with explorer link), and the exact approval spender when ERC-20 input is used. Before
+confirming, verify the executable countdown, simulation/preflight messaging, and that unsafe actions stay disabled when
+trading is paused, the estimate is stale, or the wallet/network/Set context changes. After a successful Router swap,
+confirm Activity records the selected Set once and links the confirmed Router transaction hash exactly once. Retry paths
+after wallet rejection, approval failure, on-chain revert, or expired quotes should surface accessible explanations
+without duplicate activity hashes.
+
 ## Rollback and diagnosis
 
 The app is static, so rollback by restoring the previous known-good artifact and configuration. Do not deploy a build
