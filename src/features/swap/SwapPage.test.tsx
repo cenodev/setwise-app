@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { decodeFunctionData, encodeFunctionData, hashTypedData, type Address, type Hex } from "viem";
+import { encodeFunctionData, hashTypedData, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
-import { erc20Abi, setwiseRouterAbi } from "../../data/chain/abis";
+import { setwiseRouterAbi } from "../../data/chain/abis";
 import { trustedRouterAddress } from "../../data/rfq/swaps";
 import { SwapPage } from "./SwapPage";
 
@@ -23,7 +23,9 @@ const mocks = vi.hoisted(() => ({
   batchStatusError: null as Error | null,
   batchStatusRefetch: vi.fn(),
   capabilityRefetch: vi.fn(),
+  call: vi.fn(),
   createActivity: vi.fn(),
+  getCode: vi.fn(),
   markActivityFailed: vi.fn(),
   markActivityPending: vi.fn(),
   markActivitySuccessful: vi.fn(),
@@ -348,7 +350,11 @@ vi.mock("wagmi", () => ({
     isFetched: true,
     refetch: mocks.capabilityRefetch,
   }),
-  usePublicClient: () => ({ waitForTransactionReceipt: mocks.waitForTransactionReceipt }),
+  usePublicClient: () => ({
+    call: mocks.call,
+    getCode: mocks.getCode,
+    waitForTransactionReceipt: mocks.waitForTransactionReceipt,
+  }),
   useSendCalls: () => ({ sendCallsAsync: mocks.sendCalls }),
   useSendTransaction: () => ({ sendTransactionAsync: mocks.sendTransaction }),
   useWaitForCallsStatus: () => ({
@@ -425,6 +431,8 @@ describe("SwapPage", () => {
     });
     mocks.sendTransaction.mockReset().mockResolvedValue(swapHash);
     mocks.sendCalls.mockReset().mockResolvedValue({ id: "batch-1" });
+    mocks.call.mockReset().mockResolvedValue({ data: "0x" });
+    mocks.getCode.mockReset().mockResolvedValue("0x6000");
     mocks.waitForTransactionReceipt.mockReset().mockResolvedValue({ status: "success" });
     mocks.createActivity.mockReset().mockImplementation((input: object) => ({ ...input, id: "activity-1", operation: "swap", timestamp: 1 }));
     mocks.markActivityFailed.mockReset();
@@ -513,33 +521,26 @@ describe("SwapPage", () => {
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
   });
 
-  it("submits exact approval and firm swap in one forced-atomic batch", async () => {
+  it("uses the fail-safe sequential preflight when an atomic wallet cannot simulate the stateful batch", async () => {
     mocks.atomicCapability = "supported";
     const review = await enterAmount("10");
-    await executeReviewedSwap(review);
+    fireEvent.click(review);
+    expect((await screen.findAllByText(/cannot simulate an approval-plus-swap batch/i)).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Approve exact amount & swap" }));
 
     await screen.findByRole("button", { name: "New swap" });
-    expect(mocks.sendCalls).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.sendCalls).not.toHaveBeenCalled();
+    expect(mocks.writeContract).toHaveBeenCalledTimes(1);
+    expect(mocks.call).toHaveBeenCalledWith(expect.objectContaining({
       account: wallet,
-      chainId: 97,
-      forceAtomic: true,
+      to: trustedRouterAddress,
+      value: 0n,
     }));
-    const calls = mocks.sendCalls.mock.calls[0]?.[0].calls;
-    expect(calls).toHaveLength(2);
-    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0].data })).toEqual({
-      args: [trustedRouterAddress, 10n * 10n ** 18n],
-      functionName: "approve",
-    });
-    expect(decodeFunctionData({ abi: setwiseRouterAbi, data: calls[1].data }).functionName).toBe("swapSetwise");
-    expect(calls[1]).toEqual(expect.objectContaining({ to: trustedRouterAddress, value: 0n }));
-    expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendCalls.mock.invocationCallOrder[0]);
-    expect(mocks.writeContract).not.toHaveBeenCalled();
-    expect(mocks.sendTransaction).not.toHaveBeenCalled();
-    expect(mocks.markActivityPending).toHaveBeenCalledWith("activity-1");
-    expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("activity-1", swapHash);
+    expect(mocks.writeContract.mock.invocationCallOrder[0]).toBeLessThan(mocks.call.mock.invocationCallOrder[0]);
+    expect(mocks.call.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendTransaction.mock.invocationCallOrder[0]);
   });
 
-  it("approves the final firm input atomically when exact-output pricing moves", async () => {
+  it("approves the final exact-output input before simulating and submitting", async () => {
     mocks.atomicCapability = "ready";
     mocks.firmInputDelta = 1n * 10n ** 18n;
     render(<MemoryRouter><SwapPage /></MemoryRouter>);
@@ -550,72 +551,69 @@ describe("SwapPage", () => {
     await executeReviewedSwap(review);
 
     await screen.findByRole("button", { name: "New swap" });
-    const calls = mocks.sendCalls.mock.calls[0]?.[0].calls;
-    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0].data })).toEqual({
+    expect(mocks.writeContract).toHaveBeenCalledWith(expect.objectContaining({
       args: [trustedRouterAddress, 11n * 10n ** 18n],
-      functionName: "approve",
+    }));
+    expect(mocks.call).toHaveBeenCalledTimes(1);
+    expect(mocks.sendCalls).not.toHaveBeenCalled();
+  });
+
+  it("blocks wallet submission when the configured Router has no code", async () => {
+    mocks.allowances.USDT = 1_000n * 10n ** 18n;
+    mocks.getCode.mockResolvedValueOnce(undefined);
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no deployed code/i);
+    expect(mocks.call).not.toHaveBeenCalled();
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
+    expect(mocks.saveActivity).not.toHaveBeenCalled();
+  });
+
+  it("blocks wallet submission when Router simulation reports a paused Set", async () => {
+    mocks.allowances.USDT = 1_000n * 10n ** 18n;
+    mocks.call.mockRejectedValueOnce(new Error("execution reverted: trading paused"));
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/paused on chain/i);
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
+    expect(mocks.saveActivity).not.toHaveBeenCalled();
+  });
+
+  it("rechecks Set pause state between firm validation and preflight", async () => {
+    mocks.allowances.USDT = 1_000n * 10n ** 18n;
+    mocks.poolStateRefetch
+      .mockResolvedValueOnce({ data: poolState() })
+      .mockImplementationOnce(() => {
+        mocks.tradingPaused = true;
+        return Promise.resolve({ data: poolState() });
+      });
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/paused/i);
+    expect(mocks.getCode).not.toHaveBeenCalled();
+    expect(mocks.call).not.toHaveBeenCalled();
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a successful simulation when connectivity changes before submission", async () => {
+    let online = true;
+    vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
+    mocks.allowances.USDT = 1_000n * 10n ** 18n;
+    mocks.call.mockImplementationOnce(async () => {
+      online = false;
+      window.dispatchEvent(new Event("offline"));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      return { data: "0x" };
     });
-    expect(mocks.writeContract).not.toHaveBeenCalled();
-  });
-
-  it("offers an explicit sequential retry when atomic wallet setup is rejected", async () => {
-    mocks.atomicCapability = "ready";
-    mocks.sendCalls.mockRejectedValueOnce({ code: 5750 });
     const review = await enterAmount("10");
     await executeReviewedSwap(review);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/sequential approval and swap/i);
-    fireEvent.click(screen.getByRole("button", { name: "Try swap again" }));
-    const retry = await screen.findByRole("button", { name: "Approve exact amount & swap" });
-    await waitFor(() => expect(retry).toBeEnabled());
-    fireEvent.click(retry);
-
-    await screen.findByRole("button", { name: "New swap" }, { timeout: 3_000 });
-    expect(mocks.sendCalls).toHaveBeenCalledTimes(1);
-    expect(mocks.writeContract).toHaveBeenCalledTimes(1);
-    expect(mocks.requestFirmSwapQuote).toHaveBeenCalledTimes(2);
-    expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[1]).toBeLessThan(mocks.writeContract.mock.invocationCallOrder[0]);
-  });
-
-  it("reports a submitted atomic batch failure without attempting sequential fallback", async () => {
-    mocks.atomicCapability = "supported";
-    mocks.batchStatus = { atomic: true, chainId: 97, status: "failure" };
-    const review = await enterAmount("10");
-    await executeReviewedSwap(review);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(/No approval or swap was applied/i);
-    expect(mocks.writeContract).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/connectivity/i);
+    expect(mocks.call).toHaveBeenCalledTimes(1);
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
-    expect(mocks.markActivityFailed).toHaveBeenCalledWith("activity-1", expect.any(String), undefined);
-  });
-
-  it("retries status instead of falling back after a batch ID was returned", async () => {
-    mocks.atomicCapability = "supported";
-    mocks.batchStatus = null;
-    mocks.batchStatusError = new Error("status RPC unavailable");
-    const review = await enterAmount("10");
-    await executeReviewedSwap(review);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(/sequential fallback is disabled/i);
-    fireEvent.click(screen.getByRole("button", { name: "Retry batch status" }));
-    expect(mocks.batchStatusRefetch).toHaveBeenCalledTimes(1);
-    expect(mocks.writeContract).not.toHaveBeenCalled();
-    expect(mocks.sendTransaction).not.toHaveBeenCalled();
-  });
-
-  it("does not duplicate an atomic submission while the wallet request is open", async () => {
-    mocks.atomicCapability = "supported";
-    let resolveBatch!: (value: { id: string }) => void;
-    mocks.sendCalls.mockImplementation(() => new Promise((resolve) => { resolveBatch = resolve; }));
-    const review = await enterAmount("10");
-    await executeReviewedSwap(review);
-
-    const pending = await screen.findByRole("button", { name: "Confirm atomic swap in wallet…" });
-    expect(pending).toBeDisabled();
-    fireEvent.click(pending);
-    expect(mocks.sendCalls).toHaveBeenCalledTimes(1);
-    resolveBatch({ id: "batch-1" });
-    await screen.findByRole("button", { name: "New swap" });
   });
 
   it("quotes and executes a user-specified exact output", async () => {
@@ -666,7 +664,7 @@ describe("SwapPage", () => {
     const review = await enterAmount("10");
     await executeReviewedSwap(review);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/required allowance is not available/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/approval is insufficient/i);
     expect(mocks.requestFirmSwapQuote).toHaveBeenCalledTimes(1);
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
   });
@@ -842,6 +840,8 @@ describe("SwapPage multi-Set", () => {
     mocks.writeContract.mockReset().mockResolvedValue(approvalHash);
     mocks.sendTransaction.mockReset().mockResolvedValue(swapHash);
     mocks.sendCalls.mockReset().mockResolvedValue({ id: "batch-1" });
+    mocks.call.mockReset().mockResolvedValue({ data: "0x" });
+    mocks.getCode.mockReset().mockResolvedValue("0x6000");
     mocks.waitForTransactionReceipt.mockReset().mockResolvedValue({ status: "success" });
     mocks.createActivity.mockReset().mockImplementation((input: object) => ({ ...input, id: "activity-1", operation: "swap", timestamp: 1 }));
     mocks.markActivityFailed.mockReset();
