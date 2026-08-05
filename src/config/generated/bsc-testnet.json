@@ -66,5 +66,8 @@
     "name": "Mock Wrapped BNB",
     "symbol": "mWBNB"
   },
+  "router": {
+    "address": "0x00355Ed1Fc7cD618AEC5A8E8fD31686376499ccB"
+  },
   "testBnbFaucetUrl": "https://docs.bnbchain.org/bnb-smart-chain/developers/faucet/"
 }
