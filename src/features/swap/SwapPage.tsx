@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { isAddressEqual, type Hash } from "viem";
+import { isAddressEqual, type Address, type Hash } from "viem";
 import {
   useAccount,
   useCapabilities,
@@ -128,6 +128,48 @@ function stageForError(message: string, approving: boolean): TransactionStage {
   if (normalized.includes("expired")) return "expired";
   if (normalized.includes("rejected in wallet")) return approving ? "approval-failed" : "rejected";
   return approving ? "approval-failed" : "error";
+}
+
+function RouterTarget({ address }: { address: Address }) {
+  const short = truncateAddress(address);
+  return (
+    <strong className="router-target">
+      Set Router ·{" "}
+      <a
+        href={`${runtimeConfig.explorerUrl}/address/${address}`}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`View verified Set Router ${address} in explorer`}
+        title={address}
+      >
+        {short}
+      </a>
+    </strong>
+  );
+}
+
+function executionStatusMessage(stage: TransactionStage, atomic: boolean): string | null {
+  switch (stage) {
+    case "allowance-check": return "Checking Router allowance before requesting an executable quote.";
+    case "approval-wallet": return "Approve the exact input amount for the Set Router in your wallet.";
+    case "approval-confirming": return "Waiting for Set Router approval confirmation on chain.";
+    case "firm-quote": return "Requesting a firm quote bound to the selected Set and Set Router.";
+    case "preflight": return "Simulating the swapSetwise call on the Set Router before opening your wallet.";
+    case "wallet": return atomic
+      ? "Confirm the atomic approval-and-swap batch in your wallet."
+      : "Confirm the Set Router swap in your wallet.";
+    case "confirming": return atomic
+      ? "Confirming the atomic swap batch on chain."
+      : "Confirming the Set Router swap on chain.";
+    case "success": return "Swap confirmed on chain through the Set Router.";
+    case "reverted": return "The Set Router swap reverted on chain. Review the explorer transaction before retrying.";
+    case "expired": return "The executable quote expired. Refresh the estimate and review again.";
+    case "rejected": return "Swap was rejected in the wallet before submission.";
+    case "approval-failed": return "Token approval for the Set Router was rejected or failed.";
+    case "status-error": return "Could not confirm the atomic swap batch status. Retry before submitting again.";
+    case "error": return null;
+    default: return null;
+  }
 }
 
 function transactionLabel(stage: TransactionStage, needsApproval: boolean, atomic: boolean): string {
@@ -923,6 +965,7 @@ export function SwapPage() {
     ?? (!quoteFresh ? "The estimate is stale and refreshing" : null)
     ?? quoteError;
   const displayQuote = firmQuote ?? quote;
+  const executionStatus = executionStatusMessage(transaction.stage, atomicTransaction);
 
   return (
     <div className="swap-layout">
@@ -1019,16 +1062,25 @@ export function SwapPage() {
         </div>
 
         {transaction.stage === "review" && quote && (
-          <div className="review-panel" role="status">
-            <div><p className="eyebrow">Review swap</p><strong>{quote.input.amount} {effectiveInputNative ? "BNB" : inputDisplay?.symbol} → {quote.output.amount} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</strong></div>
+          <div className="review-panel" role="status" aria-label="Swap review">
+            <div>
+              <p className="eyebrow">Review swap</p>
+              <strong>{quote.input.amount} {effectiveInputNative ? "BNB" : inputDisplay?.symbol} → {quote.output.amount} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</strong>
+            </div>
             <button className="secondary-button" type="button" onClick={() => setTransaction({ stage: "editing" })}>Edit</button>
             <div className="review-routing" aria-label="Router execution target">
-              <span>Execution target</span><strong>Set Router · {routerAddress}</strong>
-              {!effectiveInputNative && <><span>Exact approval spender</span><strong>Set Router · {routerAddress}</strong></>}
+              <span>Set</span><strong title={resolvedPoolId}>{resolvedPoolId}</strong>
+              <span>Execution target</span><RouterTarget address={routerAddress} />
+              {!effectiveInputNative && <><span>Exact approval spender</span><RouterTarget address={routerAddress} /></>}
             </div>
             <p>{atomicPreflightLimited
               ? atomicApprovalPreflightNotice
               : "A fresh executable quote is validated and simulated against the Set Router immediately before wallet submission."}</p>
+          </div>
+        )}
+        {executionStatus && transaction.stage !== "review" && (
+          <div className={transaction.stage === "success" ? "success-panel" : "notice"} role="status">
+            {executionStatus}
           </div>
         )}
         {tradingPaused && <div className="warning-panel">Trading is paused. Swaps are unavailable until this Set resumes.</div>}
@@ -1063,7 +1115,11 @@ export function SwapPage() {
           </div>
         )}
         {firmSeconds !== null && (transaction.stage === "wallet" || transaction.stage === "confirming") && (
-          <div className={firmSeconds <= 3 ? "firm-countdown is-warning" : "firm-countdown"} role="status">
+          <div
+            className={firmSeconds <= 3 ? "firm-countdown is-warning" : "firm-countdown"}
+            role="status"
+            aria-label={`Executable quote expires in ${firmSeconds} seconds`}
+          >
             Executable quote expires in <strong>{firmSeconds}s</strong>
           </div>
         )}
@@ -1074,7 +1130,18 @@ export function SwapPage() {
         {transaction.error && (
           <div className="error-panel" role="alert">
             <span>{transaction.error}</span>
-            <small>Set Router target: {routerAddress}</small>
+            <small>
+              Set Router target:{" "}
+              <a
+                href={`${runtimeConfig.explorerUrl}/address/${routerAddress}`}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`View verified Set Router ${routerAddress} in explorer`}
+                title={routerAddress}
+              >
+                {truncateAddress(routerAddress)}
+              </a>
+            </small>
           </div>
         )}
         {transaction.hash && (
