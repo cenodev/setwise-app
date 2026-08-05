@@ -20,6 +20,7 @@ import { runtimeConfig } from "../../config/env";
 import { useTokenMetadata } from "../../data/tokens";
 import { setQueryKeys } from "../../data/queryKeys";
 import { erc20Abi } from "../../data/chain/abis";
+import { readSwapChainState, type SwapChainState } from "../../data/chain/swapState";
 import { getPool, getPoolState, RfqApiError } from "../../data/rfq/deposits";
 import { getPools } from "../../data/rfq/pools";
 import { resolveSet } from "../../data/sets";
@@ -56,8 +57,6 @@ import {
   validateIndicativeSwap,
 } from "./model";
 
-type AssetChainState = { allowance: bigint; balance: bigint };
-type ChainSwapState = { assets: Record<string, AssetChainState>; nativeBalance: bigint };
 type SwapIntent = SwapQuote["intent"];
 
 const routerAddress = bscTestnetDeployment.router.address;
@@ -264,24 +263,14 @@ export function SwapPage() {
   const exactOutputSupported = Boolean(poolQuery.data?.capabilities?.swaps.exactOutput);
 
   const chainQuery = useQuery({
-    queryKey: ["swap-chain", poolQuery.data?.id, address, poolQuery.data?.contract.address, ...assets.map((asset) => asset.address)],
+    queryKey: ["swap-chain", poolQuery.data?.id, address, poolQuery.data?.contract.address, routerAddress, ...assets.map((asset) => asset.address)],
     enabled: Boolean(address && publicClient && poolQuery.data),
-    queryFn: async (): Promise<ChainSwapState> => {
-      if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and pool are required");
+    queryFn: async (): Promise<SwapChainState> => {
+      if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and Set are required");
       if (poolQuery.data.id !== resolvedPoolId || poolQuery.data.chain.id !== requiredChainId) {
         throw new Error("Set discovery does not match the selected Set and chain");
       }
-      const [nativeBalance, tokenStates] = await Promise.all([
-        publicClient.getBalance({ address }),
-        Promise.all(assets.map(async (asset) => {
-          const [balance, allowance] = await Promise.all([
-            publicClient.readContract({ address: asset.address, abi: erc20Abi, functionName: "balanceOf", args: [address] }),
-            publicClient.readContract({ address: asset.address, abi: erc20Abi, functionName: "allowance", args: [address, routerAddress] }),
-          ]);
-          return [asset.id, { allowance, balance }] as const;
-        })),
-      ]);
-      return { assets: Object.fromEntries(tokenStates), nativeBalance };
+      return readSwapChainState({ account: address, assets, client: publicClient, routerAddress });
     },
   });
 
@@ -962,9 +951,13 @@ export function SwapPage() {
           <div className="review-panel" role="status">
             <div><p className="eyebrow">Review swap</p><strong>{quote.input.amount} {effectiveInputNative ? "BNB" : inputDisplay?.symbol} → {quote.output.amount} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</strong></div>
             <button className="secondary-button" type="button" onClick={() => setTransaction({ stage: "editing" })}>Edit</button>
+            <div className="review-routing" aria-label="Router execution target">
+              <span>Execution target</span><strong>Set Router · {routerAddress}</strong>
+              {!effectiveInputNative && <><span>Exact approval spender</span><strong>Set Router · {routerAddress}</strong></>}
+            </div>
             <p>{atomicExperience
               ? "A fresh executable quote determines the exact approval, then approval and swap execute atomically in one wallet request."
-              : "The executable quote is requested only after any required sequential token approval confirms."}</p>
+              : "A fresh executable quote is validated against the Set Router before any required exact approval or swap submission."}</p>
           </div>
         )}
         {tradingPaused && <div className="warning-panel">Trading is paused. Swaps are unavailable until this Set resumes.</div>}
@@ -995,7 +988,7 @@ export function SwapPage() {
             </div>
             <p>{atomicExperience
               ? "The final firm input is approved exactly and executes with the swap. If the swap reverts, the approval reverts too."
-              : "Approval and swap use separate transactions. If exact-output pricing moves above the approved amount, refresh and review again."}</p>
+              : "Approval and swap use separate transactions. The exact allowance spender is the Set Router, never the Set contract."}</p>
           </div>
         )}
         {firmSeconds !== null && (transaction.stage === "wallet" || transaction.stage === "confirming") && (
@@ -1007,7 +1000,12 @@ export function SwapPage() {
           {quoteLoading ? "Refreshing estimate…" : transactionLabel(transaction.stage, needsApproval, atomicTransaction)}
         </button>
         {transaction.stage === "editing" && actionReason && <p className="action-reason">{actionReason}</p>}
-        {transaction.error && <div className="error-panel" role="alert">{transaction.error}</div>}
+        {transaction.error && (
+          <div className="error-panel" role="alert">
+            <span>{transaction.error}</span>
+            <small>Set Router target: {routerAddress}</small>
+          </div>
+        )}
         {transaction.hash && (
           <p className="transaction-link">Transaction <a href={`${runtimeConfig.explorerUrl}/tx/${transaction.hash}`} target="_blank" rel="noreferrer">{truncateAddress(transaction.hash)}</a></p>
         )}

@@ -455,6 +455,8 @@ code {
 .review-panel strong { display: block; margin-top: .25rem; overflow-wrap: anywhere; font-size: .9rem; }
 .review-panel p:last-child { grid-column: 1 / -1; margin: 0; color: var(--text-secondary); font-size: .76rem; line-height: 1.5; }
 .review-panel .secondary-button { min-height: 2.3rem; padding: .4rem .7rem; }
+.review-routing { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .3rem .75rem; padding: .65rem; border: 1px solid var(--border-subtle); border-radius: .55rem; color: var(--text-secondary); font-size: .76rem; }
+.review-routing strong { margin: 0; color: var(--text-primary); text-align: right; }
 .swap-action { margin: 0; }
 .action-reason { margin: -.4rem 0 0; color: var(--text-tertiary); font-size: .76rem; text-align: center; }
 .quote-card.is-refreshing > :not(.quote-title) { opacity: .52; }
@@ -583,6 +585,7 @@ code {
   line-height: 1.5;
 }
 .error-panel { border-color: rgb(255 119 136 / 35%); background: rgb(255 119 136 / 9%); color: #ffb7c0; }
+.error-panel small { display: block; margin-top: .35rem; overflow-wrap: anywhere; color: var(--text-secondary); }
 .success-panel {
   padding: .75rem;
   border: 1px solid rgb(93 213 167 / 35%);
