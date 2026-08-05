@@ -472,6 +472,32 @@ describe("SwapPage", () => {
     expect(mocks.poolStateRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
+  it("surfaces the Set Router as the execution and exact approval target during review", async () => {
+    const review = await enterAmount("10");
+    fireEvent.click(review);
+
+    const routing = await screen.findByLabelText("Router execution target");
+    expect(routing).toHaveTextContent("Execution target");
+    expect(routing).toHaveTextContent("Exact approval spender");
+    expect(routing).toHaveTextContent("Set Router");
+    expect(routing).toHaveTextContent(trustedRouterAddress);
+    expect(screen.getByText(/allowance spender is the Set Router, never the Set contract/i)).toBeInTheDocument();
+  });
+
+  it("refreshes the consumed exact Router allowance to zero after a successful swap", async () => {
+    mocks.sendTransaction.mockReset().mockImplementation(() => {
+      mocks.allowances.USDT = 0n;
+      return Promise.resolve(swapHash);
+    });
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    await screen.findByRole("button", { name: "New swap" });
+    const lastRefetch = mocks.chainRefetch.mock.results.at(-1)?.value as Promise<{ data: ReturnType<typeof chainData> }>;
+    const refreshed = await lastRefetch;
+    expect(refreshed.data.assets.USDT.allowance).toBe(0n);
+  });
+
   it("never opens an approval or submission prompt for an invalid firm authorization", async () => {
     mocks.requestFirmSwapQuote.mockReset().mockImplementation(async (input: Parameters<typeof firm>[0]) => {
       const invalid = await firm(input);
@@ -618,6 +644,33 @@ describe("SwapPage", () => {
     expect(mocks.sendTransaction).toHaveBeenCalled();
   });
 
+  it("approves a changed final firm input exactly before sequential Router execution", async () => {
+    mocks.firmInputDelta = 1n * 10n ** 18n;
+    render(<MemoryRouter><SwapPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Exact output" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "You receive amount" }), { target: { value: "20" } });
+    const review = await screen.findByRole("button", { name: "Review swap" });
+    await waitFor(() => expect(review).toBeEnabled());
+    await executeReviewedSwap(review);
+
+    await screen.findByRole("button", { name: "New swap" });
+    expect(mocks.writeContract).toHaveBeenCalledWith(expect.objectContaining({
+      args: [trustedRouterAddress, 11n * 10n ** 18n],
+    }));
+    expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]).toBeLessThan(mocks.writeContract.mock.invocationCallOrder[0]);
+    expect(mocks.writeContract.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendTransaction.mock.invocationCallOrder[0]);
+  });
+
+  it("never sends when the confirmed Router allowance remains below the final firm input", async () => {
+    mocks.writeContract.mockReset().mockResolvedValue(approvalHash);
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/required allowance is not available/i);
+    expect(mocks.requestFirmSwapQuote).toHaveBeenCalledTimes(1);
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
+  });
+
   it("skips approval for native input and submits the API's exact native transaction value", async () => {
     render(<MemoryRouter><SwapPage /></MemoryRouter>);
     fireEvent.click(screen.getByRole("combobox", { name: "You pay asset" }));
@@ -691,7 +744,10 @@ describe("SwapPage", () => {
     const review = await enterAmount("10");
     await executeReviewedSwap(review);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Rejected in wallet/i);
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent(/Rejected in wallet/i);
+    expect(error).toHaveTextContent(/Set Router target/i);
+    expect(error).toHaveTextContent(trustedRouterAddress);
     expect(screen.getByRole("button", { name: "Try swap again" })).toBeEnabled();
     expect(mocks.markActivityFailed).toHaveBeenCalledWith("activity-1", expect.any(String), undefined);
   });
