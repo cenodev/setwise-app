@@ -12,6 +12,7 @@ export type FaucetTokenMetadata = {
 export const bscTestnetDeployment = deployment as {
   chainId: number;
   faucet: { address: Address; cooldownSeconds: string };
+  router: { address: Address };
   tokens: FaucetTokenMetadata[];
   wrappedNative: FaucetTokenMetadata;
   testBnbFaucetUrl: string;

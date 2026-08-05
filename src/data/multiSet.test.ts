@@ -3,7 +3,7 @@ import type { Address } from "viem";
 import { setQueryKeys } from "./queryKeys";
 import type { Pool, PoolState } from "./rfq/deposits";
 import { requestDepositQuote, requestFirmDepositQuote } from "./rfq/deposits";
-import { requestSwapQuote, requestFirmSwapQuote } from "./rfq/swaps";
+import { requestSwapQuote, requestFirmSwapQuote, trustedRouterAddress } from "./rfq/swaps";
 import { requestWithdrawalQuote, requestFirmWithdrawalQuote } from "./rfq/withdrawals";
 import { getPools, type PoolSummary } from "./rfq/pools";
 import { resolveSet } from "./sets";
@@ -344,37 +344,60 @@ describe("two-Set isolation", () => {
 
   describe("firm quote cross-contamination guard", () => {
     it("sends distinct firm swap quote poolIds for each Set", async () => {
-      const firmSwap = (poolId: string) => ({
-        firmQuoteId: `0x${"1".repeat(64)}`,
-        quoteType: "firm",
-        status: "executable",
-        operation: "swap",
-        intent: "exact-input",
-        createdAt: at,
-        mustSubmitBy: until,
-        executionDeadline: "1784462410",
-        stateSnapshot: {
-          poolId, chainId: 97, poolAddress: poolId === SET_A ? poolAddressA : poolAddressB,
-          blockNumber: "100", blockHash: `0x${"2".repeat(64)}`, blockTimestamp: "1784462400",
-        },
-        input: { asset: "A", amount: "10", atomicAmount: "10000000000000000000", decimals: 18 },
-        output: { asset: "B", amount: "9.9", atomicAmount: "9900000000000000000", decimals: 18 },
-        venues: [],
-        guard: { packedDeadline: "1", offchainInputBalance: "1", offchainOutputBalance: "1", inputTolerancePpm: "5000", outputTolerancePpm: "5000", maximumInputBalance: "1", minimumOutputBalance: "1" },
-        authorization: {
-          signer: account, digest: `0x${"1".repeat(64)}`, signature: "0x1234",
-          typedData: {
-            domain: { name: "SetwisePool", version: "2.0.0", chainId: 97, verifyingContract: poolId === SET_A ? poolAddressA : poolAddressB },
-            primaryType: "SwapQuote",
-            types: { SwapQuote: [{ name: "payer", type: "address" }] },
-            message: { payer: account, inputAsset: assetA, outputAsset: assetB, inputAmount: "10000000000000000000", outputAmount: "9900000000000000000", quoteId: `0x${"1".repeat(64)}`, deadline: "1", recipient: account },
+      const firmSwap = (poolId: string) => {
+        const poolAddress = poolId === SET_A ? poolAddressA : poolAddressB;
+        const quoteId = `0x${"1".repeat(64)}`;
+        const routerSwap = {
+          pool: poolAddress, assetIn: assetA, assetOut: assetB, nativeIn: false, nativeOut: false,
+          amountIn: "10000000000000000000", amountOut: "9900000000000000000", quoteId, deadline: "1",
+          recipient: account, signature: "0x1234", auxiliaryData: "0x",
+        };
+        return {
+          firmQuoteId: quoteId,
+          quoteType: "firm",
+          execution: "router",
+          status: "executable",
+          operation: "swap",
+          intent: "exact-input",
+          createdAt: at,
+          mustSubmitBy: until,
+          executionDeadline: "1784462410",
+          stateSnapshot: {
+            poolId, chainId: 97, poolAddress,
+            blockNumber: "100", blockHash: `0x${"2".repeat(64)}`, blockTimestamp: "1784462400",
           },
-        },
-        transaction: { chainId: 97, to: poolId === SET_A ? poolAddressA : poolAddressB, data: "0x1234", value: "0", method: "swapExactAssetForAsset" },
-        requirements: { sender: account, approvals: [] },
-        warnings: [],
-        persisted: true,
-      });
+          input: { asset: "A", amount: "10", atomicAmount: "10000000000000000000", decimals: 18 },
+          output: { asset: "B", amount: "9.9", atomicAmount: "9900000000000000000", decimals: 18 },
+          venues: [],
+          guard: { packedDeadline: "1", offchainInputBalance: "1", offchainOutputBalance: "1", inputTolerancePpm: "5000", outputTolerancePpm: "5000", maximumInputBalance: "1", minimumOutputBalance: "1" },
+          authorization: {
+            signer: account, keyVersion: "current", signatureType: "eoa", digest: quoteId, signature: "0x1234",
+            typedData: {
+              domain: { name: "SetwisePool", version: "2.0.0", chainId: 97, verifyingContract: poolAddress },
+              primaryType: "SwapQuote",
+              types: { SwapQuote: [{ name: "payer", type: "address" }] },
+              message: { payer: trustedRouterAddress, inputAsset: assetA, outputAsset: assetB, inputAmount: "10000000000000000000", outputAmount: "9900000000000000000", quoteId, deadline: "1", recipient: account },
+            },
+            router: {
+              address: trustedRouterAddress,
+              funder: account,
+              typedData: {
+                domain: { name: "SetwiseRouter", version: "1", chainId: 97, verifyingContract: trustedRouterAddress },
+                primaryType: "SetwiseAuthorization",
+                types: { SetwiseAuthorization: [{ name: "chainId", type: "uint256" }] },
+                message: { chainId: 97, router: trustedRouterAddress, funder: account, ...routerSwap },
+              },
+              signatureType: "eoa",
+              digest: quoteId,
+              signature: "0x5678",
+            },
+          },
+          transaction: { chainId: 97, to: trustedRouterAddress, data: "0x1234", value: "0", method: "swapSetwise", adapter: { funder: account, swap: routerSwap } },
+          requirements: { sender: account, approvals: [] },
+          warnings: [],
+          persisted: true,
+        };
+      };
       const fetchMock = vi.fn()
         .mockResolvedValueOnce(response(firmSwap(SET_A)))
         .mockResolvedValueOnce(response(firmSwap(SET_B)));
@@ -387,6 +410,9 @@ describe("two-Set isolation", () => {
       const bodyB = requestBody(fetchMock, 1);
       expect(bodyA.poolId).toBe(SET_A);
       expect(bodyB.poolId).toBe(SET_B);
+      expect(bodyA.execution).toBe("router");
+      expect(bodyA.router).toBe(trustedRouterAddress);
+      expect(bodyB.router).toBe(trustedRouterAddress);
     });
 
     it("sends distinct firm withdrawal quote poolIds for each Set", async () => {

@@ -57,7 +57,7 @@ export function validateIndicativeSwap(input: {
   const { specifiedAmountAtomic, intent, inputAsset, outputAsset, poolAddress, poolId, quote, chainId } = input;
   if (quote.stateSnapshot.chainId !== chainId) throw new Error("Indicative quote targets the wrong chain");
   if (quote.stateSnapshot.poolId !== poolId || !isAddressEqual(quote.stateSnapshot.poolAddress, poolAddress)) {
-    throw new Error("Indicative quote targets an unexpected pool");
+    throw new Error("Indicative quote targets an unexpected Set");
   }
   if (quote.stateSnapshot.tradingPaused) throw new Error("Trading paused while pricing this swap");
   if (quote.intent !== intent) throw new Error(`Indicative quote is not ${intent}`);
@@ -90,10 +90,11 @@ export function validateFirmSwap(input: {
   plannedApprovalAmount?: bigint;
   poolAddress: Address;
   poolId: string;
+  routerAddress: Address;
 }): void {
   const {
     address, allowance, balance, chainId, firm, indicative, inputAsset, inputNative,
-    outputAsset, outputNative, plannedApprovalAmount, poolAddress, poolId,
+    outputAsset, outputNative, plannedApprovalAmount, poolAddress, poolId, routerAddress,
   } = input;
   const firmInput = BigInt(firm.input.atomicAmount);
   const firmOutput = BigInt(firm.output.atomicAmount);
@@ -106,12 +107,12 @@ export function validateFirmSwap(input: {
   if (firm.intent !== indicative.intent) throw new Error("Firm quote intent does not match the reviewed swap");
   if (firm.stateSnapshot.poolId !== poolId
     || !isAddressEqual(firm.stateSnapshot.poolAddress, poolAddress)
-    || !isAddressEqual(firm.transaction.to, poolAddress)
+    || !isAddressEqual(firm.transaction.to, routerAddress)
     || !isAddressEqual(firm.authorization.typedData.domain.verifyingContract, poolAddress)) {
-    throw new Error("Firm quote targets an unexpected pool");
+    throw new Error("Firm quote targets an unexpected Set");
   }
   if (!isAddressEqual(firm.requirements.sender, address)
-    || !isAddressEqual(message.payer, address)
+    || !isAddressEqual(message.payer, routerAddress)
     || !isAddressEqual(message.recipient, address)) {
     throw new Error("Firm quote requires a different sender or recipient");
   }
@@ -130,10 +131,10 @@ export function validateFirmSwap(input: {
   }
   if (balance < firmInput) throw new Error(`Insufficient ${inputNative ? "BNB" : inputAsset.symbol} balance`);
 
-  const expectedMethod = inputNative
-    ? "swapExactNativeForAsset"
-    : outputNative ? "swapExactAssetForNative" : "swapExactAssetForAsset";
-  if (firm.transaction.method !== expectedMethod) throw new Error("Firm quote native mode does not match the reviewed swap");
+  if (firm.transaction.adapter.swap.nativeIn !== inputNative
+    || firm.transaction.adapter.swap.nativeOut !== outputNative) {
+    throw new Error("Firm quote native mode does not match the reviewed swap");
+  }
   const expectedValue = inputNative ? firmInput : 0n;
   if (BigInt(firm.transaction.value) !== expectedValue) throw new Error("Firm quote transaction value is incorrect");
 
@@ -143,7 +144,7 @@ export function validateFirmSwap(input: {
     if (firm.requirements.approvals.length !== 1) throw new Error("Firm quote approval requirement is missing");
     const approval = firm.requirements.approvals[0];
     if (!isAddressEqual(approval.token, inputAsset.address)
-      || !isAddressEqual(approval.spender, poolAddress)
+      || !isAddressEqual(approval.spender, routerAddress)
       || BigInt(approval.minimumAtomicAmount) !== firmInput) {
       throw new Error("Firm quote approval requirement does not match the reviewed swap");
     }
@@ -171,10 +172,10 @@ export function buildAtomicSwapCalls(input: {
   firm: FirmSwapQuote;
   inputAsset: PoolAsset;
   now?: number;
-  poolAddress: Address;
+  routerAddress: Address;
 }): AtomicCall[] {
-  const { firm, inputAsset, poolAddress } = input;
-  if (firm.transaction.method === "swapExactNativeForAsset") {
+  const { firm, inputAsset, routerAddress } = input;
+  if (firm.transaction.adapter.swap.nativeIn) {
     throw new Error("Native-input swaps do not require an atomic approval batch");
   }
   return buildAtomicApprovalCalls({
@@ -182,7 +183,7 @@ export function buildAtomicSwapCalls(input: {
     mustSubmitBy: firm.mustSubmitBy,
     now: input.now,
     requirements: firm.requirements.approvals,
-    spender: poolAddress,
+    spender: routerAddress,
     transaction: firm.transaction,
   });
 }
