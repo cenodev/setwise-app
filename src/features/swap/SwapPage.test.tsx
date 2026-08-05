@@ -5,6 +5,7 @@ import { privateKeyToAccount } from "viem/accounts";
 
 import { setwiseRouterAbi } from "../../data/chain/abis";
 import { trustedRouterAddress } from "../../data/rfq/swaps";
+import { truncateAddress } from "../../lib/format";
 import { SwapPage } from "./SwapPage";
 
 type AtomicTestCall = { data: `0x${string}`; to: `0x${string}`; value: bigint };
@@ -485,11 +486,33 @@ describe("SwapPage", () => {
     fireEvent.click(review);
 
     const routing = await screen.findByLabelText("Router execution target");
+    expect(routing).toHaveTextContent("Set");
+    expect(routing).toHaveTextContent(pool.id);
     expect(routing).toHaveTextContent("Execution target");
     expect(routing).toHaveTextContent("Exact approval spender");
     expect(routing).toHaveTextContent("Set Router");
-    expect(routing).toHaveTextContent(trustedRouterAddress);
+    expect(routing).not.toHaveTextContent(trustedRouterAddress);
+    expect(routing).toHaveTextContent(truncateAddress(trustedRouterAddress));
+    const routerLinks = within(routing).getAllByRole("link", { name: new RegExp(trustedRouterAddress, "i") });
+    expect(routerLinks.length).toBeGreaterThanOrEqual(1);
+    expect(routerLinks[0]).toHaveAttribute("href", expect.stringContaining(trustedRouterAddress));
     expect(screen.getByText(/allowance spender is the Set Router, never the Set contract/i)).toBeInTheDocument();
+  });
+
+  it("records swap activity with the selected Set and Router hash exactly once on success", async () => {
+    mocks.allowances.USDT = 1_000n * 10n ** 18n;
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    await screen.findByRole("button", { name: "New swap" });
+    expect(mocks.createActivity).toHaveBeenCalledTimes(1);
+    expect(mocks.createActivity).toHaveBeenCalledWith(expect.objectContaining({ setId: pool.id }));
+    expect(mocks.saveActivity).toHaveBeenCalledTimes(1);
+    expect(mocks.markActivityPending).toHaveBeenCalledTimes(1);
+    expect(mocks.markActivityPending).toHaveBeenCalledWith("activity-1", swapHash);
+    expect(mocks.markActivitySuccessful).toHaveBeenCalledTimes(1);
+    expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("activity-1", swapHash);
+    expect(screen.getByText(/Swap confirmed on chain through the Set Router/i)).toBeInTheDocument();
   });
 
   it("refreshes the consumed exact Router allowance to zero after a successful swap", async () => {
@@ -745,7 +768,8 @@ describe("SwapPage", () => {
     const error = await screen.findByRole("alert");
     expect(error).toHaveTextContent(/Rejected in wallet/i);
     expect(error).toHaveTextContent(/Set Router target/i);
-    expect(error).toHaveTextContent(trustedRouterAddress);
+    expect(error).toHaveTextContent(truncateAddress(trustedRouterAddress));
+    expect(error.querySelector("a")).toHaveAttribute("href", expect.stringContaining(trustedRouterAddress));
     expect(screen.getByRole("button", { name: "Try swap again" })).toBeEnabled();
     expect(mocks.markActivityFailed).toHaveBeenCalledWith("activity-1", expect.any(String), undefined);
   });
