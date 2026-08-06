@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { isAddressEqual, type Hash } from "viem";
+import { isAddressEqual, type Address, type Hash } from "viem";
 import {
   useAccount,
   useCapabilities,
@@ -13,12 +13,14 @@ import {
 } from "wagmi";
 
 import { requiredChainId } from "../../config/chains";
+import { bscTestnetDeployment } from "../../config/deployment";
 import { TokenIdentity, tokenDisplay } from "../../components/TokenIdentity";
 import { TokenSelector } from "../../components/TokenSelector";
 import { runtimeConfig } from "../../config/env";
 import { useTokenMetadata } from "../../data/tokens";
 import { setQueryKeys } from "../../data/queryKeys";
 import { erc20Abi } from "../../data/chain/abis";
+import { readSwapChainState, type SwapChainState } from "../../data/chain/swapState";
 import { getPool, getPoolState, RfqApiError } from "../../data/rfq/deposits";
 import { getPools } from "../../data/rfq/pools";
 import { resolveSet } from "../../data/sets";
@@ -54,10 +56,17 @@ import {
   validateFirmSwap,
   validateIndicativeSwap,
 } from "./model";
+import {
+  assertSwapPreflightContext,
+  atomicApprovalPreflightNotice,
+  preflightRouterSwap,
+  statefulAtomicBatchPreflightAvailable,
+  type SwapPreflightContext,
+} from "./preflight";
 
-type AssetChainState = { allowance: bigint; balance: bigint };
-type ChainSwapState = { assets: Record<string, AssetChainState>; nativeBalance: bigint };
 type SwapIntent = SwapQuote["intent"];
+
+const routerAddress = bscTestnetDeployment.router.address;
 
 type TransactionStage =
   | "editing"
@@ -66,6 +75,7 @@ type TransactionStage =
   | "approval-wallet"
   | "approval-confirming"
   | "firm-quote"
+  | "preflight"
   | "wallet"
   | "confirming"
   | "success"
@@ -80,8 +90,12 @@ type TransactionView = { approvalHash?: Hash; error?: string; hash?: Hash; stage
 
 function useOnlineStatus() {
   const [online, setOnline] = useState(() => navigator.onLine);
+  const onlineRef = useRef(online);
   useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
+    const update = () => {
+      onlineRef.current = navigator.onLine;
+      setOnline(onlineRef.current);
+    };
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
     return () => {
@@ -89,7 +103,7 @@ function useOnlineStatus() {
       window.removeEventListener("offline", update);
     };
   }, []);
-  return online;
+  return { online, onlineRef };
 }
 
 function errorMessage(error: unknown): string {
@@ -116,6 +130,48 @@ function stageForError(message: string, approving: boolean): TransactionStage {
   return approving ? "approval-failed" : "error";
 }
 
+function RouterTarget({ address }: { address: Address }) {
+  const short = truncateAddress(address);
+  return (
+    <strong className="router-target">
+      Set Router ·{" "}
+      <a
+        href={`${runtimeConfig.explorerUrl}/address/${address}`}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`View verified Set Router ${address} in explorer`}
+        title={address}
+      >
+        {short}
+      </a>
+    </strong>
+  );
+}
+
+function executionStatusMessage(stage: TransactionStage, atomic: boolean): string | null {
+  switch (stage) {
+    case "allowance-check": return "Checking Router allowance before requesting an executable quote.";
+    case "approval-wallet": return "Approve the exact input amount for the Set Router in your wallet.";
+    case "approval-confirming": return "Waiting for Set Router approval confirmation on chain.";
+    case "firm-quote": return "Requesting a firm quote bound to the selected Set and Set Router.";
+    case "preflight": return "Simulating the swapSetwise call on the Set Router before opening your wallet.";
+    case "wallet": return atomic
+      ? "Confirm the atomic approval-and-swap batch in your wallet."
+      : "Confirm the Set Router swap in your wallet.";
+    case "confirming": return atomic
+      ? "Confirming the atomic swap batch on chain."
+      : "Confirming the Set Router swap on chain.";
+    case "success": return "Swap confirmed on chain through the Set Router.";
+    case "reverted": return "The Set Router swap reverted on chain. Review the explorer transaction before retrying.";
+    case "expired": return "The executable quote expired. Refresh the estimate and review again.";
+    case "rejected": return "Swap was rejected in the wallet before submission.";
+    case "approval-failed": return "Token approval for the Set Router was rejected or failed.";
+    case "status-error": return "Could not confirm the atomic swap batch status. Retry before submitting again.";
+    case "error": return null;
+    default: return null;
+  }
+}
+
 function transactionLabel(stage: TransactionStage, needsApproval: boolean, atomic: boolean): string {
   switch (stage) {
     case "review": return needsApproval
@@ -125,6 +181,7 @@ function transactionLabel(stage: TransactionStage, needsApproval: boolean, atomi
     case "approval-wallet": return "Approve in wallet…";
     case "approval-confirming": return "Confirming approval…";
     case "firm-quote": return "Getting executable quote…";
+    case "preflight": return "Simulating Set Router swap…";
     case "wallet": return atomic ? "Confirm atomic swap in wallet…" : "Confirm swap in wallet…";
     case "confirming": return atomic ? "Confirming atomic swap…" : "Confirming swap…";
     case "success": return "New swap";
@@ -153,7 +210,7 @@ export function SwapPage() {
   const { sendCallsAsync } = useSendCalls();
   const { sendTransactionAsync } = useSendTransaction();
   const { writeContractAsync } = useWriteContract();
-  const online = useOnlineStatus();
+  const { online, onlineRef } = useOnlineStatus();
   const tokenMetadataQuery = useTokenMetadata();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlSetId = searchParams.get("set") ?? "";
@@ -193,7 +250,7 @@ export function SwapPage() {
   });
   const quoteSequence = useRef(0);
   const connectionRef = useRef({ address, chainId, online });
-  useEffect(() => {
+  useLayoutEffect(() => {
     connectionRef.current = { address, chainId, online };
   }, [address, chainId, online]);
 
@@ -261,25 +318,14 @@ export function SwapPage() {
   const exactOutputSupported = Boolean(poolQuery.data?.capabilities?.swaps.exactOutput);
 
   const chainQuery = useQuery({
-    queryKey: ["swap-chain", poolQuery.data?.id, address, poolQuery.data?.contract.address, ...assets.map((asset) => asset.address)],
+    queryKey: ["swap-chain", poolQuery.data?.id, address, poolQuery.data?.contract.address, routerAddress, ...assets.map((asset) => asset.address)],
     enabled: Boolean(address && publicClient && poolQuery.data),
-    queryFn: async (): Promise<ChainSwapState> => {
-      if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and pool are required");
+    queryFn: async (): Promise<SwapChainState> => {
+      if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and Set are required");
       if (poolQuery.data.id !== resolvedPoolId || poolQuery.data.chain.id !== requiredChainId) {
-        throw new Error("Pool discovery does not match the selected Set and chain");
+        throw new Error("Set discovery does not match the selected Set and chain");
       }
-      const poolAddress = poolQuery.data.contract.address;
-      const [nativeBalance, tokenStates] = await Promise.all([
-        publicClient.getBalance({ address }),
-        Promise.all(assets.map(async (asset) => {
-          const [balance, allowance] = await Promise.all([
-            publicClient.readContract({ address: asset.address, abi: erc20Abi, functionName: "balanceOf", args: [address] }),
-            publicClient.readContract({ address: asset.address, abi: erc20Abi, functionName: "allowance", args: [address, poolAddress] }),
-          ]);
-          return [asset.id, { allowance, balance }] as const;
-        })),
-      ]);
-      return { assets: Object.fromEntries(tokenStates), nativeBalance };
+      return readSwapChainState({ account: address, assets, client: publicClient, routerAddress });
     },
   });
 
@@ -313,9 +359,33 @@ export function SwapPage() {
   const insufficientBalance = requiredInputAtomic > maximumInput;
   const needsApproval = !effectiveInputNative && requiredInputAtomic > allowance;
   const atomicAvailable = atomicFallbackConnection !== connectionKey && supportsAtomicBatch(capabilityQuery.data);
-  const atomicExperience = needsApproval && atomicAvailable;
+  const atomicPreflightLimited = needsApproval && atomicAvailable && !statefulAtomicBatchPreflightAvailable;
+  const atomicExperience = needsApproval && atomicAvailable && statefulAtomicBatchPreflightAvailable;
   const atomicTransaction = atomicExperience || Boolean(batchId);
-  const busy = ["allowance-check", "approval-wallet", "approval-confirming", "firm-quote", "wallet", "confirming"].includes(transaction.stage);
+  const busy = ["allowance-check", "approval-wallet", "approval-confirming", "firm-quote", "preflight", "wallet", "confirming"].includes(transaction.stage);
+
+  const livePreflightContext: SwapPreflightContext = {
+    account: address,
+    chainId,
+    online,
+    poolAddress: poolQuery.data?.contract.address,
+    poolId: resolvedPoolId,
+    quoteId: quote?.indicativeQuoteId ?? "",
+    routerAddress,
+  };
+  const preflightContextRef = useRef(livePreflightContext);
+  useLayoutEffect(() => {
+    preflightContextRef.current = {
+      account: address,
+      chainId,
+      online,
+      poolAddress: poolQuery.data?.contract.address,
+      poolId: resolvedPoolId,
+      quoteId: quote?.indicativeQuoteId ?? "",
+      routerAddress,
+    };
+  }, [address, chainId, online, poolQuery.data?.contract.address, quote?.indicativeQuoteId,
+    resolvedPoolId]);
 
   const clearExecutable = useCallback(() => {
     setFirmQuote(null);
@@ -419,7 +489,7 @@ export function SwapPage() {
     previousContext.current = executionContext;
     const reset = window.setTimeout(() => {
       setFirmQuote(null);
-      if (["review", "approval-wallet", "approval-confirming", "firm-quote"].includes(transaction.stage)) {
+      if (["review", "approval-wallet", "approval-confirming", "firm-quote", "preflight"].includes(transaction.stage)) {
         setTransaction({ stage: "error", error: "Wallet, network, connectivity, or Set state changed. Review again." });
       }
     }, 0);
@@ -479,6 +549,7 @@ export function SwapPage() {
 
   async function executeSwap() {
     if (!canReview || !quote || !address || !publicClient || !poolQuery.data || !inputAsset || !outputAsset) return;
+    const reviewedContext = preflightContextRef.current;
     setTransaction({ stage: "allowance-check" });
     setFirmQuote(null);
     setBatchId(undefined);
@@ -489,6 +560,8 @@ export function SwapPage() {
       const [latestChain, latestPoolState] = await Promise.all([chainQuery.refetch(), poolStateQuery.refetch()]);
       if (!latestChain.data) throw new Error("Wallet balances are unavailable. Retry the chain read.");
       if (latestPoolState.data?.trading.paused) throw new Error("Trading is paused. Wait for swaps to resume.");
+      const quoteSigner = latestPoolState.data?.contract?.quoteSigner;
+      if (!quoteSigner) throw new Error("The Set quote signer is unavailable. Executable swaps are disabled.");
       const latestBalance = effectiveInputNative
         ? latestChain.data.nativeBalance
         : (latestChain.data.assets[inputAsset.id]?.balance ?? 0n);
@@ -499,16 +572,17 @@ export function SwapPage() {
       if (latestChain.data.nativeBalance < gasReserve) throw new Error("Insufficient BNB for gas");
 
       let latestAllowance = effectiveInputNative ? 0n : (latestChain.data.assets[inputAsset.id]?.allowance ?? 0n);
-      let useAtomicBatch = false;
-      if (!effectiveInputNative && latestAllowance < quotedInputAtomic
-        && atomicFallbackConnection !== connectionKey) {
-        const latestCapabilities = await capabilityQuery.refetch();
-        useAtomicBatch = supportsAtomicBatch(latestCapabilities.data);
-      }
+      // The connected RPC cannot apply an approval while simulating the following Router call.
+      // Approval-required swaps therefore use the sequential path and simulate after approval.
+      const useAtomicBatch = statefulAtomicBatchPreflightAvailable
+        && !effectiveInputNative
+        && latestAllowance < quotedInputAtomic
+        && atomicFallbackConnection !== connectionKey
+        && supportsAtomicBatch(capabilityQuery.data);
 
       const requestFirm = async () => {
         const currentConnection = connectionRef.current;
-        if (!currentConnection.online || currentConnection.chainId !== requiredChainId
+        if (!onlineRef.current || !currentConnection.online || currentConnection.chainId !== requiredChainId
           || !currentConnection.address || !isAddressEqual(currentConnection.address, address)) {
           throw new Error("Wallet, network, or connectivity changed before the executable quote request");
         }
@@ -539,7 +613,7 @@ export function SwapPage() {
           }
           throw new Error(`Insufficient ${inputAsset.symbol} balance`);
         }
-        validateFirmSwap({
+        await validateFirmSwap({
           address,
           allowance: latestAllowance,
           balance: latestBalance,
@@ -553,11 +627,13 @@ export function SwapPage() {
           plannedApprovalAmount: firmInputAtomic,
           poolAddress: poolQuery.data.contract.address,
           poolId: poolQuery.data.id,
+          quoteSigner,
+          routerAddress,
         });
         const calls = buildAtomicSwapCalls({
           firm,
           inputAsset,
-          poolAddress: poolQuery.data.contract.address,
+          routerAddress,
         });
         setFirmQuote(firm);
 
@@ -610,36 +686,19 @@ export function SwapPage() {
         return;
       }
 
-      if (!effectiveInputNative && latestAllowance < quotedInputAtomic) {
-        approving = true;
-        setTransaction({ stage: "approval-wallet" });
-        const approvalHash = await writeContractAsync({
-          account: address,
-          address: inputAsset.address,
-          abi: erc20Abi,
-          functionName: "approve",
-          args: [poolQuery.data.contract.address, quotedInputAtomic],
-        });
-        setTransaction({ stage: "approval-confirming", approvalHash });
-        const approvalReceipt = await publicClient.waitForTransactionReceipt({ hash: approvalHash });
-        if (approvalReceipt.status !== "success") throw new Error("Token approval reverted on chain");
-        const approvedChain = await chainQuery.refetch();
-        latestAllowance = approvedChain.data?.assets[inputAsset.id]?.allowance ?? 0n;
-        if (latestAllowance < quotedInputAtomic) throw new Error("Approval confirmed, but the required allowance is not available yet. Retry the chain read.");
-        approving = false;
-      }
-
       const firm = await requestFirm();
       const firmInputAtomic = BigInt(firm.input.atomicAmount);
-      if (intent === "exact-output"
-        && (firmInputAtomic > maximumSwapInput(latestBalance, effectiveInputNative, gasReserve)
-          || (!effectiveInputNative && firmInputAtomic > latestAllowance))) {
-        setQuote(null);
-        setQuoteRequestKey("");
-        setQuoteRefresh((value) => value + 1);
-        throw new Error("The required input changed while preparing the exact-output swap. Review the refreshed estimate.");
+      if (firmInputAtomic > maximumSwapInput(latestBalance, effectiveInputNative, gasReserve)) {
+        if (intent === "exact-output") {
+          setQuote(null);
+          setQuoteRequestKey("");
+          setQuoteRefresh((value) => value + 1);
+          throw new Error("The required input changed while preparing the exact-output swap. Review the refreshed estimate.");
+        }
+        throw new Error(`Insufficient ${effectiveInputNative ? "BNB after gas reserve" : inputAsset.symbol} balance`);
       }
-      validateFirmSwap({
+      const needsFirmApproval = !effectiveInputNative && latestAllowance < firmInputAtomic;
+      await validateFirmSwap({
         address,
         allowance: latestAllowance,
         balance: latestBalance,
@@ -650,13 +709,84 @@ export function SwapPage() {
         inputNative: effectiveInputNative,
         outputAsset,
         outputNative: effectiveOutputNative,
+        plannedApprovalAmount: needsFirmApproval ? firmInputAtomic : undefined,
         poolAddress: poolQuery.data.contract.address,
         poolId: poolQuery.data.id,
+        quoteSigner,
+        routerAddress,
       });
+
+      if (needsFirmApproval) {
+        approving = true;
+        setTransaction({ stage: "approval-wallet" });
+        const approvalHash = await writeContractAsync({
+          account: address,
+          address: inputAsset.address,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [routerAddress, firmInputAtomic],
+        });
+        setTransaction({ stage: "approval-confirming", approvalHash });
+        const approvalReceipt = await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+        if (approvalReceipt.status !== "success") throw new Error("Token approval reverted on chain");
+        approving = false;
+      }
+
+      setTransaction({ stage: "preflight" });
+      assertSwapPreflightContext(reviewedContext, { ...preflightContextRef.current, online: onlineRef.current });
+      const [preflightChain, preflightPoolState] = await Promise.all([chainQuery.refetch(), poolStateQuery.refetch()]);
+      assertSwapPreflightContext(reviewedContext, { ...preflightContextRef.current, online: onlineRef.current });
+      if (!preflightChain.data) throw new Error("Wallet balances are unavailable during Set Router preflight. Retry.");
+      if (!preflightPoolState.data) throw new Error("Set state is unavailable during Router preflight. Retry.");
+      if (preflightPoolState.data.chainId !== requiredChainId
+        || preflightPoolState.data.poolId !== poolQuery.data.id
+        || !isAddressEqual(preflightPoolState.data.poolAddress, poolQuery.data.contract.address)) {
+        throw new Error("Selected Set state changed during Router preflight. Review again.");
+      }
+
+      const preflightBalance = effectiveInputNative
+        ? preflightChain.data.nativeBalance
+        : (preflightChain.data.assets[inputAsset.id]?.balance ?? 0n);
+      latestAllowance = effectiveInputNative ? 0n : (preflightChain.data.assets[inputAsset.id]?.allowance ?? 0n);
+      await validateFirmSwap({
+        address,
+        allowance: latestAllowance,
+        balance: preflightBalance,
+        chainId: requiredChainId,
+        firm,
+        indicative: quote,
+        inputAsset,
+        inputNative: effectiveInputNative,
+        outputAsset,
+        outputNative: effectiveOutputNative,
+        poolAddress: poolQuery.data.contract.address,
+        poolId: poolQuery.data.id,
+        quoteSigner,
+        routerAddress,
+      });
+      await preflightRouterSwap({
+        account: address,
+        allowance: latestAllowance,
+        balance: preflightBalance,
+        chainId: chainId ?? 0,
+        client: publicClient,
+        expectedChainId: requiredChainId,
+        firmInput: firmInputAtomic,
+        gasReserve,
+        inputNative: effectiveInputNative,
+        inputSymbol: inputAsset.symbol,
+        mustSubmitBy: firm.mustSubmitBy,
+        nativeBalance: preflightChain.data.nativeBalance,
+        routerAddress,
+        swapsPaused: preflightPoolState.data.trading.paused
+          || preflightPoolState.data.trading.swaps === "paused",
+        transaction: firm.transaction,
+      });
+      assertSwapPreflightContext(reviewedContext, { ...preflightContextRef.current, online: onlineRef.current });
       setFirmQuote(firm);
 
       const beforeWallet = connectionRef.current;
-      if (!beforeWallet.online || beforeWallet.chainId !== requiredChainId
+      if (!onlineRef.current || !beforeWallet.online || beforeWallet.chainId !== requiredChainId
         || !beforeWallet.address || !isAddressEqual(beforeWallet.address, address)) {
         throw new Error("Wallet, network, or connectivity changed before wallet confirmation");
       }
@@ -803,7 +933,7 @@ export function SwapPage() {
     && (poolStateQuery.data.poolId !== poolQuery.data.id
       || poolStateQuery.data.chainId !== requiredChainId
       || !isAddressEqual(poolStateQuery.data.poolAddress, poolQuery.data.contract.address))
-    ? new Error("Pool state does not match the selected Set and chain")
+    ? new Error("Set state does not match the selected Set and chain")
     : null;
   const loadError = poolQuery.error ?? poolStateQuery.error ?? chainQuery.error ?? stateConfigurationError;
   if (loadError) {
@@ -835,6 +965,7 @@ export function SwapPage() {
     ?? (!quoteFresh ? "The estimate is stale and refreshing" : null)
     ?? quoteError;
   const displayQuote = firmQuote ?? quote;
+  const executionStatus = executionStatusMessage(transaction.stage, atomicTransaction);
 
   return (
     <div className="swap-layout">
@@ -931,12 +1062,25 @@ export function SwapPage() {
         </div>
 
         {transaction.stage === "review" && quote && (
-          <div className="review-panel" role="status">
-            <div><p className="eyebrow">Review swap</p><strong>{quote.input.amount} {effectiveInputNative ? "BNB" : inputDisplay?.symbol} → {quote.output.amount} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</strong></div>
+          <div className="review-panel" role="status" aria-label="Swap review">
+            <div>
+              <p className="eyebrow">Review swap</p>
+              <strong>{quote.input.amount} {effectiveInputNative ? "BNB" : inputDisplay?.symbol} → {quote.output.amount} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</strong>
+            </div>
             <button className="secondary-button" type="button" onClick={() => setTransaction({ stage: "editing" })}>Edit</button>
-            <p>{atomicExperience
-              ? "A fresh executable quote determines the exact approval, then approval and swap execute atomically in one wallet request."
-              : "The executable quote is requested only after any required sequential token approval confirms."}</p>
+            <div className="review-routing" aria-label="Router execution target">
+              <span>Set</span><strong title={resolvedPoolId}>{resolvedPoolId}</strong>
+              <span>Execution target</span><RouterTarget address={routerAddress} />
+              {!effectiveInputNative && <><span>Exact approval spender</span><RouterTarget address={routerAddress} /></>}
+            </div>
+            <p>{atomicPreflightLimited
+              ? atomicApprovalPreflightNotice
+              : "A fresh executable quote is validated and simulated against the Set Router immediately before wallet submission."}</p>
+          </div>
+        )}
+        {executionStatus && transaction.stage !== "review" && (
+          <div className={transaction.stage === "success" ? "success-panel" : "notice"} role="status">
+            {executionStatus}
           </div>
         )}
         {tradingPaused && <div className="warning-panel">Trading is paused. Swaps are unavailable until this Set resumes.</div>}
@@ -965,13 +1109,17 @@ export function SwapPage() {
                   : needsApproval ? atomicExperience ? "atomic exact approval" : "sequential exact approval needed" : "sufficient"}</span>
               {transaction.approvalHash && <a href={`${runtimeConfig.explorerUrl}/tx/${transaction.approvalHash}`} target="_blank" rel="noreferrer">View</a>}
             </div>
-            <p>{atomicExperience
-              ? "The final firm input is approved exactly and executes with the swap. If the swap reverts, the approval reverts too."
-              : "Approval and swap use separate transactions. If exact-output pricing moves above the approved amount, refresh and review again."}</p>
+            <p>{atomicPreflightLimited
+              ? atomicApprovalPreflightNotice
+              : "Approval and swap use separate transactions. The exact allowance spender is the Set Router, never the Set contract; the swap is simulated after approval."}</p>
           </div>
         )}
         {firmSeconds !== null && (transaction.stage === "wallet" || transaction.stage === "confirming") && (
-          <div className={firmSeconds <= 3 ? "firm-countdown is-warning" : "firm-countdown"} role="status">
+          <div
+            className={firmSeconds <= 3 ? "firm-countdown is-warning" : "firm-countdown"}
+            role="status"
+            aria-label={`Executable quote expires in ${firmSeconds} seconds`}
+          >
             Executable quote expires in <strong>{firmSeconds}s</strong>
           </div>
         )}
@@ -979,11 +1127,27 @@ export function SwapPage() {
           {quoteLoading ? "Refreshing estimate…" : transactionLabel(transaction.stage, needsApproval, atomicTransaction)}
         </button>
         {transaction.stage === "editing" && actionReason && <p className="action-reason">{actionReason}</p>}
-        {transaction.error && <div className="error-panel" role="alert">{transaction.error}</div>}
+        {transaction.error && (
+          <div className="error-panel" role="alert">
+            <span>{transaction.error}</span>
+            <small>
+              Set Router target:{" "}
+              <a
+                href={`${runtimeConfig.explorerUrl}/address/${routerAddress}`}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`View verified Set Router ${routerAddress} in explorer`}
+                title={routerAddress}
+              >
+                {truncateAddress(routerAddress)}
+              </a>
+            </small>
+          </div>
+        )}
         {transaction.hash && (
           <p className="transaction-link">Transaction <a href={`${runtimeConfig.explorerUrl}/tx/${transaction.hash}`} target="_blank" rel="noreferrer">{truncateAddress(transaction.hash)}</a></p>
         )}
-        <p className="quote-note">Setwise uses server-side market and pool guards. There is no user-configurable slippage or minimum-received setting.</p>
+        <p className="quote-note">Setwise uses server-side market and Set guards. There is no user-configurable slippage or minimum-received setting.</p>
         <p className="gate-help"><Link to="/faucet">Need mock ERC-20 assets?</Link></p>
       </section>
 
@@ -1001,12 +1165,12 @@ export function SwapPage() {
               <div><dt>Effective rate</dt><dd>1 {effectiveInputNative ? "BNB" : inputDisplay?.symbol} = {quote.economics.effectiveRate} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</dd></div>
               <div><dt>Fair rate</dt><dd>{quote.economics.fairRate} {effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</dd></div>
               <div className={quote.economics.priceImpactBps > 100 ? "is-warning" : ""}><dt>Price impact</dt><dd>{quote.economics.priceImpactBps / 100}%</dd></div>
-              <div><dt>Pool fee</dt><dd>{quote.economics.fee.bps / 100}% · {atomicToDecimal(BigInt(quote.economics.fee.indicativeAtomicAmount), inputAsset?.decimals ?? 18)} {inputDisplay?.symbol}</dd></div>
-              <div><dt>Venue status</dt><dd>{quote.pricing.venues.length === 0 ? "Pool only" : quote.pricing.venues.some((venue) => venue.eligible) ? "External guard eligible" : "External guard unavailable"}</dd></div>
+              <div><dt>Set fee</dt><dd>{quote.economics.fee.bps / 100}% · {atomicToDecimal(BigInt(quote.economics.fee.indicativeAtomicAmount), inputAsset?.decimals ?? 18)} {inputDisplay?.symbol}</dd></div>
+              <div><dt>Venue status</dt><dd>{quote.pricing.venues.length === 0 ? "Set only" : quote.pricing.venues.some((venue) => venue.eligible) ? "External guard eligible" : "External guard unavailable"}</dd></div>
               <div><dt>Indicative freshness</dt><dd>{quoteFresh && quoteMatchesDraft ? `${indicativeSeconds ?? 0}s` : "Refreshing…"}</dd></div>
               {firmSeconds !== null && <div className={firmSeconds <= 3 ? "is-warning" : ""}><dt>Firm quote</dt><dd>Confirm within {firmSeconds}s</dd></div>}
             </dl>}
-            <p className="quote-note">Indicative estimates are never executable. A fresh signed transaction is validated immediately before {atomicExperience ? "the atomic approval-and-swap request" : "swap submission"}.</p>
+            <p className="quote-note">Indicative estimates are never executable. A fresh signed transaction is validated and simulated immediately before swap submission.</p>
           </>
         ) : <p>{quoteLoading ? "Getting an indicative price…" : `Enter an exact ${intent === "exact-input" ? "input" : "output"} amount to see an estimate.`}</p>}
       </aside>

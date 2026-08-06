@@ -1,8 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { decodeFunctionData } from "viem";
+import { encodeFunctionData, hashTypedData, type Address, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 
-import { erc20Abi } from "../../data/chain/abis";
+import { setwiseRouterAbi } from "../../data/chain/abis";
+import { trustedRouterAddress } from "../../data/rfq/swaps";
+import { truncateAddress } from "../../lib/format";
 import { SwapPage } from "./SwapPage";
 
 type AtomicTestCall = { data: `0x${string}`; to: `0x${string}`; value: bigint };
@@ -21,7 +24,9 @@ const mocks = vi.hoisted(() => ({
   batchStatusError: null as Error | null,
   batchStatusRefetch: vi.fn(),
   capabilityRefetch: vi.fn(),
+  call: vi.fn(),
   createActivity: vi.fn(),
+  getCode: vi.fn(),
   markActivityFailed: vi.fn(),
   markActivityPending: vi.fn(),
   markActivitySuccessful: vi.fn(),
@@ -43,6 +48,7 @@ const wallet = "0x2000000000000000000000000000000000000000";
 const wrappedAddress = "0x3000000000000000000000000000000000000000";
 const usdtAddress = "0x4000000000000000000000000000000000000000";
 const tokenAddress = "0x5000000000000000000000000000000000000000";
+const signerAccount = privateKeyToAccount(`0x${"b".repeat(64)}`);
 const approvalHash = `0x${"a".repeat(64)}` as const;
 const swapHash = `0x${"b".repeat(64)}` as const;
 
@@ -88,7 +94,7 @@ function poolState() {
   return {
     assets: assets.map((asset) => ({ asset: asset.id, index: asset.index, market: { askUsd: "1", bidUsd: "1" } })),
     chainId: 97,
-    contract: { wrappedNativeToken: wrappedAddress },
+    contract: { quoteSigner: signerAccount.address, wrappedNativeToken: wrappedAddress },
     poolAddress,
     poolId: pool.id,
     trading: { deposits: "available", paused: mocks.tradingPaused, swaps: mocks.tradingPaused ? "paused" : "available" },
@@ -99,7 +105,7 @@ function secondPoolState() {
   return {
     assets: secondAssets.map((asset) => ({ asset: asset.id, index: asset.index, market: { askUsd: "1", bidUsd: "1" } })),
     chainId: 97,
-    contract: { wrappedNativeToken: secondAssetAAddress },
+    contract: { quoteSigner: secondAssetBAddress, wrappedNativeToken: secondAssetAAddress },
     poolAddress: secondPoolAddress,
     poolId: secondPool.id,
     trading: { deposits: "available", paused: false, swaps: "available" },
@@ -152,7 +158,38 @@ function indicative(
   };
 }
 
-function firm(input: {
+const poolAuthorizationTypes = {
+  SwapQuote: [
+    { name: "payer", type: "address" },
+    { name: "inputAsset", type: "address" },
+    { name: "outputAsset", type: "address" },
+    { name: "inputAmount", type: "uint256" },
+    { name: "outputAmount", type: "uint256" },
+    { name: "quoteId", type: "bytes32" },
+    { name: "deadline", type: "uint256" },
+    { name: "recipient", type: "address" },
+  ],
+} as const;
+
+const routerAuthorizationTypes = {
+  SetwiseAuthorization: [
+    { name: "chainId", type: "uint256" },
+    { name: "router", type: "address" },
+    { name: "pool", type: "address" },
+    { name: "funder", type: "address" },
+    { name: "recipient", type: "address" },
+    { name: "assetIn", type: "address" },
+    { name: "assetOut", type: "address" },
+    { name: "nativeIn", type: "bool" },
+    { name: "nativeOut", type: "bool" },
+    { name: "amountIn", type: "uint256" },
+    { name: "amountOut", type: "uint256" },
+    { name: "quoteId", type: "bytes32" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
+async function firm(input: {
   inputAmount?: string;
   inputAsset: string;
   inputNative: boolean;
@@ -170,23 +207,81 @@ function firm(input: {
   const inputMetadata = assets.find((asset) => asset.id === input.inputAsset)!;
   const outputMetadata = assets.find((asset) => asset.id === input.outputAsset)!;
   const deadline = Math.floor(Date.now() / 1_000) + (expired ? -1 : 60);
+  const packedDeadline = String(deadline);
   const quoteId = `0x${"1".repeat(64)}`;
+  const routerSwap = {
+    amountIn: finalInputAtomic,
+    amountOut: preview.output.atomicAmount,
+    assetIn: inputMetadata.address,
+    assetOut: outputMetadata.address,
+    deadline: packedDeadline,
+    nativeIn: input.inputNative,
+    nativeOut: input.outputNative,
+    pool: poolAddress,
+    quoteId,
+    recipient: input.payer,
+  };
+  const poolSigningData = {
+    domain: { chainId: 97, name: "SetwisePool", verifyingContract: poolAddress as Address, version: "2.0.0" },
+    message: { deadline: BigInt(packedDeadline), inputAmount: BigInt(finalInputAtomic), inputAsset: inputMetadata.address as Address, outputAmount: BigInt(preview.output.atomicAmount), outputAsset: outputMetadata.address as Address, payer: trustedRouterAddress, quoteId: quoteId as Hex, recipient: input.payer as Address },
+    primaryType: "SwapQuote",
+    types: poolAuthorizationTypes,
+  } as const;
+  const routerSigningData = {
+    domain: { chainId: 97, name: "SetwiseRouter", verifyingContract: trustedRouterAddress, version: "1" },
+    message: {
+      ...routerSwap,
+      amountIn: BigInt(routerSwap.amountIn),
+      amountOut: BigInt(routerSwap.amountOut),
+      assetIn: routerSwap.assetIn as Address,
+      assetOut: routerSwap.assetOut as Address,
+      chainId: 97n,
+      deadline: BigInt(routerSwap.deadline),
+      funder: input.payer as Address,
+      pool: routerSwap.pool as Address,
+      quoteId: routerSwap.quoteId as Hex,
+      recipient: routerSwap.recipient as Address,
+      router: trustedRouterAddress,
+    },
+    primaryType: "SetwiseAuthorization",
+    types: routerAuthorizationTypes,
+  } as const;
+  const [poolSignature, routerSignature] = await Promise.all([
+    signerAccount.signTypedData(poolSigningData),
+    signerAccount.signTypedData(routerSigningData),
+  ]);
+  const poolTypedData = {
+    ...poolSigningData,
+    message: { ...poolSigningData.message, deadline: packedDeadline, inputAmount: finalInputAtomic, outputAmount: preview.output.atomicAmount },
+    types: { SwapQuote: [...poolAuthorizationTypes.SwapQuote] },
+  };
+  const routerTypedData = {
+    ...routerSigningData,
+    message: { ...routerSigningData.message, amountIn: finalInputAtomic, amountOut: preview.output.atomicAmount, chainId: 97, deadline: packedDeadline },
+    types: { SetwiseAuthorization: [...routerAuthorizationTypes.SetwiseAuthorization] },
+  };
   return {
     authorization: {
-      digest: quoteId,
-      signature: "0x1234",
-      signer: tokenAddress,
-      typedData: {
-        domain: { chainId: 97, name: "SetwisePool", verifyingContract: poolAddress, version: "2.0.0" },
-        message: { deadline: "123", inputAmount: finalInputAtomic, inputAsset: inputMetadata.address, outputAmount: preview.output.atomicAmount, outputAsset: outputMetadata.address, payer: input.payer, quoteId, recipient: input.payer },
-        primaryType: "SwapQuote",
-        types: {},
+      digest: hashTypedData(poolSigningData),
+      keyVersion: "current",
+      router: {
+        address: trustedRouterAddress,
+        digest: hashTypedData(routerSigningData),
+        funder: input.payer,
+        signature: routerSignature,
+        signatureType: "eoa",
+        typedData: routerTypedData,
       },
+      signature: poolSignature,
+      signatureType: "eoa",
+      signer: signerAccount.address,
+      typedData: poolTypedData,
     },
     createdAt: new Date((deadline - 10) * 1_000).toISOString(),
+    execution: "router",
     executionDeadline: String(deadline),
     firmQuoteId: quoteId,
-    guard: { inputTolerancePpm: "5000", maximumInputBalance: "1", minimumOutputBalance: "1", offchainInputBalance: "1", offchainOutputBalance: "1", outputTolerancePpm: "5000", packedDeadline: "123" },
+    guard: { inputTolerancePpm: "5000", maximumInputBalance: "1", minimumOutputBalance: "1", offchainInputBalance: "1", offchainOutputBalance: "1", outputTolerancePpm: "5000", packedDeadline },
     input: finalInput,
     intent,
     mustSubmitBy: new Date(deadline * 1_000).toISOString(),
@@ -195,16 +290,33 @@ function firm(input: {
     persisted: true,
     quoteType: "firm",
     requirements: {
-      approvals: input.inputNative ? [] : [{ minimumAtomicAmount: finalInputAtomic, spender: poolAddress, token: inputMetadata.address }],
+      approvals: input.inputNative ? [] : [{ minimumAtomicAmount: finalInputAtomic, spender: trustedRouterAddress, token: inputMetadata.address }],
       sender: input.payer,
     },
     stateSnapshot: { blockHash: `0x${"2".repeat(64)}`, blockNumber: "1", blockTimestamp: "1", chainId: 97, poolAddress, poolId: pool.id },
     status: "executable",
     transaction: {
+      adapter: { funder: input.payer, swap: { ...routerSwap, auxiliaryData: "0x", signature: poolSignature } },
       chainId: 97,
-      data: "0x1234",
-      method: input.inputNative ? "swapExactNativeForAsset" : input.outputNative ? "swapExactAssetForNative" : "swapExactAssetForAsset",
-      to: poolAddress,
+      data: encodeFunctionData({
+        abi: setwiseRouterAbi,
+        functionName: "swapSetwise",
+        args: [{
+          ...routerSwap,
+          pool: routerSwap.pool as Address,
+          assetIn: routerSwap.assetIn as Address,
+          assetOut: routerSwap.assetOut as Address,
+          amountIn: BigInt(routerSwap.amountIn),
+          amountOut: BigInt(routerSwap.amountOut),
+          quoteId: routerSwap.quoteId as Hex,
+          deadline: BigInt(routerSwap.deadline),
+          recipient: routerSwap.recipient as Address,
+          signature: poolSignature,
+          auxiliaryData: "0x",
+        }, input.payer as Address, routerSignature],
+      }),
+      method: "swapSetwise",
+      to: trustedRouterAddress,
       value: input.inputNative ? finalInputAtomic : "0",
     },
     venues: [],
@@ -239,7 +351,11 @@ vi.mock("wagmi", () => ({
     isFetched: true,
     refetch: mocks.capabilityRefetch,
   }),
-  usePublicClient: () => ({ waitForTransactionReceipt: mocks.waitForTransactionReceipt }),
+  usePublicClient: () => ({
+    call: mocks.call,
+    getCode: mocks.getCode,
+    waitForTransactionReceipt: mocks.waitForTransactionReceipt,
+  }),
   useSendCalls: () => ({ sendCallsAsync: mocks.sendCalls }),
   useSendTransaction: () => ({ sendTransactionAsync: mocks.sendTransaction }),
   useWaitForCallsStatus: () => ({
@@ -308,7 +424,7 @@ describe("SwapPage", () => {
       const intent = inputAmount !== undefined ? "exact-input" : "exact-output";
       return Promise.resolve(indicative(inputAsset, outputAsset, inputAmount ?? outputAmount ?? "", intent));
     });
-    mocks.requestFirmSwapQuote.mockReset().mockImplementation((input: Parameters<typeof firm>[0]) => Promise.resolve(firm(input)));
+    mocks.requestFirmSwapQuote.mockReset().mockImplementation((input: Parameters<typeof firm>[0]) => firm(input));
     mocks.writeContract.mockReset().mockImplementation(({ address, args }: { address: string; args: readonly [string, bigint] }) => {
       const asset = assets.find((candidate) => candidate.address === address)!;
       mocks.allowances[asset.id] = args[1];
@@ -316,6 +432,8 @@ describe("SwapPage", () => {
     });
     mocks.sendTransaction.mockReset().mockResolvedValue(swapHash);
     mocks.sendCalls.mockReset().mockResolvedValue({ id: "batch-1" });
+    mocks.call.mockReset().mockResolvedValue({ data: "0x" });
+    mocks.getCode.mockReset().mockResolvedValue("0x6000");
     mocks.waitForTransactionReceipt.mockReset().mockResolvedValue({ status: "success" });
     mocks.createActivity.mockReset().mockImplementation((input: object) => ({ ...input, id: "activity-1", operation: "swap", timestamp: 1 }));
     mocks.markActivityFailed.mockReset();
@@ -347,48 +465,105 @@ describe("SwapPage", () => {
     expect(screen.getByLabelText("You receive amount")).not.toHaveTextContent("20 TOKEN");
   });
 
-  it("confirms an exact ERC-20 approval before requesting and submitting a firm quote", async () => {
+  it("validates a firm quote before confirming an exact ERC-20 approval and submitting", async () => {
     const review = await enterAmount("10");
     await executeReviewedSwap(review);
 
     await screen.findByRole("button", { name: "New swap" });
     expect(mocks.writeContract).toHaveBeenCalledWith(expect.objectContaining({
-      args: [poolAddress, 10n * 10n ** 18n],
+      args: [trustedRouterAddress, 10n * 10n ** 18n],
       functionName: "approve",
     }));
-    expect(mocks.writeContract.mock.invocationCallOrder[0]).toBeLessThan(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]);
-    expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendTransaction.mock.invocationCallOrder[0]);
+    expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]).toBeLessThan(mocks.writeContract.mock.invocationCallOrder[0]);
+    expect(mocks.writeContract.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendTransaction.mock.invocationCallOrder[0]);
     expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("activity-1", swapHash);
     expect(mocks.chainRefetch.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(mocks.poolStateRefetch.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("submits exact approval and firm swap in one forced-atomic batch", async () => {
-    mocks.atomicCapability = "supported";
+  it("surfaces the Set Router as the execution and exact approval target during review", async () => {
+    const review = await enterAmount("10");
+    fireEvent.click(review);
+
+    const routing = await screen.findByLabelText("Router execution target");
+    expect(routing).toHaveTextContent("Set");
+    expect(routing).toHaveTextContent(pool.id);
+    expect(routing).toHaveTextContent("Execution target");
+    expect(routing).toHaveTextContent("Exact approval spender");
+    expect(routing).toHaveTextContent("Set Router");
+    expect(routing).not.toHaveTextContent(trustedRouterAddress);
+    expect(routing).toHaveTextContent(truncateAddress(trustedRouterAddress));
+    const routerLinks = within(routing).getAllByRole("link", { name: new RegExp(trustedRouterAddress, "i") });
+    expect(routerLinks.length).toBeGreaterThanOrEqual(1);
+    expect(routerLinks[0]).toHaveAttribute("href", expect.stringContaining(trustedRouterAddress));
+    expect(screen.getByText(/allowance spender is the Set Router, never the Set contract/i)).toBeInTheDocument();
+  });
+
+  it("records swap activity with the selected Set and Router hash exactly once on success", async () => {
+    mocks.allowances.USDT = 1_000n * 10n ** 18n;
     const review = await enterAmount("10");
     await executeReviewedSwap(review);
 
     await screen.findByRole("button", { name: "New swap" });
-    expect(mocks.sendCalls).toHaveBeenCalledWith(expect.objectContaining({
-      account: wallet,
-      chainId: 97,
-      forceAtomic: true,
-    }));
-    const calls = mocks.sendCalls.mock.calls[0]?.[0].calls;
-    expect(calls).toHaveLength(2);
-    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0].data })).toEqual({
-      args: [poolAddress, 10n * 10n ** 18n],
-      functionName: "approve",
-    });
-    expect(calls[1]).toEqual({ data: "0x1234", to: poolAddress, value: 0n });
-    expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendCalls.mock.invocationCallOrder[0]);
-    expect(mocks.writeContract).not.toHaveBeenCalled();
-    expect(mocks.sendTransaction).not.toHaveBeenCalled();
-    expect(mocks.markActivityPending).toHaveBeenCalledWith("activity-1");
+    expect(mocks.createActivity).toHaveBeenCalledTimes(1);
+    expect(mocks.createActivity).toHaveBeenCalledWith(expect.objectContaining({ setId: pool.id }));
+    expect(mocks.saveActivity).toHaveBeenCalledTimes(1);
+    expect(mocks.markActivityPending).toHaveBeenCalledTimes(1);
+    expect(mocks.markActivityPending).toHaveBeenCalledWith("activity-1", swapHash);
+    expect(mocks.markActivitySuccessful).toHaveBeenCalledTimes(1);
     expect(mocks.markActivitySuccessful).toHaveBeenCalledWith("activity-1", swapHash);
+    expect(screen.getByText(/Swap confirmed on chain through the Set Router/i)).toBeInTheDocument();
   });
 
-  it("approves the final firm input atomically when exact-output pricing moves", async () => {
+  it("refreshes the consumed exact Router allowance to zero after a successful swap", async () => {
+    mocks.sendTransaction.mockReset().mockImplementation(() => {
+      mocks.allowances.USDT = 0n;
+      return Promise.resolve(swapHash);
+    });
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    await screen.findByRole("button", { name: "New swap" });
+    const lastRefetch = mocks.chainRefetch.mock.results.at(-1)?.value as Promise<{ data: ReturnType<typeof chainData> }>;
+    const refreshed = await lastRefetch;
+    expect(refreshed.data.assets.USDT.allowance).toBe(0n);
+  });
+
+  it("never opens an approval or submission prompt for an invalid firm authorization", async () => {
+    mocks.requestFirmSwapQuote.mockReset().mockImplementation(async (input: Parameters<typeof firm>[0]) => {
+      const invalid = await firm(input);
+      invalid.authorization.signer = tokenAddress;
+      return invalid;
+    });
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/signer/i);
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+    expect(mocks.sendCalls).not.toHaveBeenCalled();
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("uses the fail-safe sequential preflight when an atomic wallet cannot simulate the stateful batch", async () => {
+    mocks.atomicCapability = "supported";
+    const review = await enterAmount("10");
+    fireEvent.click(review);
+    expect((await screen.findAllByText(/cannot simulate an approval-plus-swap batch/i)).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Approve exact amount & swap" }));
+
+    await screen.findByRole("button", { name: "New swap" });
+    expect(mocks.sendCalls).not.toHaveBeenCalled();
+    expect(mocks.writeContract).toHaveBeenCalledTimes(1);
+    expect(mocks.call).toHaveBeenCalledWith(expect.objectContaining({
+      account: wallet,
+      to: trustedRouterAddress,
+      value: 0n,
+    }));
+    expect(mocks.writeContract.mock.invocationCallOrder[0]).toBeLessThan(mocks.call.mock.invocationCallOrder[0]);
+    expect(mocks.call.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendTransaction.mock.invocationCallOrder[0]);
+  });
+
+  it("approves the final exact-output input before simulating and submitting", async () => {
     mocks.atomicCapability = "ready";
     mocks.firmInputDelta = 1n * 10n ** 18n;
     render(<MemoryRouter><SwapPage /></MemoryRouter>);
@@ -399,72 +574,69 @@ describe("SwapPage", () => {
     await executeReviewedSwap(review);
 
     await screen.findByRole("button", { name: "New swap" });
-    const calls = mocks.sendCalls.mock.calls[0]?.[0].calls;
-    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0].data })).toEqual({
-      args: [poolAddress, 11n * 10n ** 18n],
-      functionName: "approve",
+    expect(mocks.writeContract).toHaveBeenCalledWith(expect.objectContaining({
+      args: [trustedRouterAddress, 11n * 10n ** 18n],
+    }));
+    expect(mocks.call).toHaveBeenCalledTimes(1);
+    expect(mocks.sendCalls).not.toHaveBeenCalled();
+  });
+
+  it("blocks wallet submission when the configured Router has no code", async () => {
+    mocks.allowances.USDT = 1_000n * 10n ** 18n;
+    mocks.getCode.mockResolvedValueOnce(undefined);
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no deployed code/i);
+    expect(mocks.call).not.toHaveBeenCalled();
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
+    expect(mocks.saveActivity).not.toHaveBeenCalled();
+  });
+
+  it("blocks wallet submission when Router simulation reports a paused Set", async () => {
+    mocks.allowances.USDT = 1_000n * 10n ** 18n;
+    mocks.call.mockRejectedValueOnce(new Error("execution reverted: trading paused"));
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/paused on chain/i);
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
+    expect(mocks.saveActivity).not.toHaveBeenCalled();
+  });
+
+  it("rechecks Set pause state between firm validation and preflight", async () => {
+    mocks.allowances.USDT = 1_000n * 10n ** 18n;
+    mocks.poolStateRefetch
+      .mockResolvedValueOnce({ data: poolState() })
+      .mockImplementationOnce(() => {
+        mocks.tradingPaused = true;
+        return Promise.resolve({ data: poolState() });
+      });
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/paused/i);
+    expect(mocks.getCode).not.toHaveBeenCalled();
+    expect(mocks.call).not.toHaveBeenCalled();
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a successful simulation when connectivity changes before submission", async () => {
+    let online = true;
+    vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
+    mocks.allowances.USDT = 1_000n * 10n ** 18n;
+    mocks.call.mockImplementationOnce(async () => {
+      online = false;
+      window.dispatchEvent(new Event("offline"));
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      return { data: "0x" };
     });
-    expect(mocks.writeContract).not.toHaveBeenCalled();
-  });
-
-  it("offers an explicit sequential retry when atomic wallet setup is rejected", async () => {
-    mocks.atomicCapability = "ready";
-    mocks.sendCalls.mockRejectedValueOnce({ code: 5750 });
     const review = await enterAmount("10");
     await executeReviewedSwap(review);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/sequential approval and swap/i);
-    fireEvent.click(screen.getByRole("button", { name: "Try swap again" }));
-    const retry = await screen.findByRole("button", { name: "Approve exact amount & swap" });
-    await waitFor(() => expect(retry).toBeEnabled());
-    fireEvent.click(retry);
-
-    await screen.findByRole("button", { name: "New swap" }, { timeout: 3_000 });
-    expect(mocks.sendCalls).toHaveBeenCalledTimes(1);
-    expect(mocks.writeContract).toHaveBeenCalledTimes(1);
-    expect(mocks.requestFirmSwapQuote).toHaveBeenCalledTimes(2);
-    expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[1]).toBeGreaterThan(mocks.writeContract.mock.invocationCallOrder[0]);
-  });
-
-  it("reports a submitted atomic batch failure without attempting sequential fallback", async () => {
-    mocks.atomicCapability = "supported";
-    mocks.batchStatus = { atomic: true, chainId: 97, status: "failure" };
-    const review = await enterAmount("10");
-    await executeReviewedSwap(review);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(/No approval or swap was applied/i);
-    expect(mocks.writeContract).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/connectivity/i);
+    expect(mocks.call).toHaveBeenCalledTimes(1);
     expect(mocks.sendTransaction).not.toHaveBeenCalled();
-    expect(mocks.markActivityFailed).toHaveBeenCalledWith("activity-1", expect.any(String), undefined);
-  });
-
-  it("retries status instead of falling back after a batch ID was returned", async () => {
-    mocks.atomicCapability = "supported";
-    mocks.batchStatus = null;
-    mocks.batchStatusError = new Error("status RPC unavailable");
-    const review = await enterAmount("10");
-    await executeReviewedSwap(review);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(/sequential fallback is disabled/i);
-    fireEvent.click(screen.getByRole("button", { name: "Retry batch status" }));
-    expect(mocks.batchStatusRefetch).toHaveBeenCalledTimes(1);
-    expect(mocks.writeContract).not.toHaveBeenCalled();
-    expect(mocks.sendTransaction).not.toHaveBeenCalled();
-  });
-
-  it("does not duplicate an atomic submission while the wallet request is open", async () => {
-    mocks.atomicCapability = "supported";
-    let resolveBatch!: (value: { id: string }) => void;
-    mocks.sendCalls.mockImplementation(() => new Promise((resolve) => { resolveBatch = resolve; }));
-    const review = await enterAmount("10");
-    await executeReviewedSwap(review);
-
-    const pending = await screen.findByRole("button", { name: "Confirm atomic swap in wallet…" });
-    expect(pending).toBeDisabled();
-    fireEvent.click(pending);
-    expect(mocks.sendCalls).toHaveBeenCalledTimes(1);
-    resolveBatch({ id: "batch-1" });
-    await screen.findByRole("button", { name: "New swap" });
   });
 
   it("quotes and executes a user-specified exact output", async () => {
@@ -486,11 +658,38 @@ describe("SwapPage", () => {
 
     await screen.findByRole("button", { name: "New swap" });
     expect(mocks.writeContract).toHaveBeenCalledWith(expect.objectContaining({
-      args: [poolAddress, 10n * 10n ** 18n],
+      args: [trustedRouterAddress, 10n * 10n ** 18n],
     }));
     expect(mocks.requestFirmSwapQuote).toHaveBeenCalledWith(expect.objectContaining({ outputAmount: "20" }));
     expect(mocks.requestFirmSwapQuote.mock.calls[0]?.[0]).not.toHaveProperty("inputAmount");
     expect(mocks.sendTransaction).toHaveBeenCalled();
+  });
+
+  it("approves a changed final firm input exactly before sequential Router execution", async () => {
+    mocks.firmInputDelta = 1n * 10n ** 18n;
+    render(<MemoryRouter><SwapPage /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: "Exact output" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "You receive amount" }), { target: { value: "20" } });
+    const review = await screen.findByRole("button", { name: "Review swap" });
+    await waitFor(() => expect(review).toBeEnabled());
+    await executeReviewedSwap(review);
+
+    await screen.findByRole("button", { name: "New swap" });
+    expect(mocks.writeContract).toHaveBeenCalledWith(expect.objectContaining({
+      args: [trustedRouterAddress, 11n * 10n ** 18n],
+    }));
+    expect(mocks.requestFirmSwapQuote.mock.invocationCallOrder[0]).toBeLessThan(mocks.writeContract.mock.invocationCallOrder[0]);
+    expect(mocks.writeContract.mock.invocationCallOrder[0]).toBeLessThan(mocks.sendTransaction.mock.invocationCallOrder[0]);
+  });
+
+  it("never sends when the confirmed Router allowance remains below the final firm input", async () => {
+    mocks.writeContract.mockReset().mockResolvedValue(approvalHash);
+    const review = await enterAmount("10");
+    await executeReviewedSwap(review);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/approval is insufficient/i);
+    expect(mocks.requestFirmSwapQuote).toHaveBeenCalledTimes(1);
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
   });
 
   it("skips approval for native input and submits the API's exact native transaction value", async () => {
@@ -537,7 +736,7 @@ describe("SwapPage", () => {
   });
 
   it("never opens the wallet for expired executable calldata", async () => {
-    mocks.requestFirmSwapQuote.mockReset().mockImplementation((input: Parameters<typeof firm>[0]) => Promise.resolve(firm(input, true)));
+    mocks.requestFirmSwapQuote.mockReset().mockImplementation((input: Parameters<typeof firm>[0]) => firm(input, true));
     mocks.allowances.USDT = 1_000n * 10n ** 18n;
     const review = await enterAmount("10");
     await executeReviewedSwap(review);
@@ -550,7 +749,7 @@ describe("SwapPage", () => {
 
   it("never submits an expired firm quote as an atomic batch", async () => {
     mocks.atomicCapability = "supported";
-    mocks.requestFirmSwapQuote.mockReset().mockImplementation((input: Parameters<typeof firm>[0]) => Promise.resolve(firm(input, true)));
+    mocks.requestFirmSwapQuote.mockReset().mockImplementation((input: Parameters<typeof firm>[0]) => firm(input, true));
     const review = await enterAmount("10");
     await executeReviewedSwap(review);
 
@@ -566,19 +765,23 @@ describe("SwapPage", () => {
     const review = await enterAmount("10");
     await executeReviewedSwap(review);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Rejected in wallet/i);
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent(/Rejected in wallet/i);
+    expect(error).toHaveTextContent(/Set Router target/i);
+    expect(error).toHaveTextContent(truncateAddress(trustedRouterAddress));
+    expect(error.querySelector("a")).toHaveAttribute("href", expect.stringContaining(trustedRouterAddress));
     expect(screen.getByRole("button", { name: "Try swap again" })).toBeEnabled();
     expect(mocks.markActivityFailed).toHaveBeenCalledWith("activity-1", expect.any(String), undefined);
   });
 
-  it("offers retry after an approval rejection without requesting a firm quote", async () => {
+  it("offers retry after an approval rejection only after validating a firm quote", async () => {
     mocks.writeContract.mockReset().mockRejectedValue(new Error("User rejected request"));
     const review = await enterAmount("10");
     await executeReviewedSwap(review);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/Rejected in wallet/i);
     expect(screen.getByRole("button", { name: "Try swap again" })).toBeEnabled();
-    expect(mocks.requestFirmSwapQuote).not.toHaveBeenCalled();
+    expect(mocks.requestFirmSwapQuote).toHaveBeenCalledTimes(1);
     expect(mocks.saveActivity).not.toHaveBeenCalled();
   });
 
@@ -657,10 +860,12 @@ describe("SwapPage multi-Set", () => {
       const intent = inputAmount !== undefined ? "exact-input" : "exact-output";
       return Promise.resolve(indicative(inputAsset, outputAsset, inputAmount ?? outputAmount ?? "", intent));
     });
-    mocks.requestFirmSwapQuote.mockReset().mockImplementation((input: Parameters<typeof firm>[0]) => Promise.resolve(firm(input)));
+    mocks.requestFirmSwapQuote.mockReset().mockImplementation((input: Parameters<typeof firm>[0]) => firm(input));
     mocks.writeContract.mockReset().mockResolvedValue(approvalHash);
     mocks.sendTransaction.mockReset().mockResolvedValue(swapHash);
     mocks.sendCalls.mockReset().mockResolvedValue({ id: "batch-1" });
+    mocks.call.mockReset().mockResolvedValue({ data: "0x" });
+    mocks.getCode.mockReset().mockResolvedValue("0x6000");
     mocks.waitForTransactionReceipt.mockReset().mockResolvedValue({ status: "success" });
     mocks.createActivity.mockReset().mockImplementation((input: object) => ({ ...input, id: "activity-1", operation: "swap", timestamp: 1 }));
     mocks.markActivityFailed.mockReset();

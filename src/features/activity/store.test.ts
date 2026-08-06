@@ -3,6 +3,7 @@ import {
   createSwapActivity,
   createWithdrawalActivity,
   markActivityFailed,
+  markActivityPending,
   markActivitySuccessful,
   readActivity,
   saveActivity,
@@ -73,6 +74,29 @@ describe("local activity store", () => {
     ]));
 
     expect(readActivity(storage)).toEqual([valid]);
+  });
+
+  it("creates swap activity with Set identity and finalizes Router hash once", () => {
+    const storage = memoryStorage();
+    const swap = createSwapActivity({
+      chainId: 97,
+      input: { amount: "10", symbol: "USDT" },
+      output: { amount: "2", symbol: "TOKEN" },
+      setId: "set-a",
+      status: "pending",
+    });
+    saveActivity(swap, storage);
+    markActivityPending(swap.id, `0x${"b".repeat(64)}`, storage);
+    markActivitySuccessful(swap.id, `0x${"b".repeat(64)}`, storage);
+
+    const records = readActivity(storage);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toEqual(expect.objectContaining({
+      hash: `0x${"b".repeat(64)}`,
+      setId: "set-a",
+      status: "success",
+      submitted: true,
+    }));
   });
 
   it("creates typed deposit and withdrawal records and shares failure updates", () => {

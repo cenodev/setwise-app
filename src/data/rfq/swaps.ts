@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Address, Hex } from "viem";
 
+import { bscTestnetDeployment } from "../../config/deployment";
 import { runtimeConfig } from "../../config/env";
 import { RfqApiError } from "./deposits";
 
@@ -8,6 +9,9 @@ const addressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/).transform((value) 
 const hexSchema = z.string().regex(/^0x(?:[0-9a-fA-F]{2})*$/).transform((value) => value as Hex);
 const atomicSchema = z.string().regex(/^\d+$/);
 const decimalSchema = z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/);
+
+export const trustedRouterAddress = bscTestnetDeployment.router.address;
+const trustedRouterAddressSchema = z.literal(trustedRouterAddress);
 
 const amountSchema = z.object({
   asset: z.string().min(1),
@@ -118,15 +122,19 @@ export const swapQuoteSchema = z.object({
   warnings: z.array(warningSchema),
 });
 
-const typedDataSchema = z.object({
-  domain: z.object({
-    name: z.string().min(1),
-    version: z.string().min(1),
-    chainId: z.number().int(),
-    verifyingContract: addressSchema,
-  }),
+const typedDataDomainSchema = z.object({
+  name: z.string().min(1),
+  version: z.string().min(1),
+  chainId: z.number().int(),
+  verifyingContract: addressSchema,
+});
+
+const typedDataTypesSchema = z.record(z.string(), z.array(z.object({ name: z.string(), type: z.string() })));
+
+const poolTypedDataSchema = z.object({
+  domain: typedDataDomainSchema,
   primaryType: z.literal("SwapQuote"),
-  types: z.record(z.string(), z.array(z.object({ name: z.string(), type: z.string() }))),
+  types: typedDataTypesSchema,
   message: z.object({
     payer: addressSchema,
     inputAsset: addressSchema,
@@ -139,6 +147,54 @@ const typedDataSchema = z.object({
   }).passthrough(),
 });
 
+const routerTypedDataSchema = z.object({
+  domain: typedDataDomainSchema.extend({ verifyingContract: trustedRouterAddressSchema }),
+  primaryType: z.literal("SetwiseAuthorization"),
+  types: typedDataTypesSchema,
+  message: z.object({
+    chainId: z.number().int(),
+    router: trustedRouterAddressSchema,
+    pool: addressSchema,
+    funder: addressSchema,
+    recipient: addressSchema,
+    assetIn: addressSchema,
+    assetOut: addressSchema,
+    nativeIn: z.boolean(),
+    nativeOut: z.boolean(),
+    amountIn: atomicSchema,
+    amountOut: atomicSchema,
+    quoteId: hexSchema,
+    deadline: atomicSchema,
+  }).passthrough(),
+});
+
+const routerAuthorizationSchema = z.object({
+  address: trustedRouterAddressSchema,
+  funder: addressSchema,
+  typedData: routerTypedDataSchema,
+  signatureType: z.string().min(1),
+  digest: hexSchema,
+  signature: hexSchema,
+});
+
+const routerSwapAdapterSchema = z.object({
+  funder: addressSchema,
+  swap: z.object({
+    pool: addressSchema,
+    assetIn: addressSchema,
+    assetOut: addressSchema,
+    nativeIn: z.boolean(),
+    nativeOut: z.boolean(),
+    amountIn: atomicSchema,
+    amountOut: atomicSchema,
+    quoteId: hexSchema,
+    deadline: atomicSchema,
+    recipient: addressSchema,
+    signature: hexSchema,
+    auxiliaryData: hexSchema,
+  }),
+});
+
 const approvalRequirementSchema = z.object({
   token: addressSchema,
   spender: addressSchema,
@@ -148,6 +204,7 @@ const approvalRequirementSchema = z.object({
 export const firmSwapQuoteSchema = z.object({
   firmQuoteId: hexSchema,
   quoteType: z.literal("firm"),
+  execution: z.literal("router"),
   status: z.literal("executable"),
   operation: z.literal("swap"),
   intent: z.enum(["exact-input", "exact-output"]),
@@ -169,16 +226,20 @@ export const firmSwapQuoteSchema = z.object({
   }),
   authorization: z.object({
     signer: addressSchema,
+    keyVersion: z.string().min(1),
+    signatureType: z.string().min(1),
     digest: hexSchema,
     signature: hexSchema,
-    typedData: typedDataSchema,
+    typedData: poolTypedDataSchema,
+    router: routerAuthorizationSchema,
   }),
   transaction: z.object({
     chainId: z.number().int(),
-    to: addressSchema,
+    to: trustedRouterAddressSchema,
     data: hexSchema,
     value: atomicSchema,
-    method: z.enum(["swapExactAssetForAsset", "swapExactNativeForAsset", "swapExactAssetForNative"]),
+    method: z.literal("swapSetwise"),
+    adapter: routerSwapAdapterSchema,
   }),
   requirements: z.object({
     sender: addressSchema,
@@ -273,6 +334,8 @@ export function requestFirmSwapQuote(input: {
       recipient: input.recipient,
       inputNative: input.inputNative,
       outputNative: input.outputNative,
+      execution: "router",
+      router: trustedRouterAddress,
     }),
   });
 }

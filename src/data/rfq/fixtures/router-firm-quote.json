@@ -1,0 +1,270 @@
+{
+  "firmQuoteId": "0x3ddb96e1a894708828ddfd52839d04f057db3cf03e475109fec4892b2febe441",
+  "quoteType": "firm",
+  "operation": "swap",
+  "intent": "exact-input",
+  "execution": "router",
+  "createdAt": "2026-08-05T11:09:50.057Z",
+  "mustSubmitBy": "2026-08-05T11:10:00.000Z",
+  "executionDeadline": "1785928200",
+  "stateSnapshot": {
+    "poolId": "bstock-ai-no-bnb-bsc-testnet",
+    "chainId": 97,
+    "poolAddress": "0xA54D041eD831BBE2D6F97107Ab3aD9f9682C392a",
+    "blockNumber": "123293097",
+    "blockHash": "0x2f51de8acb17daae8cd13544314da4a3606ba095186b0e0f4aa6c5a7896e9251",
+    "blockTimestamp": "1785928188"
+  },
+  "input": {
+    "asset": "USDT-BSC-TESTNET",
+    "amount": "10",
+    "atomicAmount": "10000000000000000000",
+    "decimals": 18
+  },
+  "output": {
+    "asset": "SPCXB-BSC-TESTNET",
+    "amount": "0.084673291643507414",
+    "atomicAmount": "84673291643507414",
+    "decimals": 18
+  },
+  "venues": [
+    {
+      "sourceId": "binance:SPCXBUSDT",
+      "venue": "binance",
+      "input": {
+        "asset": "USDT-BSC-TESTNET",
+        "amount": "10",
+        "atomicAmount": "10000000000000000000",
+        "decimals": 18
+      },
+      "output": {
+        "asset": "SPCXB-BSC-TESTNET",
+        "amount": "0.089710235937920516",
+        "atomicAmount": "89710235937920516",
+        "decimals": 18
+      },
+      "eligible": true,
+      "exclusionReason": null,
+      "liquidityUsd": "2788324.45",
+      "priceImpactBps": 1,
+      "gasEstimate": null,
+      "blockNumber": null,
+      "observedAt": "2026-08-05T11:09:48.651Z"
+    }
+  ],
+  "guard": {
+    "packedDeadline": "987196826485754357035886938539539231740712247855061315852557540218051080",
+    "offchainInputBalance": "675467478975010000000000",
+    "offchainOutputBalance": "2434151664518035835930",
+    "inputTolerancePpm": "5000",
+    "outputTolerancePpm": "5000",
+    "maximumInputBalance": "678844816369885050000000",
+    "minimumOutputBalance": "2421980906195445656750"
+  },
+  "requirements": {
+    "sender": "0x4000000000000000000000000000000000000000",
+    "approvals": [
+      {
+        "token": "0x0827541D8d43Bb891865440B50e6713D4C55be5A",
+        "spender": "0x00355Ed1Fc7cD618AEC5A8E8fD31686376499ccB",
+        "minimumAtomicAmount": "10000000000000000000"
+      }
+    ]
+  },
+  "warnings": [
+    "auxiliaryData is included in calldata but is not signed by the current contract"
+  ],
+  "status": "executable",
+  "authorization": {
+    "signer": "0x0B37DDA72EbC2E9Cd177D1455139e7355d3a9e50",
+    "keyVersion": "current",
+    "signatureType": "eoa",
+    "digest": "0xb5e337807246c34c5571ef09575e01ed5616cb131a8bc40eb0ba0024580535e4",
+    "signature": "0x443d7cf339477994338c62f9925eefe599adb6ff1a29052d90679db978892d4a38bbc2c3bffdb482ec2b3153e6b2a18744d433d4525c8dc973a49b27b976ade31c",
+    "typedData": {
+      "domain": {
+        "name": "SetwisePool",
+        "version": "2.0.0",
+        "chainId": 97,
+        "verifyingContract": "0xA54D041eD831BBE2D6F97107Ab3aD9f9682C392a"
+      },
+      "primaryType": "SwapQuote",
+      "types": {
+        "SwapQuote": [
+          {
+            "name": "payer",
+            "type": "address"
+          },
+          {
+            "name": "inputAsset",
+            "type": "address"
+          },
+          {
+            "name": "outputAsset",
+            "type": "address"
+          },
+          {
+            "name": "inputAmount",
+            "type": "uint256"
+          },
+          {
+            "name": "outputAmount",
+            "type": "uint256"
+          },
+          {
+            "name": "quoteId",
+            "type": "bytes32"
+          },
+          {
+            "name": "deadline",
+            "type": "uint256"
+          },
+          {
+            "name": "recipient",
+            "type": "address"
+          }
+        ]
+      },
+      "message": {
+        "payer": "0x00355Ed1Fc7cD618AEC5A8E8fD31686376499ccB",
+        "inputAsset": "0x0827541D8d43Bb891865440B50e6713D4C55be5A",
+        "outputAsset": "0x75D74Ab8EcFF5215bbad450103ceDF532C23Ae46",
+        "inputAmount": "10000000000000000000",
+        "outputAmount": "84673291643507414",
+        "quoteId": "0x3ddb96e1a894708828ddfd52839d04f057db3cf03e475109fec4892b2febe441",
+        "deadline": "987196826485754357035886938539539231740712247855061315852557540218051080",
+        "recipient": "0x4000000000000000000000000000000000000000"
+      }
+    },
+    "router": {
+      "address": "0x00355Ed1Fc7cD618AEC5A8E8fD31686376499ccB",
+      "funder": "0x4000000000000000000000000000000000000000",
+      "typedData": {
+        "domain": {
+          "name": "SetwiseRouter",
+          "version": "1",
+          "chainId": 97,
+          "verifyingContract": "0x00355Ed1Fc7cD618AEC5A8E8fD31686376499ccB"
+        },
+        "primaryType": "SetwiseAuthorization",
+        "types": {
+          "EIP712Domain": [
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "version",
+              "type": "string"
+            },
+            {
+              "name": "chainId",
+              "type": "uint256"
+            },
+            {
+              "name": "verifyingContract",
+              "type": "address"
+            }
+          ],
+          "SetwiseAuthorization": [
+            {
+              "name": "chainId",
+              "type": "uint256"
+            },
+            {
+              "name": "router",
+              "type": "address"
+            },
+            {
+              "name": "pool",
+              "type": "address"
+            },
+            {
+              "name": "funder",
+              "type": "address"
+            },
+            {
+              "name": "recipient",
+              "type": "address"
+            },
+            {
+              "name": "assetIn",
+              "type": "address"
+            },
+            {
+              "name": "assetOut",
+              "type": "address"
+            },
+            {
+              "name": "nativeIn",
+              "type": "bool"
+            },
+            {
+              "name": "nativeOut",
+              "type": "bool"
+            },
+            {
+              "name": "amountIn",
+              "type": "uint256"
+            },
+            {
+              "name": "amountOut",
+              "type": "uint256"
+            },
+            {
+              "name": "quoteId",
+              "type": "bytes32"
+            },
+            {
+              "name": "deadline",
+              "type": "uint256"
+            }
+          ]
+        },
+        "message": {
+          "chainId": 97,
+          "router": "0x00355Ed1Fc7cD618AEC5A8E8fD31686376499ccB",
+          "pool": "0xA54D041eD831BBE2D6F97107Ab3aD9f9682C392a",
+          "funder": "0x4000000000000000000000000000000000000000",
+          "recipient": "0x4000000000000000000000000000000000000000",
+          "assetIn": "0x0827541D8d43Bb891865440B50e6713D4C55be5A",
+          "assetOut": "0x75D74Ab8EcFF5215bbad450103ceDF532C23Ae46",
+          "nativeIn": false,
+          "nativeOut": false,
+          "amountIn": "10000000000000000000",
+          "amountOut": "84673291643507414",
+          "quoteId": "0x3ddb96e1a894708828ddfd52839d04f057db3cf03e475109fec4892b2febe441",
+          "deadline": "987196826485754357035886938539539231740712247855061315852557540218051080"
+        }
+      },
+      "signatureType": "eoa",
+      "digest": "0xf2182706a809763a26e94d394d77a4c8753622ec5e244785cb4ff324c54f23b1",
+      "signature": "0x416990f5c57d4f814baaee1a15e73a8b01aa07aacc9e46d086220f7a6cfbd9634d2f080bcb79eed593e2abdd6a704e409d7cf19ccb241cb79d4e7560c21348771b"
+    }
+  },
+  "transaction": {
+    "chainId": 97,
+    "to": "0x00355Ed1Fc7cD618AEC5A8E8fD31686376499ccB",
+    "data": "0xa6022e95000000000000000000000000000000000000000000000000000000000000006000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000280000000000000000000000000a54d041ed831bbe2d6f97107ab3ad9f9682c392a0000000000000000000000000827541d8d43bb891865440b50e6713d4c55be5a00000000000000000000000075d74ab8ecff5215bbad450103cedf532c23ae46000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008ac7230489e80000000000000000000000000000000000000000000000000000012cd1e8fe5fd2d63ddb96e1a894708828ddfd52839d04f057db3cf03e475109fec4892b2febe44100008f092a5823b03aa2d40000000083f4a3ea30df568c1a138813886a731a080000000000000000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000018000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000041443d7cf339477994338c62f9925eefe599adb6ff1a29052d90679db978892d4a38bbc2c3bffdb482ec2b3153e6b2a18744d433d4525c8dc973a49b27b976ade31c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041416990f5c57d4f814baaee1a15e73a8b01aa07aacc9e46d086220f7a6cfbd9634d2f080bcb79eed593e2abdd6a704e409d7cf19ccb241cb79d4e7560c21348771b00000000000000000000000000000000000000000000000000000000000000",
+    "value": "0",
+    "method": "swapSetwise",
+    "adapter": {
+      "funder": "0x4000000000000000000000000000000000000000",
+      "swap": {
+        "pool": "0xA54D041eD831BBE2D6F97107Ab3aD9f9682C392a",
+        "assetIn": "0x0827541D8d43Bb891865440B50e6713D4C55be5A",
+        "assetOut": "0x75D74Ab8EcFF5215bbad450103ceDF532C23Ae46",
+        "nativeIn": false,
+        "nativeOut": false,
+        "amountIn": "10000000000000000000",
+        "amountOut": "84673291643507414",
+        "quoteId": "0x3ddb96e1a894708828ddfd52839d04f057db3cf03e475109fec4892b2febe441",
+        "deadline": "987196826485754357035886938539539231740712247855061315852557540218051080",
+        "recipient": "0x4000000000000000000000000000000000000000",
+        "signature": "0x443d7cf339477994338c62f9925eefe599adb6ff1a29052d90679db978892d4a38bbc2c3bffdb482ec2b3153e6b2a18744d433d4525c8dc973a49b27b976ade31c",
+        "auxiliaryData": "0x"
+      }
+    }
+  },
+  "persisted": true
+}
