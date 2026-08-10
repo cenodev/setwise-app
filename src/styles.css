@@ -81,7 +81,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-vis
   padding: 1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--bg-surface-raised) 92%, transparent), color-mix(in srgb, var(--bg-surface) 92%, transparent));
+  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
 }
 .set-directory-card h2 { margin: .25rem 0 .35rem; font-size: 1.05rem; }
 .set-directory-card p:not(.eyebrow):not(.set-directory-note) { margin: 0; color: var(--text-secondary); font-size: .9rem; }
@@ -123,7 +123,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-vis
   padding: 1.25rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--bg-surface-raised) 92%, transparent), color-mix(in srgb, var(--bg-surface) 92%, transparent));
+  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
 }
 .set-detail-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
 .set-detail-heading > div { min-width: 0; }
@@ -313,7 +313,7 @@ code {
   padding: 1.25rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--bg-surface-raised) 92%, transparent), color-mix(in srgb, var(--bg-surface) 92%, transparent));
+  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
 }
 .gate-card h2, .prototype-card h2, .empty-card h2 { margin: .35rem 0 .5rem; font-size: 1.15rem; }
 .gate-card p:not(.eyebrow), .prototype-card p:not(.eyebrow), .empty-card p, .disclosure { color: var(--text-secondary); line-height: 1.55; }
@@ -368,14 +368,14 @@ code {
   padding: 1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--bg-surface-raised) 92%, transparent), color-mix(in srgb, var(--bg-surface) 92%, transparent));
+  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
 }
 .portfolio-metric-card { display: grid; gap: .35rem; }
 .portfolio-metric-card strong { font-size: 1.55rem; letter-spacing: -.025em; }
 .portfolio-metric-card span { color: var(--text-tertiary); font-size: .75rem; line-height: 1.4; }
 .portfolio-metric-card--external {
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--bg-surface-raised) 96%, transparent), color-mix(in srgb, var(--bg-surface) 92%, transparent));
+  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
 }
 .portfolio-liquidity-note,
 .portfolio-wallet-setup,
@@ -389,7 +389,7 @@ code {
   padding: 1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(160deg, color-mix(in srgb, var(--bg-surface-raised) 88%, transparent), color-mix(in srgb, var(--bg-surface) 92%, transparent));
+  background: linear-gradient(160deg, var(--bg-surface-raised), var(--bg-surface));
 }
 .portfolio-wallet-panel > p { margin: 0; color: var(--text-secondary); line-height: 1.5; }
 .portfolio-wallet-panel .primary-button { justify-self: start; }
@@ -428,7 +428,7 @@ code {
 .portfolio-set-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
 
 .activity-list { display: grid; gap: .75rem; }
-.activity-card { display: grid; gap: .85rem; padding: 1rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-container); background: linear-gradient(145deg, color-mix(in srgb, var(--bg-surface-raised) 92%, transparent), color-mix(in srgb, var(--bg-surface) 92%, transparent)); }
+.activity-card { display: grid; gap: .85rem; padding: 1rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-container); background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface)); }
 .activity-card h2 { margin: .25rem 0 0; font-size: 1rem; }
 .activity-card > a { color: var(--info); font-size: .78rem; }
 .activity-card dd { overflow-wrap: anywhere; }
@@ -443,7 +443,7 @@ code {
   padding: 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--bg-surface-raised) 94%, transparent), color-mix(in srgb, var(--bg-surface) 94%, transparent));
+  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
 }
 .swap-form { display: grid; gap: 1rem; }
 .swap-assets { display: grid; gap: 0; }
@@ -498,7 +498,7 @@ code {
   padding: 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--bg-surface-raised) 94%, transparent), color-mix(in srgb, var(--bg-surface) 94%, transparent));
+  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
 }
 .deposit-form { display: grid; gap: 1rem; }
 .mode-tabs, .lock-options {
@@ -668,7 +668,7 @@ code {
   padding: 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--bg-surface-raised) 94%, transparent), color-mix(in srgb, var(--bg-surface) 94%, transparent));
+  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
 }
 .withdraw-form { display: grid; gap: 1rem; }
 .withdraw-amount-control { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
@@ -723,7 +723,7 @@ code {
   padding: 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--bg-surface-raised) 94%, transparent), color-mix(in srgb, var(--bg-surface) 94%, transparent));
+  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
 }
 .pool-status-card { color: var(--text-secondary); line-height: 1.5; }
 .pool-section-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
@@ -761,7 +761,7 @@ code {
   padding: 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--bg-surface-raised) 94%, transparent), color-mix(in srgb, var(--bg-surface) 94%, transparent));
+  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
 }
 .faucet-claim-card { display: grid; gap: 1rem; }
 .faucet-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
