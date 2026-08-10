@@ -42,6 +42,16 @@
   --info: var(--color-border-blue);
 }
 
+/*
+ * Astryx's dark-mode scope currently aliases --color-accent to --color-on-dark.
+ * Keep the app's intended ice-cyan accent when that scope is active; otherwise
+ * every translucent accent surface (the color-mix() rules below) is tinted by
+ * the text color instead of the Setwise palette.
+ */
+html[data-astryx-media="dark"] {
+  --color-accent: #67dcff;
+}
+
 * { box-sizing: border-box; }
 
 html { background: var(--bg-base); }
