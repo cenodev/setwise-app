@@ -3,8 +3,8 @@ import type { PropsWithChildren } from "react";
 import { BrowserRouter } from "react-router-dom";
 import { WagmiProvider } from "wagmi";
 import { Theme } from "@astryxdesign/core/theme";
-import { y2kTheme } from "@astryxdesign/theme-y2k/built";
 
+import { setwiseTheme } from "../theme/setwise";
 import { wagmiConfig } from "../config/wallet";
 
 const queryClient = new QueryClient({
@@ -19,7 +19,7 @@ const queryClient = new QueryClient({
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
-    <Theme theme={y2kTheme} mode="dark">
+    <Theme theme={setwiseTheme} mode="dark">
       <WagmiProvider config={wagmiConfig} reconnectOnMount>
         <QueryClientProvider client={queryClient}>
           <BrowserRouter>{children}</BrowserRouter>

@@ -10,7 +10,7 @@
 @import "tailwindcss/preflight.css" layer(base);
 @import "@astryxdesign/core/reset.css";
 @import "@astryxdesign/core/astryx.css";
-@import "@astryxdesign/theme-y2k/theme.css";
+@import "./theme/setwise.css";
 @import "@astryxdesign/core/tailwind-theme.css";
 @import "tailwindcss/utilities.css" layer(utilities);
 
@@ -34,7 +34,7 @@
   --text-secondary: var(--color-text-secondary);
   --text-tertiary: color-mix(in srgb, var(--color-text-secondary) 65%, var(--color-background-surface));
   --accent: var(--color-accent);
-  --accent-hover: var(--color-on-dark);
+  --accent-hover: var(--color-tint-hover);
   --accent-contrast: var(--color-on-accent);
   --success: var(--color-success);
   --warning: var(--color-warning);
@@ -296,7 +296,7 @@ code {
 .screen-header { padding: .25rem 0 .5rem; }
 .screen-header h1 { margin: .2rem 0 .5rem; font-size: clamp(1.8rem, 8vw, 2.5rem); letter-spacing: -.035em; }
 .screen-header p:last-child { max-width: 42rem; margin: 0; color: var(--text-secondary); line-height: 1.6; }
-.eyebrow { margin: 0; color: var(--accent); font-size: .75rem; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+.eyebrow { margin: 0; color: var(--accent); font-family: var(--font-family-code); font-size: .75rem; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
 .eyebrow--critical { color: var(--critical); }
 
 .gate-card, .prototype-card, .empty-card, .disclosure {
