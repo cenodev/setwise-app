@@ -12,6 +12,10 @@ export function setsPath(): string {
   return "/sets";
 }
 
+export function assetsPath(): string {
+  return "/assets";
+}
+
 export function setPath(setId: string, tab: SetTab = "overview"): string {
   return `/sets/${encodeURIComponent(setId)}/${tab}`;
 }

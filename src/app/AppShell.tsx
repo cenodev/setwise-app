@@ -4,10 +4,11 @@ import { NavLink } from "react-router-dom";
 import { NetworkBanner } from "../features/wallet/NetworkBanner";
 import { WalletButton } from "../features/wallet/WalletButton";
 import { PwaStatus } from "../features/pwa/PwaStatus";
-import { activityPath, portfolioPath, setsPath, swapPath } from "./routes";
+import { activityPath, assetsPath, portfolioPath, setsPath, swapPath } from "./routes";
 
 const navigation = [
   { label: "Sets", to: setsPath() },
+  { label: "Assets", to: assetsPath() },
   { label: "Portfolio", to: portfolioPath() },
   { label: "Swap", to: swapPath() },
   { label: "Activity", to: activityPath() },

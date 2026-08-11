@@ -162,7 +162,7 @@ describe("Sets routes and navigation", () => {
 
   it("uses Sets terminology in primary navigation on desktop and mobile", () => {
     renderApp("/sets");
-    const labels = ["Sets", "Portfolio", "Swap", "Activity"];
+    const labels = ["Sets", "Assets", "Portfolio", "Swap", "Activity"];
     for (const label of labels) {
       expect(screen.getAllByRole("link", { name: label })).toHaveLength(2);
     }
@@ -171,6 +171,7 @@ describe("Sets routes and navigation", () => {
     expect(screen.queryByRole("link", { name: "Withdraw" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Sets" })[0]).toHaveAttribute("href", "/sets");
     expect(screen.getAllByRole("link", { name: "Portfolio" })[0]).toHaveAttribute("href", "/portfolio");
+    expect(screen.getAllByRole("link", { name: "Assets" })[0]).toHaveAttribute("href", "/assets");
   });
 
   it("marks Sets active on nested Set routes", async () => {
