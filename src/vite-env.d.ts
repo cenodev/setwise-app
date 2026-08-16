@@ -3,6 +3,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_APP_URL?: string;
+  readonly VITE_ASSET_METRICS_API_URL?: string;
   readonly VITE_BSC_TESTNET_RPC_URL?: string;
   readonly VITE_REOWN_PROJECT_ID?: string;
   readonly VITE_RFQ_API_URL?: string;

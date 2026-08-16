@@ -61,7 +61,7 @@ export class AssetMetricsError extends Error {
 export async function fetchAssetMetricsCatalog(signal?: AbortSignal): Promise<AssetMetricsCatalog> {
   let response: Response;
   try {
-    response = await fetch(`${runtimeConfig.rfqApiUrl}/v1/assets/metrics`, { signal });
+    response = await fetch(`${runtimeConfig.assetMetricsApiUrl}/v1/assets/metrics`, { signal });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new AssetMetricsError("Asset metrics are unavailable");

@@ -33,7 +33,9 @@ describe("cached asset metrics", () => {
     const result = await fetchAssetMetricsCatalog();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/v1/assets/metrics");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "https://setwise-asset-metrics.datadex.workers.dev/v1/assets/metrics",
+    );
     expect(result.tokens).toHaveLength(1);
     expect(result.metrics.get(tokenMetadataKey(56, address))).toMatchObject({
       liquidityUsd: 25_000,
