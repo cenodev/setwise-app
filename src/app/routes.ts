@@ -16,6 +16,10 @@ export function assetsPath(): string {
   return "/assets";
 }
 
+export function assetPath(assetId: string): string {
+  return `${assetsPath()}/${encodeURIComponent(assetId)}`;
+}
+
 export function setPath(setId: string, tab: SetTab = "overview"): string {
   return `/sets/${encodeURIComponent(setId)}/${tab}`;
 }

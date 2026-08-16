@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
 import { AssetsPage } from "./AssetsPage";
 import { tokenMetadataKey, type TokenMetadata } from "../data/tokens";
@@ -63,7 +64,9 @@ describe("AssetsPage sorting", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
       <QueryClientProvider client={client}>
-        <AssetsPage />
+        <MemoryRouter>
+          <AssetsPage />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
   }
@@ -106,6 +109,10 @@ describe("AssetsPage sorting", () => {
     renderPage();
 
     expect(await screen.findAllByRole("img", { name: "Networks: Ethereum" })).not.toHaveLength(0);
+    expect(screen.getAllByRole("link", { name: /ALPHA/i })[0]).toHaveAttribute(
+      "href",
+      "/assets/example%3Aalpha",
+    );
     expect(screen.queryByText(/Token-holder rights/)).not.toBeInTheDocument();
   });
 });

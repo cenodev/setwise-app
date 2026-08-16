@@ -14,16 +14,19 @@ import type { TableColumn } from "@astryxdesign/core/Table";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { Heading, Text } from "@astryxdesign/core/Text";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
-import { TokenIcon } from "../components/TokenIdentity";
 import {
-  fetchAssetMetricsCatalog,
-  type DeploymentDexMetrics,
-  type DexMetricsIndex,
-} from "../data/assetMetrics";
+  compactUsd,
+  NetworkLogos,
+  summarizeAssetMetrics,
+  type AssetNetwork,
+} from "../components/AssetMetricsView";
+import { TokenIcon } from "../components/TokenIdentity";
+import { fetchAssetMetricsCatalog, type DexMetricsIndex } from "../data/assetMetrics";
 import { groupRwaAssets, type RwaAsset } from "../data/assets";
 import { assetMetricsQueryKeys } from "../data/queryKeys";
-import { tokenMetadataKey } from "../data/tokens";
+import { assetPath } from "../app/routes";
 
 interface AssetMetricRow extends Record<string, unknown> {
   asset: RwaAsset;
@@ -40,92 +43,14 @@ interface AssetMetricRow extends Record<string, unknown> {
 
 type AssetMetricSortKey = "liquidityUsd" | "volume24hUsd";
 
-type AssetNetwork = {
-  chainId: number;
-  name: string;
-};
-
-const networkIconSlugs: Readonly<Record<number, string>> = {
-  [-239]: "ton",
-  1: "ethereum",
-  56: "bsc",
-  97: "bsc",
-  101: "solana",
-  137: "polygon",
-  143: "monad",
-  196: "x-layer",
-  988: "stable",
-  999: "hyperliquid",
-  1030: "conflux",
-  4663: "robinhood-chain",
-  5000: "mantle",
-  9745: "plasma",
-  42161: "arbitrum",
-  42220: "celo",
-  43114: "avalanche",
-  57073: "ink",
-};
-
-function networkIconUrl(chainId: number): string | undefined {
-  const slug = networkIconSlugs[chainId];
-  return slug ? `https://icons.llamao.fi/icons/chains/rsz_${slug}.jpg` : undefined;
-}
-
-function NetworkLogo({ network }: { network: AssetNetwork }) {
-  const [failed, setFailed] = useState(false);
-  const logo = networkIconUrl(network.chainId);
-  if (!logo || failed) {
-    return <span className="asset-network-logo asset-network-logo--fallback" title={network.name}>{network.name.slice(0, 2).toUpperCase()}</span>;
-  }
-  return <img className="asset-network-logo" src={logo} alt="" title={network.name} loading="lazy" onError={() => setFailed(true)} />;
-}
-
-function NetworkLogos({ networks }: { networks: AssetNetwork[] }) {
-  const visible = networks.slice(0, 5);
-  return (
-    <span className="asset-network-logos" role="img" aria-label={`Networks: ${networks.map(({ name }) => name).join(", ")}`}>
-      {visible.map((network) => <NetworkLogo key={network.chainId} network={network} />)}
-      {networks.length > visible.length && <span className="asset-network-overflow">+{networks.length - visible.length}</span>}
-    </span>
-  );
-}
-
-function compactUsd(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    maximumFractionDigits: value < 1_000 ? 2 : 1,
-    notation: value >= 1_000 ? "compact" : "standard",
-    style: "currency",
-  }).format(value);
-}
-
-function deploymentMetrics(asset: RwaAsset, metrics: DexMetricsIndex | undefined): DeploymentDexMetrics[] {
-  if (!metrics) return [];
-  return asset.tokens.flatMap((token) => {
-    const value = metrics.get(tokenMetadataKey(token.chainId, token.address));
-    return value ? [value] : [];
-  });
-}
-
 function buildAssetMetricRows(assets: readonly RwaAsset[], metrics?: DexMetricsIndex): AssetMetricRow[] {
   return assets.map((asset) => {
-    const values = deploymentMetrics(asset, metrics);
-    const mostLiquid = [...values].sort((a, b) => b.liquidityUsd - a.liquidityUsd)[0];
-    const networks = [...new Map(asset.tokens.map((token) => [
-      token.chainId,
-      { chainId: token.chainId, name: token.chainName ?? `Chain ${token.chainId}` },
-    ])).values()];
+    const summary = summarizeAssetMetrics(asset, metrics);
     return {
       asset,
       id: asset.id,
-      liquidityUsd: values.reduce((sum, value) => sum + value.liquidityUsd, 0),
-      metricsAvailable: values.length > 0,
-      networkSearch: networks.map(({ name }) => name).join(", "),
-      networks,
-      poolCount: values.reduce((sum, value) => sum + value.poolCount, 0),
-      priceUsd: mostLiquid?.priceUsd ?? null,
-      topVenue: mostLiquid?.topVenue ?? null,
-      volume24hUsd: values.reduce((sum, value) => sum + value.volume24hUsd, 0),
+      ...summary,
+      networkSearch: summary.networks.map(({ name }) => name).join(", "),
     };
   });
 }
@@ -136,13 +61,15 @@ const columns: TableColumn<AssetMetricRow>[] = [
     header: "Asset",
     width: proportional(3),
     renderCell: ({ asset }) => (
-      <HStack gap={3} vAlign="center">
-        <TokenIcon logoURI={asset.logoURI} symbol={asset.underlyingSymbol ?? asset.symbol} />
-        <VStack gap={0}>
-          <Text weight="bold">{asset.underlyingSymbol ?? asset.symbol}</Text>
-          <Text type="supporting" color="secondary">{asset.name} · {asset.provider}</Text>
-        </VStack>
-      </HStack>
+      <Link className="asset-detail-link" to={assetPath(asset.id)}>
+        <HStack gap={3} vAlign="center">
+          <TokenIcon logoURI={asset.logoURI} symbol={asset.underlyingSymbol ?? asset.symbol} />
+          <VStack gap={0}>
+            <Text weight="bold">{asset.underlyingSymbol ?? asset.symbol}</Text>
+            <Text type="supporting" color="secondary">{asset.name} · {asset.provider}</Text>
+          </VStack>
+        </HStack>
+      </Link>
     ),
   },
   {
@@ -307,10 +234,12 @@ export function AssetsPage() {
                     <HStack gap={3} vAlign="center" className="asset-card-heading">
                       <HStack gap={3} vAlign="center">
                         <TokenIcon logoURI={row.asset.logoURI} symbol={row.asset.underlyingSymbol ?? row.asset.symbol} />
-                        <VStack gap={0}>
-                          <Text weight="bold">{row.asset.underlyingSymbol ?? row.asset.symbol}</Text>
-                          <Text type="supporting" color="secondary">{row.asset.name} · {row.asset.provider}</Text>
-                        </VStack>
+                        <Link className="asset-detail-link" to={assetPath(row.asset.id)}>
+                          <VStack gap={0}>
+                            <Text weight="bold">{row.asset.underlyingSymbol ?? row.asset.symbol}</Text>
+                            <Text type="supporting" color="secondary">{row.asset.name} · {row.asset.provider}</Text>
+                          </VStack>
+                        </Link>
                       </HStack>
                       <NetworkLogos networks={row.networks} />
                     </HStack>

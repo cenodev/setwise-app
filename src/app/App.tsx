@@ -9,6 +9,7 @@ import { FaucetPage } from "../features/faucet/FaucetPage";
 import { SwapPage } from "../features/swap/SwapPage";
 import { WalletGate } from "../features/wallet/WalletGate";
 import { ActivityPage } from "../pages/ActivityPage";
+import { AssetDetailPage } from "../pages/AssetDetailPage";
 import { AssetsPage } from "../pages/AssetsPage";
 import { PortfolioPage } from "../pages/PortfolioPage";
 import { SetsPage } from "../pages/SetsPage";
@@ -20,6 +21,7 @@ export function App() {
         <Route path="/" element={<Navigate to={setsPath()} replace />} />
         <Route path="/sets" element={<SetsPage />} />
         <Route path="/assets" element={<AssetsPage />} />
+        <Route path="/assets/:assetId" element={<AssetDetailPage />} />
         <Route path="/sets/:setId" element={<SetDetailLayout />}>
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="overview" element={<SetOverviewTab />} />
