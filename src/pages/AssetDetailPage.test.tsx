@@ -71,8 +71,8 @@ describe("AssetDetailPage", () => {
     expect(screen.getAllByText("$42.13")).not.toHaveLength(0);
     expect(screen.getAllByText("uniswap")).not.toHaveLength(0);
     expect(screen.getAllByText("Ethereum")).not.toHaveLength(0);
-    expect(screen.getAllByText("Polygon")).not.toHaveLength(0);
-    expect(screen.getAllByText("0x2000000000000000000000000000000000000000")).not.toHaveLength(0);
+    expect(screen.queryByText("Polygon")).not.toBeInTheDocument();
+    expect(screen.queryByText("0x2000000000000000000000000000000000000000")).not.toBeInTheDocument();
   });
 
   it("renders an explicit not-found state for an unknown asset id", async () => {
@@ -80,5 +80,30 @@ describe("AssetDetailPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Asset not found" })).toBeVisible();
     expect(screen.getByText(/not present in the current Setwise token list/i)).toBeVisible();
+  });
+
+  it("replaces zero-liquidity network rows with an empty state", async () => {
+    const ethereum = token(1, "Ethereum", "0x1000000000000000000000000000000000000000");
+    mocks.fetchAssetMetricsCatalog.mockResolvedValueOnce({
+      cache: { ageSeconds: 30, maxStaleSeconds: 900, status: "fresh" },
+      coverage: { batchCount: 1, pairCount: 0, supportedTokenCount: 1, tokenCount: 1 },
+      generatedAt: "2026-08-16T21:00:45.704Z",
+      metrics: new Map([
+        [tokenMetadataKey(ethereum.chainId, ethereum.address), {
+          liquidityUsd: 0,
+          poolCount: 0,
+          priceUsd: null,
+          topVenue: null,
+          volume24hUsd: 0,
+        }],
+      ]),
+      tokens: [ethereum],
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "No liquid DEX markets" })).toBeVisible();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /Networks:/i })).not.toBeInTheDocument();
   });
 });

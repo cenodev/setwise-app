@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@astryxdesign/core/Badge";
 import { BreadcrumbItem, Breadcrumbs } from "@astryxdesign/core/Breadcrumbs";
 import { Card } from "@astryxdesign/core/Card";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Grid } from "@astryxdesign/core/Grid";
 import { HStack, VStack } from "@astryxdesign/core/Layout";
 import { proportional, Table, type TableColumn } from "@astryxdesign/core/Table";
@@ -103,10 +104,12 @@ export function AssetDetailPage() {
     [asset, catalog.data?.metrics],
   );
   const deployments = useMemo<DeploymentRow[]>(
-    () => asset ? assetDeploymentMetrics(asset, catalog.data?.metrics).map((deployment) => ({
-      ...deployment,
-      id: `${deployment.token.chainId}:${deployment.token.address.toLowerCase()}`,
-    })) : [],
+    () => asset ? assetDeploymentMetrics(asset, catalog.data?.metrics)
+      .filter(({ metrics }) => metrics !== undefined && metrics.liquidityUsd > 0)
+      .map((deployment) => ({
+        ...deployment,
+        id: `${deployment.token.chainId}:${deployment.token.address.toLowerCase()}`,
+      })) : [],
     [asset, catalog.data?.metrics],
   );
 
@@ -214,56 +217,69 @@ export function AssetDetailPage() {
                   </Text>
                 </VStack>
 
-                <section className="asset-table" aria-label="Asset network metrics table">
-                  <Table<DeploymentRow>
-                    data={deployments}
-                    columns={deploymentColumns}
-                    idKey="id"
-                    density="balanced"
-                    dividers="rows"
-                    verticalAlign="top"
-                    textOverflow="wrap"
-                  />
-                </section>
+                {deployments.length === 0 ? (
+                  <Card>
+                    <EmptyState
+                      title="No liquid DEX markets"
+                      description="Network metrics will appear when a trusted USD pool reports liquidity for this asset."
+                      headingLevel={3}
+                      isCompact
+                    />
+                  </Card>
+                ) : (
+                  <>
+                    <section className="asset-table" aria-label="Asset network metrics table">
+                      <Table<DeploymentRow>
+                        data={deployments}
+                        columns={deploymentColumns}
+                        idKey="id"
+                        density="balanced"
+                        dividers="rows"
+                        verticalAlign="top"
+                        textOverflow="wrap"
+                      />
+                    </section>
 
-                <section className="asset-card-list" aria-label="Asset network metrics cards">
-                  {deployments.map(({ id, metrics, network, token }) => (
-                    <Card key={id}>
-                      <VStack gap={4}>
-                        <HStack gap={3} vAlign="center" className="asset-card-heading">
-                          <NetworkIdentity network={network} />
-                          <Badge label={metrics?.topVenue ?? "Unavailable"} variant="neutral" />
-                        </HStack>
-                        <VStack gap={0}>
-                          <Text weight="bold">{token.symbol}</Text>
-                          <code className="asset-deployment-address">{token.address}</code>
-                        </VStack>
-                        <Grid columns={{ minWidth: 120, max: 2, repeat: "fit" }} gap={3}>
-                          <VStack gap={0}>
-                            <Text type="supporting" color="secondary">Liquidity</Text>
-                            <Text weight="bold">{metrics ? compactUsd(metrics.liquidityUsd) : "—"}</Text>
+                    <section className="asset-card-list" aria-label="Asset network metrics cards">
+                      {deployments.map(({ id, metrics, network, token }) => (
+                        <Card key={id}>
+                          <VStack gap={4}>
+                            <HStack gap={3} vAlign="center" className="asset-card-heading">
+                              <NetworkIdentity network={network} />
+                              <Badge label={metrics?.topVenue ?? "Unavailable"} variant="neutral" />
+                            </HStack>
+                            <VStack gap={0}>
+                              <Text weight="bold">{token.symbol}</Text>
+                              <code className="asset-deployment-address">{token.address}</code>
+                            </VStack>
+                            <Grid columns={{ minWidth: 120, max: 2, repeat: "fit" }} gap={3}>
+                              <VStack gap={0}>
+                                <Text type="supporting" color="secondary">Liquidity</Text>
+                                <Text weight="bold">{metrics ? compactUsd(metrics.liquidityUsd) : "—"}</Text>
+                              </VStack>
+                              <VStack gap={0}>
+                                <Text type="supporting" color="secondary">24h volume</Text>
+                                <Text weight="bold">{metrics ? compactUsd(metrics.volume24hUsd) : "—"}</Text>
+                              </VStack>
+                              <VStack gap={0}>
+                                <Text type="supporting" color="secondary">DEX price</Text>
+                                <Text weight="bold">
+                                  {metrics?.priceUsd === null || metrics?.priceUsd === undefined
+                                    ? "—"
+                                    : compactUsd(metrics.priceUsd)}
+                                </Text>
+                              </VStack>
+                              <VStack gap={0}>
+                                <Text type="supporting" color="secondary">Pools</Text>
+                                <Text weight="bold">{metrics ? String(metrics.poolCount) : "—"}</Text>
+                              </VStack>
+                            </Grid>
                           </VStack>
-                          <VStack gap={0}>
-                            <Text type="supporting" color="secondary">24h volume</Text>
-                            <Text weight="bold">{metrics ? compactUsd(metrics.volume24hUsd) : "—"}</Text>
-                          </VStack>
-                          <VStack gap={0}>
-                            <Text type="supporting" color="secondary">DEX price</Text>
-                            <Text weight="bold">
-                              {metrics?.priceUsd === null || metrics?.priceUsd === undefined
-                                ? "—"
-                                : compactUsd(metrics.priceUsd)}
-                            </Text>
-                          </VStack>
-                          <VStack gap={0}>
-                            <Text type="supporting" color="secondary">Pools</Text>
-                            <Text weight="bold">{metrics ? String(metrics.poolCount) : "—"}</Text>
-                          </VStack>
-                        </Grid>
-                      </VStack>
-                    </Card>
-                  ))}
-                </section>
+                        </Card>
+                      ))}
+                    </section>
+                  </>
+                )}
               </VStack>
             </section>
 

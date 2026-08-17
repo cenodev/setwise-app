@@ -19,6 +19,7 @@ describe("summarizeAssetMetrics", () => {
   it("uses the most-liquid deployment with a validated price", () => {
     const ethereum = deployment(1, "0x1aad217b8f78dba5e6693460e8470f8b1a3977f3");
     const solana = deployment(101, "Xs78JED6PFZxWc2wCEPspZW9kL3Se5J7L5TChKgsidH");
+    const polygon = deployment(137, "0x3000000000000000000000000000000000000000");
     const asset: RwaAsset = {
       assetType: "equity",
       description: "",
@@ -27,7 +28,7 @@ describe("summarizeAssetMetrics", () => {
       name: ethereum.name,
       provider: "xStocks",
       symbol: ethereum.symbol,
-      tokens: [ethereum, solana],
+      tokens: [ethereum, solana, polygon],
       underlyingSymbol: "STRC",
     };
     const metric = (input: Partial<DeploymentDexMetrics>): DeploymentDexMetrics => ({
@@ -47,6 +48,7 @@ describe("summarizeAssetMetrics", () => {
         topVenue: "raydium",
         volume24hUsd: 3_527.85,
       })],
+      [tokenMetadataKey(polygon.chainId, polygon.address), metric({})],
     ]);
 
     const summary = summarizeAssetMetrics(asset, metrics);
@@ -55,5 +57,6 @@ describe("summarizeAssetMetrics", () => {
       volume24hUsd: 3_527.85,
     });
     expect(summary.liquidityUsd).toBeCloseTo(694_576.68);
+    expect(summary.networks.map(({ chainId }) => chainId)).toEqual([1, 101]);
   });
 });

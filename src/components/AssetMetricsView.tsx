@@ -76,6 +76,7 @@ export function NetworkLogo({ network }: { network: AssetNetwork }) {
 }
 
 export function NetworkLogos({ networks }: { networks: AssetNetwork[] }) {
+  if (networks.length === 0) return null;
   const visible = networks.slice(0, 5);
   return (
     <span
@@ -128,12 +129,17 @@ export function summarizeAssetMetrics(
   metrics: DexMetricsIndex | undefined,
 ): AssetMetricSummary {
   const deployments = assetDeploymentMetrics(asset, metrics);
-  const values = deployments.flatMap(({ metrics: value }) => value ? [value] : []);
+  const liquidDeployments = deployments.filter(({ metrics: value }) => (
+    value !== undefined && value.liquidityUsd > 0
+  ));
+  const values = liquidDeployments.flatMap(({ metrics: value }) => value ? [value] : []);
   const mostLiquid = [...values].sort((a, b) => b.liquidityUsd - a.liquidityUsd)[0];
   const mostLiquidPriced = [...values]
     .filter((value) => value.priceUsd !== null)
     .sort((a, b) => b.liquidityUsd - a.liquidityUsd)[0];
-  const networks = [...new Map(deployments.map(({ network }) => [network.chainId, network])).values()];
+  const networks = [...new Map(
+    liquidDeployments.map(({ network }) => [network.chainId, network]),
+  ).values()];
   return {
     liquidityUsd: values.reduce((sum, value) => sum + value.liquidityUsd, 0),
     metricsAvailable: values.length > 0,
