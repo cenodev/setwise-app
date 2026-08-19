@@ -115,4 +115,33 @@ describe("AssetsPage sorting", () => {
     );
     expect(screen.queryByText(/Token-holder rights/)).not.toBeInTheDocument();
   });
+
+  it("paginates the sorted asset set and resets pagination when searching", async () => {
+    const tokens = Array.from({ length: 51 }, (_, index) => token(
+      `ASSET${String(index + 1).padStart(2, "0")}`,
+      `0x${(index + 1).toString(16).padStart(40, "0")}`,
+    ));
+    mocks.fetchAssetMetricsCatalog.mockResolvedValue({
+      cache: { ageSeconds: 30, maxStaleSeconds: 900, status: "fresh" },
+      coverage: { batchCount: 2, pairCount: 0, supportedTokenCount: 51, tokenCount: 51 },
+      generatedAt: "2026-08-11T18:05:00.000Z",
+      metrics: new Map(),
+      tokens,
+    });
+    renderPage();
+
+    const pagination = await screen.findByRole("navigation", { name: "Asset pages" });
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(51);
+    expect(within(pagination).getByRole("spinbutton", { name: "Go to page" })).toHaveValue(1);
+
+    fireEvent.click(within(pagination).getByRole("button", { name: "Go to next page" }));
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(2);
+    expect(within(screen.getByRole("table")).getByText("ASSET51")).toBeVisible();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Search assets" }), {
+      target: { value: "ASSET01" },
+    });
+    expect(within(screen.getByRole("table")).getByText("ASSET01")).toBeVisible();
+    expect(screen.queryByRole("navigation", { name: "Asset pages" })).not.toBeInTheDocument();
+  });
 });

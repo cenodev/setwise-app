@@ -4,6 +4,7 @@ import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { Grid } from "@astryxdesign/core/Grid";
 import { HStack, VStack } from "@astryxdesign/core/Layout";
+import { Pagination } from "@astryxdesign/core/Pagination";
 import {
   Table,
   proportional,
@@ -42,6 +43,9 @@ interface AssetMetricRow extends Record<string, unknown> {
 }
 
 type AssetMetricSortKey = "liquidityUsd" | "volume24hUsd";
+
+const DEFAULT_PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 function buildAssetMetricRows(assets: readonly RwaAsset[], metrics?: DexMetricsIndex): AssetMetricRow[] {
   return assets.map((asset) => {
@@ -118,6 +122,8 @@ const columns: TableColumn<AssetMetricRow>[] = [
 
 export function AssetsPage() {
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const catalog = useQuery({
     queryKey: assetMetricsQueryKeys.all,
     queryFn: ({ signal }) => fetchAssetMetricsCatalog(signal),
@@ -143,7 +149,14 @@ export function AssetsPage() {
     defaultSort: [{ sortKey: "liquidityUsd", direction: "descending" }],
     allowUnsortedState: false,
   });
-  const sortPlugin = useTableSortable<AssetMetricRow, AssetMetricSortKey>(sortConfig);
+  const handleSortChange: typeof sortConfig.onSortChange = (nextSort) => {
+    setPage(1);
+    sortConfig.onSortChange(nextSort);
+  };
+  const sortPlugin = useTableSortable<AssetMetricRow, AssetMetricSortKey>({
+    ...sortConfig,
+    onSortChange: handleSortChange,
+  });
   const displayedRows = useMemo(() => {
     if (sort.length === 0) return sortedData;
     return [
@@ -151,12 +164,24 @@ export function AssetsPage() {
       ...sortedData.filter((row) => !row.metricsAvailable),
     ];
   }, [sort, sortedData]);
+  const totalPages = Math.max(1, Math.ceil(displayedRows.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const pageRows = displayedRows.slice(pageStart, pageStart + pageSize);
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
+  const handlePageSizeChange = (nextPageSize: number) => {
+    setPageSize(nextPageSize);
+    setPage(1);
+  };
   const setMobileSort = (sortKey: AssetMetricSortKey) => {
     const current = sort[0];
     const direction = current?.sortKey === sortKey && current.direction === "descending"
       ? "ascending"
       : "descending";
-    sortConfig.onSortChange([{ sortKey, direction }]);
+    handleSortChange([{ sortKey, direction }]);
   };
 
   return (
@@ -172,7 +197,7 @@ export function AssetsPage() {
           <TextInput
             label="Search assets"
             value={search}
-            onChange={setSearch}
+            onChange={handleSearchChange}
             placeholder="Symbol, asset, issuer or network"
             hasClear
             width="min(100%, 32rem)"
@@ -184,7 +209,7 @@ export function AssetsPage() {
                 ? "Refreshing cached metrics…"
                 : catalog.data?.cache.status === "stale"
                   ? "Cached snapshot is stale"
-                  : "Worker cache refreshes every five minutes"}
+                  : "Worker refreshes a metrics slice every two minutes"}
             </Text>
           </VStack>
         </Grid>
@@ -200,13 +225,15 @@ export function AssetsPage() {
           <section aria-label="RWA asset metrics" className="asset-results">
             <div className="asset-table">
               <Table<AssetMetricRow>
-                data={displayedRows}
+                data={pageRows}
                 columns={columns}
                 idKey="id"
                 density="balanced"
                 dividers="rows"
                 hasHover
                 plugins={{ sort: sortPlugin }}
+                rowCount={displayedRows.length}
+                rowIndexStart={pageStart + 1}
                 verticalAlign="top"
               />
             </div>
@@ -228,7 +255,7 @@ export function AssetsPage() {
             </div>
 
             <div className="asset-card-list">
-              {displayedRows.map((row) => (
+              {pageRows.map((row) => (
                 <Card key={row.id}>
                   <VStack gap={4}>
                     <HStack gap={3} vAlign="center" className="asset-card-heading">
@@ -257,11 +284,27 @@ export function AssetsPage() {
                 </Card>
               ))}
             </div>
+
+            {displayedRows.length > pageSize && (
+              <HStack hAlign="center">
+                <Pagination
+                  page={currentPage}
+                  onChange={setPage}
+                  totalItems={displayedRows.length}
+                  pageSize={pageSize}
+                  pageSizeOptions={PAGE_SIZE_OPTIONS}
+                  onPageSizeChange={handlePageSizeChange}
+                  variant="input"
+                  size="sm"
+                  label="Asset pages"
+                />
+              </HStack>
+            )}
           </section>
         )}
 
         <Text type="supporting" color="secondary">
-          Liquidity and volume come from the last complete Setwise Worker snapshot and are informational, not executable quotes. Price impact and trade-size depth will require the next quote-sampling phase.
+          Liquidity and volume come from the rolling Setwise Worker snapshot and are informational, not executable quotes. A full metrics cycle currently completes in about 14 minutes. Price impact and trade-size depth will require the next quote-sampling phase.
         </Text>
       </VStack>
     </section>
