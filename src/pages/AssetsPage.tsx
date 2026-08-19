@@ -5,6 +5,7 @@ import { Card } from "@astryxdesign/core/Card";
 import { Grid } from "@astryxdesign/core/Grid";
 import { HStack, VStack } from "@astryxdesign/core/Layout";
 import { Pagination } from "@astryxdesign/core/Pagination";
+import { Switch } from "@astryxdesign/core/Switch";
 import { Tab, TabList, TabMenu } from "@astryxdesign/core/TabList";
 import {
   Table,
@@ -136,6 +137,7 @@ const columns: TableColumn<AssetMetricRow>[] = [
 
 export function AssetsPage() {
   const [category, setCategory] = useState<AssetCategory>("all");
+  const [hasLiquidityOnly, setHasLiquidityOnly] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -149,17 +151,18 @@ export function AssetsPage() {
   const rows = useMemo(() => {
     const needle = search.trim().toLowerCase();
     const categoryAssets = assets.filter((asset) => matchesAssetCategory(asset, category));
-    return buildAssetMetricRows(categoryAssets, catalog.data?.metrics).filter(({ asset, networkSearch }) => (
-      needle.length === 0 || [
-        asset.name,
-        asset.provider,
-        asset.symbol,
-        asset.underlyingSymbol,
-        asset.assetType,
-        networkSearch,
-      ].filter(Boolean).some((value) => String(value).toLowerCase().includes(needle))
+    return buildAssetMetricRows(categoryAssets, catalog.data?.metrics).filter((row) => (
+      (!hasLiquidityOnly || row.liquidityUsd > 0)
+      && (needle.length === 0 || [
+          row.asset.name,
+          row.asset.provider,
+          row.asset.symbol,
+          row.asset.underlyingSymbol,
+          row.asset.assetType,
+          row.networkSearch,
+        ].filter(Boolean).some((value) => String(value).toLowerCase().includes(needle)))
     ));
-  }, [assets, catalog.data?.metrics, category, search]);
+  }, [assets, catalog.data?.metrics, category, hasLiquidityOnly, search]);
   const { sortedData, sort, sortConfig } = useTableSortableState<AssetMetricRow, AssetMetricSortKey>({
     data: rows,
     defaultSort: [{ sortKey: "liquidityUsd", direction: "descending" }],
@@ -190,6 +193,10 @@ export function AssetsPage() {
   };
   const handleCategoryChange = (value: string) => {
     setCategory(value as AssetCategory);
+    setPage(1);
+  };
+  const handleLiquidityFilterChange = (value: boolean) => {
+    setHasLiquidityOnly(value);
     setPage(1);
   };
   const handlePageSizeChange = (nextPageSize: number) => {
@@ -234,7 +241,7 @@ export function AssetsPage() {
           />
         </TabList>
 
-        <Grid columns={{ minWidth: 240, max: 2, repeat: "fit" }} gap={4} align="end">
+        <Grid columns={{ minWidth: 220, max: 3, repeat: "fit" }} gap={4} align="end">
           <TextInput
             label="Search assets"
             value={search}
@@ -242,6 +249,12 @@ export function AssetsPage() {
             placeholder="Symbol, asset, issuer or network"
             hasClear
             width="min(100%, 32rem)"
+          />
+          <Switch
+            label="Only assets with liquidity"
+            value={hasLiquidityOnly}
+            onChange={handleLiquidityFilterChange}
+            size="sm"
           />
           <VStack gap={0} hAlign="end">
             <Text weight="bold">{rows.length} {rows.length === 1 ? "asset" : "assets"}</Text>

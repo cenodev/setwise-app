@@ -117,6 +117,22 @@ describe("AssetsPage sorting", () => {
     expect(screen.queryByText(/Token-holder rights/)).not.toBeInTheDocument();
   });
 
+  it("filters out assets without positive liquidity", async () => {
+    renderPage();
+
+    await screen.findByRole("table");
+    const liquidityFilter = screen.getByRole("switch", { name: "Only assets with liquidity" });
+    expect(liquidityFilter).not.toBeChecked();
+
+    fireEvent.click(liquidityFilter);
+    expect(liquidityFilter).toBeChecked();
+    expect(tableAssetNames().map((name) => name.match(/ALPHA|BETA|GAMMA/)?.[0])).toEqual([
+      "ALPHA",
+      "BETA",
+    ]);
+    expect(screen.getByText("2 assets")).toBeVisible();
+  });
+
   it("paginates the sorted asset set and resets pagination when searching", async () => {
     const tokens = Array.from({ length: 51 }, (_, index) => token(
       `ASSET${String(index + 1).padStart(2, "0")}`,
