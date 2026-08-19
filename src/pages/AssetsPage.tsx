@@ -5,6 +5,7 @@ import { Card } from "@astryxdesign/core/Card";
 import { Grid } from "@astryxdesign/core/Grid";
 import { HStack, VStack } from "@astryxdesign/core/Layout";
 import { Pagination } from "@astryxdesign/core/Pagination";
+import { Tab, TabList, TabMenu } from "@astryxdesign/core/TabList";
 import {
   Table,
   proportional,
@@ -43,9 +44,22 @@ interface AssetMetricRow extends Record<string, unknown> {
 }
 
 type AssetMetricSortKey = "liquidityUsd" | "volume24hUsd";
+type AssetCategory = "all" | "commodities" | "currencies" | "equities" | "fixed-income" | "funds" | "real-estate";
 
 const DEFAULT_PAGE_SIZE = 50;
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
+const CATEGORY_ASSET_TYPES: Readonly<Record<Exclude<AssetCategory, "all">, readonly string[]>> = {
+  commodities: ["commodity"],
+  currencies: ["currency", "crypto"],
+  equities: ["equity", "private-equity"],
+  "fixed-income": ["bond", "credit", "treasury"],
+  funds: ["etf", "fund"],
+  "real-estate": ["real-estate"],
+};
+
+function matchesAssetCategory(asset: RwaAsset, category: AssetCategory): boolean {
+  return category === "all" || CATEGORY_ASSET_TYPES[category].includes(asset.assetType?.toLowerCase() ?? "");
+}
 
 function buildAssetMetricRows(assets: readonly RwaAsset[], metrics?: DexMetricsIndex): AssetMetricRow[] {
   return assets.map((asset) => {
@@ -121,6 +135,7 @@ const columns: TableColumn<AssetMetricRow>[] = [
 ];
 
 export function AssetsPage() {
+  const [category, setCategory] = useState<AssetCategory>("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -133,7 +148,8 @@ export function AssetsPage() {
   const assets = useMemo(() => groupRwaAssets(catalog.data?.tokens ?? []), [catalog.data?.tokens]);
   const rows = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return buildAssetMetricRows(assets, catalog.data?.metrics).filter(({ asset, networkSearch }) => (
+    const categoryAssets = assets.filter((asset) => matchesAssetCategory(asset, category));
+    return buildAssetMetricRows(categoryAssets, catalog.data?.metrics).filter(({ asset, networkSearch }) => (
       needle.length === 0 || [
         asset.name,
         asset.provider,
@@ -143,7 +159,7 @@ export function AssetsPage() {
         networkSearch,
       ].filter(Boolean).some((value) => String(value).toLowerCase().includes(needle))
     ));
-  }, [assets, catalog.data?.metrics, search]);
+  }, [assets, catalog.data?.metrics, category, search]);
   const { sortedData, sort, sortConfig } = useTableSortableState<AssetMetricRow, AssetMetricSortKey>({
     data: rows,
     defaultSort: [{ sortKey: "liquidityUsd", direction: "descending" }],
@@ -172,6 +188,10 @@ export function AssetsPage() {
     setSearch(value);
     setPage(1);
   };
+  const handleCategoryChange = (value: string) => {
+    setCategory(value as AssetCategory);
+    setPage(1);
+  };
   const handlePageSizeChange = (nextPageSize: number) => {
     setPageSize(nextPageSize);
     setPage(1);
@@ -193,6 +213,27 @@ export function AssetsPage() {
           <p>Compare tokenized real-world assets and their visible DEX liquidity across networks.</p>
         </header>
 
+        <TabList
+          value={category}
+          onChange={handleCategoryChange}
+          size="sm"
+          hasDivider
+          aria-label="Asset categories"
+        >
+          <Tab value="all" label="All" />
+          <Tab value="equities" label="Equities" />
+          <Tab value="funds" label="Funds" />
+          <Tab value="fixed-income" label="Fixed income" />
+          <TabMenu
+            label="More"
+            options={[
+              { value: "commodities", label: "Commodities" },
+              { value: "real-estate", label: "Real estate" },
+              { value: "currencies", label: "Currencies" },
+            ]}
+          />
+        </TabList>
+
         <Grid columns={{ minWidth: 240, max: 2, repeat: "fit" }} gap={4} align="end">
           <TextInput
             label="Search assets"
@@ -203,7 +244,7 @@ export function AssetsPage() {
             width="min(100%, 32rem)"
           />
           <VStack gap={0} hAlign="end">
-            <Text weight="bold">{rows.length} assets</Text>
+            <Text weight="bold">{rows.length} {rows.length === 1 ? "asset" : "assets"}</Text>
             <Text type="supporting" color="secondary">
               {catalog.isFetching
                 ? "Refreshing cached metrics…"

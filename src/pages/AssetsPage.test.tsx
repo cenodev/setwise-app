@@ -14,9 +14,10 @@ vi.mock("../data/assetMetrics", async (importOriginal) => {
   return { ...actual, fetchAssetMetricsCatalog: mocks.fetchAssetMetricsCatalog };
 });
 
-function token(symbol: string, address: string): TokenMetadata {
+function token(symbol: string, address: string, assetType?: string): TokenMetadata {
   return {
     address,
+    assetType,
     chainId: 1,
     chainName: "Ethereum",
     name: `${symbol} asset`,
@@ -143,5 +144,35 @@ describe("AssetsPage sorting", () => {
     });
     expect(within(screen.getByRole("table")).getByText("ASSET01")).toBeVisible();
     expect(screen.queryByRole("navigation", { name: "Asset pages" })).not.toBeInTheDocument();
+  });
+
+  it("filters assets by grouped market category tabs", async () => {
+    const equity = token("EQUITY", "0x1000000000000000000000000000000000000001", "private-equity");
+    const fund = token("FUND", "0x2000000000000000000000000000000000000002", "etf");
+    const treasury = token("TREASURY", "0x3000000000000000000000000000000000000003", "treasury");
+    const commodity = token("GOLD", "0x4000000000000000000000000000000000000004", "commodity");
+    mocks.fetchAssetMetricsCatalog.mockResolvedValue({
+      cache: { ageSeconds: 30, maxStaleSeconds: 900, status: "fresh" },
+      coverage: { batchCount: 1, pairCount: 0, supportedTokenCount: 4, tokenCount: 4 },
+      generatedAt: "2026-08-11T18:05:00.000Z",
+      metrics: new Map(),
+      tokens: [equity, fund, treasury, commodity],
+    });
+    renderPage();
+
+    const categories = await screen.findByRole("navigation", { name: "Asset categories" });
+    await screen.findByRole("table");
+    expect(tableAssetNames()).toHaveLength(4);
+
+    fireEvent.click(within(categories).getByRole("button", { name: "Equities" }));
+    expect(tableAssetNames().map((name) => name.match(/EQUITY|FUND|TREASURY|GOLD/)?.[0])).toEqual(["EQUITY"]);
+    expect(screen.getByText("1 asset")).toBeVisible();
+
+    fireEvent.click(within(categories).getByRole("button", { name: "Fixed income" }));
+    expect(tableAssetNames().map((name) => name.match(/EQUITY|FUND|TREASURY|GOLD/)?.[0])).toEqual(["TREASURY"]);
+
+    fireEvent.click(within(categories).getByRole("button", { name: /More/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Commodities", hidden: true }));
+    expect(tableAssetNames().map((name) => name.match(/EQUITY|FUND|TREASURY|GOLD/)?.[0])).toEqual(["GOLD"]);
   });
 });
