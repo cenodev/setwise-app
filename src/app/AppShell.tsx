@@ -7,11 +7,11 @@ import { PwaStatus } from "../features/pwa/PwaStatus";
 import { activityPath, assetsPath, portfolioPath, setsPath, swapPath } from "./routes";
 
 const navigation = [
-  { label: "Sets", to: setsPath() },
-  { label: "Assets", to: assetsPath() },
+  { label: "Explore", to: assetsPath() },
+  { label: "Trade", to: swapPath() },
   { label: "Portfolio", to: portfolioPath() },
-  { label: "Swap", to: swapPath() },
-  { label: "Activity", to: activityPath() },
+  { label: "Sets", to: setsPath() },
+  { label: "History", to: activityPath() },
 ];
 
 export function AppShell({ children }: PropsWithChildren) {
@@ -22,6 +22,17 @@ export function AppShell({ children }: PropsWithChildren) {
           <img src="/setwise-mark.svg" alt="" width="32" height="32" />
           <span>Setwise</span>
         </NavLink>
+        <nav className="desktop-nav" aria-label="Primary navigation">
+          {navigation.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) => (isActive ? "nav-link is-active" : "nav-link")}
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
         <span className="testnet-badge">BSC Testnet</span>
         <WalletButton />
       </header>
@@ -33,18 +44,6 @@ export function AppShell({ children }: PropsWithChildren) {
           Unaudited testnet prototype. Do not move mainnet funds.
         </div>
       </div>
-
-      <nav className="desktop-nav" aria-label="Primary navigation">
-        {navigation.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) => (isActive ? "nav-link is-active" : "nav-link")}
-          >
-            {item.label}
-          </NavLink>
-        ))}
-      </nav>
 
       <main className="app-main">{children}</main>
 

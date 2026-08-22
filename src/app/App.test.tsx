@@ -160,9 +160,9 @@ describe("Sets routes and navigation", () => {
     mocks.getPoolState.mockImplementation((id: string) => Promise.resolve(state(id, id === "eth-set" ? 1 : 97)));
   });
 
-  it("uses Sets terminology in primary navigation on desktop and mobile", () => {
-    renderApp("/sets");
-    const labels = ["Sets", "Assets", "Portfolio", "Swap", "Activity"];
+  it("places desktop navigation beside the brand and keeps mobile navigation separate", () => {
+    const { container } = renderApp("/sets");
+    const labels = ["Explore", "Trade", "Portfolio", "Sets", "History"];
     for (const label of labels) {
       expect(screen.getAllByRole("link", { name: label })).toHaveLength(2);
     }
@@ -171,7 +171,15 @@ describe("Sets routes and navigation", () => {
     expect(screen.queryByRole("link", { name: "Withdraw" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Sets" })[0]).toHaveAttribute("href", "/sets");
     expect(screen.getAllByRole("link", { name: "Portfolio" })[0]).toHaveAttribute("href", "/portfolio");
-    expect(screen.getAllByRole("link", { name: "Assets" })[0]).toHaveAttribute("href", "/assets");
+    expect(screen.getAllByRole("link", { name: "Explore" })[0]).toHaveAttribute("href", "/assets");
+
+    const header = container.querySelector<HTMLElement>(".app-header");
+    const desktopNavigation = container.querySelector<HTMLElement>(".desktop-nav");
+    const mobileNavigation = container.querySelector<HTMLElement>(".mobile-nav");
+    expect(header).toContainElement(desktopNavigation);
+    expect(header?.children[0]).toHaveClass("brand");
+    expect(header?.children[1]).toBe(desktopNavigation);
+    expect(header).not.toContainElement(mobileNavigation);
   });
 
   it("marks Sets active on nested Set routes", async () => {
