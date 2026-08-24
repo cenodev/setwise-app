@@ -84,7 +84,7 @@ export function ActivityPage() {
     <div className="screen">
       <header className="screen-header">
         <p className="eyebrow">Local record</p>
-        <h1>Activity</h1>
+        <h1>History</h1>
         <p>This shows Setwise transactions submitted from this browser, not complete on-chain account history.</p>
       </header>
       {records.length === 0 ? (

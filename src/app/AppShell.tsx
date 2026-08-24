@@ -4,23 +4,36 @@ import { NavLink } from "react-router-dom";
 import { NetworkBanner } from "../features/wallet/NetworkBanner";
 import { WalletButton } from "../features/wallet/WalletButton";
 import { PwaStatus } from "../features/pwa/PwaStatus";
-import { activityPath, portfolioPath, setsPath, swapPath } from "./routes";
+import { activityPath, assetsPath, portfolioPath, setsPath, swapPath } from "./routes";
 
 const navigation = [
-  { label: "Sets", to: setsPath() },
+  { label: "Explore", to: assetsPath() },
+  { label: "Trade", to: swapPath() },
   { label: "Portfolio", to: portfolioPath() },
-  { label: "Swap", to: swapPath() },
-  { label: "Activity", to: activityPath() },
+  { label: "Sets", to: setsPath() },
+  { label: "History", to: activityPath() },
 ];
 
 export function AppShell({ children }: PropsWithChildren) {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <NavLink className="brand" to={setsPath()} aria-label="Setwise home">
+        <NavLink className="brand" to={assetsPath()} aria-label="Setwise home">
           <img src="/setwise-mark.svg" alt="" width="32" height="32" />
           <span>Setwise</span>
         </NavLink>
+        <nav className="desktop-nav" aria-label="Primary navigation">
+          {navigation.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/"}
+              className={({ isActive }) => (isActive ? "nav-link is-active" : "nav-link")}
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
         <span className="testnet-badge">BSC Testnet</span>
         <WalletButton />
       </header>
@@ -33,18 +46,6 @@ export function AppShell({ children }: PropsWithChildren) {
         </div>
       </div>
 
-      <nav className="desktop-nav" aria-label="Primary navigation">
-        {navigation.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) => (isActive ? "nav-link is-active" : "nav-link")}
-          >
-            {item.label}
-          </NavLink>
-        ))}
-      </nav>
-
       <main className="app-main">{children}</main>
 
       <nav className="mobile-nav" aria-label="Primary navigation">
@@ -52,6 +53,7 @@ export function AppShell({ children }: PropsWithChildren) {
           <NavLink
             key={item.to}
             to={item.to}
+            end={item.to === "/"}
             className={({ isActive }) => (isActive ? "nav-link is-active" : "nav-link")}
           >
             {item.label}

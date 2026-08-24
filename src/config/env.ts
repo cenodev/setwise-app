@@ -1,5 +1,6 @@
 export type PublicRuntimeConfig = {
   appUrl: string;
+  assetMetricsApiUrl: string;
   bscTestnetRpcUrl: string;
   defaultPoolId: string;
   explorerUrl: string;
@@ -12,6 +13,7 @@ export type PublicRuntimeConfig = {
 
 type PublicEnv = Partial<Record<
   | "VITE_APP_URL"
+  | "VITE_ASSET_METRICS_API_URL"
   | "VITE_BSC_TESTNET_RPC_URL"
   | "VITE_BSC_TESTNET_EXPLORER_URL"
   | "VITE_NATIVE_GAS_RESERVE_BNB"
@@ -45,6 +47,10 @@ export function resolveRuntimeConfig(
 
   return {
     appUrl: normalizeUrl(env.VITE_APP_URL, browserOrigin),
+    assetMetricsApiUrl: normalizeUrl(
+      env.VITE_ASSET_METRICS_API_URL,
+      "https://setwise-asset-metrics.datadex.workers.dev",
+    ),
     bscTestnetRpcUrl: normalizeUrl(
       env.VITE_BSC_TESTNET_RPC_URL,
       DEFAULT_BSC_TESTNET_RPC_URL,

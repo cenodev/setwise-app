@@ -1,12 +1,9 @@
 /**
  * Setwise Theme
  *
- * Matches the Setwise landing page (https://setwisemarkets.github.io/setwise-landing/):
- * near-black blue-tinted surfaces, ice-blue ink, and the signature ice-cyan
- * accent (#67dcff) with subtle cyan glows. The landing page only defines a
- * positive green beyond the blue family, so this theme adds two accents that
- * harmonize with the ice palette: a warm amber for warning and a soft coral
- * for error.
+ * A graphite-neutral system with icy blue reserved for Setwise branding,
+ * interaction, focus, and selection. Status colors are independent semantic
+ * families and must not be used as brand accents.
  *
  * Dark-only for now (single values apply to both modes); the app pins
  * mode="dark" in AppProviders.
@@ -16,6 +13,48 @@
  */
 
 import { defineTheme } from "@astryxdesign/core/theme";
+
+const palette = {
+  graphite: {
+    950: "#0c0d0f",
+    900: "#141619",
+    850: "#181a1e",
+    800: "#202328",
+  },
+  neutral: {
+    primary: "#f2f3f5",
+    secondary: "#a7abb2",
+    muted: "#686d75",
+    subtle: "#ffffff14",
+    emphasized: "#3a3e45",
+  },
+  setwiseBlue: {
+    primary: "#7ddfff",
+    light: "#b7efff",
+    interactive: "#43b9dc",
+    muted: "#7ddfff1a",
+  },
+  positive: {
+    primary: "#62d49b",
+    light: "#93e4ba",
+    muted: "#62d49b1f",
+  },
+  negative: {
+    primary: "#f06c75",
+    light: "#ff9ca3",
+    muted: "#f06c751f",
+  },
+  warning: {
+    primary: "#e6b85c",
+    light: "#f0ca7a",
+    muted: "#e6b85c1f",
+  },
+  information: {
+    primary: "#91a7ff",
+    light: "#b5c2ff",
+    muted: "#91a7ff1f",
+  },
+} as const;
 
 export const setwiseTheme = defineTheme({
   name: "setwise",
@@ -44,87 +83,87 @@ export const setwiseTheme = defineTheme({
 
   tokens: {
     // =========================================================================
-    // Core semantic — landing page palette
+    // Core semantic. Blue is for interaction, selection, and brand emphasis;
+    // neutral surfaces never inherit it.
     // =========================================================================
-    "--color-accent": "#67dcff",
-    "--color-accent-muted": "#67dcff1f",
-    "--color-neutral": "#addeef14",
-    "--color-background-surface": "#10171b",
-    "--color-background-body": "#0a0f12",
-    "--color-overlay": "#0a0f12cc",
-    "--color-overlay-hover": "#67dcff0d",
-    "--color-overlay-pressed": "#67dcff1a",
-    "--color-background-muted": "#151e23",
+    "--color-accent": palette.setwiseBlue.primary,
+    "--color-accent-muted": palette.setwiseBlue.muted,
+    "--color-neutral": "#ffffff0d",
+    "--color-background-surface": palette.graphite[900],
+    "--color-background-body": palette.graphite[950],
+    "--color-overlay": "#0c0d0fcc",
+    "--color-overlay-hover": "#ffffff0a",
+    "--color-overlay-pressed": "#ffffff12",
+    "--color-background-muted": palette.graphite[850],
 
     // Text
-    "--color-text-primary": "#eaf7fb",
-    "--color-text-secondary": "#8da3ad",
-    "--color-text-disabled": "#52636b",
-    "--color-text-accent": "#67dcff",
-    "--color-on-dark": "#eaf7fb",
-    "--color-on-light": "#071014",
-    "--color-on-accent": "#071014",
-    "--color-on-success": "#06231a",
-    "--color-on-error": "#3d0a14",
-    "--color-on-warning": "#2e1f00",
+    "--color-text-primary": palette.neutral.primary,
+    "--color-text-secondary": palette.neutral.secondary,
+    "--color-text-disabled": palette.neutral.muted,
+    "--color-text-accent": palette.setwiseBlue.primary,
+    "--color-on-dark": palette.neutral.primary,
+    "--color-on-light": palette.graphite[950],
+    "--color-on-accent": palette.graphite[950],
+    "--color-on-success": "#08150f",
+    "--color-on-error": "#1b090b",
+    "--color-on-warning": "#181205",
 
     // Icon
-    "--color-icon-accent": "#67dcff",
-    "--color-icon-primary": "#eaf7fb",
-    "--color-icon-secondary": "#8da3ad",
-    "--color-icon-disabled": "#52636b",
+    "--color-icon-accent": palette.setwiseBlue.primary,
+    "--color-icon-primary": palette.neutral.primary,
+    "--color-icon-secondary": palette.neutral.secondary,
+    "--color-icon-disabled": palette.neutral.muted,
 
-    // Surface variants — landing tile / chip / footer tones
-    "--color-background-card": "#131e23",
-    "--color-background-popover": "#17242a",
-    "--color-background-inverted": "#eaf7fb",
+    // Graphite elevation: 950 body → 900 surface → 850 card → 800 popover.
+    "--color-background-card": palette.graphite[850],
+    "--color-background-popover": palette.graphite[800],
+    "--color-background-inverted": palette.neutral.primary,
 
-    // Status — success is the landing's positive green; warning/error are the
-    // added accents (warm amber, soft coral) tuned to sit beside the ice cyan.
-    "--color-success": "#7fe1bf",
-    "--color-success-muted": "#7fe1bf",
-    "--color-error": "#ff8fa3",
-    "--color-error-muted": "#ff8fa3",
-    "--color-warning": "#ffd166",
-    "--color-warning-muted": "#ffd166",
+    // Functional colors remain semantically separate from Setwise blue.
+    "--color-success": palette.positive.primary,
+    "--color-success-muted": palette.positive.muted,
+    "--color-error": palette.negative.primary,
+    "--color-error-muted": palette.negative.muted,
+    "--color-warning": palette.warning.primary,
+    "--color-warning-muted": palette.warning.muted,
 
-    // Hairline borders carry an ice tint; emphasis is the landing's tile hover
-    "--color-border": "#addeef26",
-    "--color-border-emphasized": "#67dcff61",
+    // Neutral structure; focus and selected states use --color-accent instead.
+    "--color-border": palette.neutral.subtle,
+    "--color-border-emphasized": palette.neutral.emphasized,
 
-    // Effects — deep card shadow, hover is the landing's blue-bright
-    "--color-skeleton": "#1a262c",
+    // Neutral effects; no ambient brand-color glow.
+    "--color-skeleton": "#272a30",
     "--color-shadow": "#00000070",
-    "--color-tint-hover": "#a5ecff",
+    "--color-tint-hover": palette.setwiseBlue.interactive,
 
     // =========================================================================
     // Categorical families
     // =========================================================================
-    "--color-background-blue": "#67dcff",
-    "--color-border-blue": "#a5ecff",
-    "--color-icon-blue": "#06303e",
-    "--color-text-blue": "#06303e",
+    // The blue categorical family is information, not the brand accent.
+    "--color-background-blue": palette.information.muted,
+    "--color-border-blue": palette.information.primary,
+    "--color-icon-blue": palette.information.light,
+    "--color-text-blue": palette.information.light,
 
-    "--color-background-green": "#7fe1bf",
-    "--color-border-green": "#a4ebd4",
-    "--color-icon-green": "#06231a",
-    "--color-text-green": "#06231a",
+    "--color-background-green": palette.positive.muted,
+    "--color-border-green": palette.positive.primary,
+    "--color-icon-green": palette.positive.light,
+    "--color-text-green": palette.positive.light,
 
-    "--color-background-yellow": "#ffd166",
-    "--color-border-yellow": "#ffe09a",
-    "--color-icon-yellow": "#2e1f00",
-    "--color-text-yellow": "#2e1f00",
+    "--color-background-yellow": palette.warning.muted,
+    "--color-border-yellow": palette.warning.primary,
+    "--color-icon-yellow": palette.warning.light,
+    "--color-text-yellow": palette.warning.light,
 
-    "--color-background-red": "#ff8fa3",
-    "--color-border-red": "#ffb3c1",
-    "--color-icon-red": "#3d0a14",
-    "--color-text-red": "#3d0a14",
+    "--color-background-red": palette.negative.muted,
+    "--color-border-red": palette.negative.primary,
+    "--color-icon-red": palette.negative.light,
+    "--color-text-red": palette.negative.light,
 
-    // Slate gray from the landing's allocation scale
-    "--color-background-gray": "#40515b",
-    "--color-border-gray": "#708895",
-    "--color-icon-gray": "#eaf7fb",
-    "--color-text-gray": "#eaf7fb",
+    "--color-background-gray": "#ffffff0a",
+    "--color-border-gray": palette.neutral.emphasized,
+    "--color-icon-gray": palette.neutral.secondary,
+    "--color-text-gray": palette.neutral.secondary,
 
     // =========================================================================
     // Radius — sharp / brutalist
@@ -137,16 +176,16 @@ export const setwiseTheme = defineTheme({
     "--radius-full": "0px",
 
     // =========================================================================
-    // Shadows — deep, with the landing's cyan glow on the high level
+    // Shadows — depth without colored glow
     // =========================================================================
     "--shadow-low": "0 2px 4px #00000040, 0 4px 8px #00000052",
     "--shadow-med": "0 2px 4px #00000040, 0 4px 12px #00000052",
-    "--shadow-high": "0 4px 6px #00000052, 0 12px 24px #0000005e, 0 0 35px #67dcff1f",
-    "--shadow-inset-hover": "inset 0px 0px 0px 2px #67dcff4d",
-    "--shadow-inset-selected": "inset 0px 0px 0px 2px #67dcff80",
-    "--shadow-inset-success": "inset 0px 0px 0px 2px #06231a80",
-    "--shadow-inset-warning": "inset 0px 0px 0px 2px #2e1f0080",
-    "--shadow-inset-error": "inset 0px 0px 0px 2px #3d0a1480",
+    "--shadow-high": "0 4px 6px #00000052, 0 12px 24px #00000070",
+    "--shadow-inset-hover": "inset 0px 0px 0px 2px #7ddfff4d",
+    "--shadow-inset-selected": "inset 0px 0px 0px 2px #7ddfff80",
+    "--shadow-inset-success": "inset 0px 0px 0px 2px #62d49b66",
+    "--shadow-inset-warning": "inset 0px 0px 0px 2px #e6b85c66",
+    "--shadow-inset-error": "inset 0px 0px 0px 2px #f06c7566",
   },
 
   components: {

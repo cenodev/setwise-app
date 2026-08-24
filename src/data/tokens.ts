@@ -8,13 +8,21 @@ import { tokenListQueryKeys } from "./queryKeys";
 // unrelated non-EVM entries must not make the complete metadata list unusable.
 const addressSchema = z.string().min(1);
 
-const tokenSchema = z.object({
+export const tokenSchema = z.object({
   address: addressSchema,
   assetType: z.string().min(1).optional(),
   chainId: z.number().int(),
+  chainName: z.string().min(1).optional(),
+  confidence: z.string().min(1).optional(),
+  description: z.string().min(1).optional(),
+  id: z.string().min(1).optional(),
   logoURI: z.string().url().optional(),
   name: z.string().min(1),
+  network: z.string().min(1).optional(),
+  provider: z.string().min(1).optional(),
+  sourceUrl: z.string().url().optional(),
   symbol: z.string().min(1),
+  tokenStandard: z.string().min(1).optional(),
   underlyingSymbol: z.string().min(1).optional(),
 }).passthrough();
 
@@ -84,6 +92,10 @@ export function enrichTokenDisplay(
 }
 
 export async function fetchTokenList(signal?: AbortSignal): Promise<TokenMetadataIndex> {
+  return createTokenMetadataIndex(await fetchTokenCatalog(signal));
+}
+
+export async function fetchTokenCatalog(signal?: AbortSignal): Promise<TokenMetadata[]> {
   let response: Response;
   try {
     response = await fetch(runtimeConfig.tokenListUrl, { signal });
@@ -93,7 +105,7 @@ export async function fetchTokenList(signal?: AbortSignal): Promise<TokenMetadat
   }
   if (!response.ok) throw new TokenListError("Token metadata is unavailable");
   const json: unknown = await response.json().catch(() => null);
-  return createTokenMetadataIndex(parseTokenList(json));
+  return parseTokenList(json);
 }
 
 export function useTokenMetadata() {

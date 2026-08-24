@@ -5,6 +5,7 @@ describe("resolveRuntimeConfig", () => {
     const config = resolveRuntimeConfig({}, "http://localhost:4173");
 
     expect(config.appUrl).toBe("http://localhost:4173");
+    expect(config.assetMetricsApiUrl).toBe("https://setwise-asset-metrics.datadex.workers.dev");
     expect(config.defaultPoolId).toBe("bstock-ai-no-bnb-bsc-testnet");
     expect(config.nativeGasReserveBnb).toBe("0.001");
     expect(config.walletConfigured).toBe(false);
@@ -16,11 +17,13 @@ describe("resolveRuntimeConfig", () => {
   it("recognizes a configured Reown project", () => {
     const config = resolveRuntimeConfig({
       VITE_APP_URL: "https://app.setwise.example/",
+      VITE_ASSET_METRICS_API_URL: "https://metrics.setwise.example/",
       VITE_REOWN_PROJECT_ID: "project-id",
       VITE_RFQ_API_URL: "https://rfq.setwise.example/",
     });
 
     expect(config.appUrl).toBe("https://app.setwise.example");
+    expect(config.assetMetricsApiUrl).toBe("https://metrics.setwise.example");
     expect(config.rfqApiUrl).toBe("https://rfq.setwise.example");
     expect(config.walletConfigured).toBe(true);
   });

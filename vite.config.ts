@@ -17,8 +17,8 @@ export default defineConfig({
         start_url: "/sets",
         scope: "/",
         display: "standalone",
-        background_color: "#0a0f12",
-        theme_color: "#0a0f12",
+        background_color: "#0c0d0f",
+        theme_color: "#0c0d0f",
         icons: [
           {
             src: "/setwise-mark.svg",

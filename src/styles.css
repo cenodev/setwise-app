@@ -27,6 +27,7 @@
   text-rendering: optimizeLegibility;
   --bg-base: var(--color-background-body);
   --bg-surface: var(--color-background-surface);
+  --bg-card: var(--color-background-card);
   --bg-surface-raised: var(--color-background-popover);
   --border-subtle: var(--color-border);
   --border-strong: var(--color-accent);
@@ -43,13 +44,11 @@
 }
 
 /*
- * Astryx's dark-mode scope currently aliases --color-accent to --color-on-dark.
- * Keep the app's intended ice-cyan accent when that scope is active; otherwise
- * every translucent accent surface (the color-mix() rules below) is tinted by
- * the text color instead of the Setwise palette.
+ * Astryx's dark-mode scope aliases --color-accent to --color-on-dark. Restore
+ * the theme's semantic accent so interaction and selection remain Setwise blue.
  */
 html[data-astryx-media="dark"] {
-  --color-accent: #67dcff;
+  --color-accent: var(--color-text-accent);
 }
 
 * { box-sizing: border-box; }
@@ -60,9 +59,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 50% -15%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 34rem),
-    var(--bg-base);
+  background: var(--bg-base);
   color: var(--text-primary);
 }
 
@@ -81,7 +78,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-vis
   padding: 1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
+  background: var(--bg-card);
 }
 .set-directory-card h2 { margin: .25rem 0 .35rem; font-size: 1.05rem; }
 .set-directory-card p:not(.eyebrow):not(.set-directory-note) { margin: 0; color: var(--text-secondary); font-size: .9rem; }
@@ -123,7 +120,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-vis
   padding: 1.25rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
+  background: var(--bg-card);
 }
 .set-detail-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
 .set-detail-heading > div { min-width: 0; }
@@ -280,7 +277,7 @@ code {
   bottom: 0;
   left: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   min-height: calc(4.25rem + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid var(--border-subtle);
@@ -313,7 +310,7 @@ code {
   padding: 1.25rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
+  background: var(--bg-card);
 }
 .gate-card h2, .prototype-card h2, .empty-card h2 { margin: .35rem 0 .5rem; font-size: 1.15rem; }
 .gate-card p:not(.eyebrow), .prototype-card p:not(.eyebrow), .empty-card p, .disclosure { color: var(--text-secondary); line-height: 1.55; }
@@ -368,14 +365,14 @@ code {
   padding: 1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
+  background: var(--bg-card);
 }
 .portfolio-metric-card { display: grid; gap: .35rem; }
 .portfolio-metric-card strong { font-size: 1.55rem; letter-spacing: -.025em; }
 .portfolio-metric-card span { color: var(--text-tertiary); font-size: .75rem; line-height: 1.4; }
 .portfolio-metric-card--external {
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
+  background: var(--bg-card);
 }
 .portfolio-liquidity-note,
 .portfolio-wallet-setup,
@@ -389,7 +386,7 @@ code {
   padding: 1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(160deg, var(--bg-surface-raised), var(--bg-surface));
+  background: var(--bg-card);
 }
 .portfolio-wallet-panel > p { margin: 0; color: var(--text-secondary); line-height: 1.5; }
 .portfolio-wallet-panel .primary-button { justify-self: start; }
@@ -428,7 +425,7 @@ code {
 .portfolio-set-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
 
 .activity-list { display: grid; gap: .75rem; }
-.activity-card { display: grid; gap: .85rem; padding: 1rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-container); background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface)); }
+.activity-card { display: grid; gap: .85rem; padding: 1rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-container); background: var(--bg-card); }
 .activity-card h2 { margin: .25rem 0 0; font-size: 1rem; }
 .activity-card > a { color: var(--info); font-size: .78rem; }
 .activity-card dd { overflow-wrap: anywhere; }
@@ -443,7 +440,7 @@ code {
   padding: 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
+  background: var(--bg-card);
 }
 .swap-form { display: grid; gap: 1rem; }
 .swap-assets { display: grid; gap: 0; }
@@ -498,7 +495,7 @@ code {
   padding: 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
+  background: var(--bg-card);
 }
 .deposit-form { display: grid; gap: 1rem; }
 .mode-tabs, .lock-options {
@@ -668,7 +665,7 @@ code {
   padding: 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
+  background: var(--bg-card);
 }
 .withdraw-form { display: grid; gap: 1rem; }
 .withdraw-amount-control { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
@@ -723,7 +720,7 @@ code {
   padding: 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
+  background: var(--bg-card);
 }
 .pool-status-card { color: var(--text-secondary); line-height: 1.5; }
 .pool-section-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
@@ -761,7 +758,7 @@ code {
   padding: 1.1rem;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-container);
-  background: linear-gradient(145deg, var(--bg-surface-raised), var(--bg-surface));
+  background: var(--bg-card);
 }
 .faucet-claim-card { display: grid; gap: 1rem; }
 .faucet-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
@@ -802,6 +799,59 @@ code {
   border: 0;
 }
 
+.asset-table {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-container);
+  background: var(--bg-card);
+}
+.asset-home-hero { max-width: 52rem; margin-inline: auto; text-align: center; }
+.asset-home-hero .astryx-text:not(.eyebrow) { max-width: 42rem; }
+.asset-search-trigger { justify-content: space-between; text-align: left; }
+.asset-market-heading { flex-wrap: wrap; }
+.asset-results { display: grid; gap: 1rem; }
+.asset-detail-link { color: inherit; text-decoration: none; }
+.asset-detail-link:hover strong { color: var(--accent); }
+.asset-detail-heading { flex-wrap: wrap; }
+.asset-detail-heading > :last-child { margin-inline-start: auto; }
+.asset-deployment-address {
+  overflow-wrap: anywhere;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+.asset-network-logos { display: inline-flex; align-items: center; padding-left: .35rem; }
+.asset-network-logo,
+.asset-network-overflow {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-left: -.35rem;
+  border: 2px solid var(--bg-surface);
+  border-radius: 50%;
+  background: var(--bg-surface-raised);
+}
+.asset-network-logo { display: block; object-fit: cover; }
+.asset-network-logo--fallback,
+.asset-network-overflow { display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); font-size: .55rem; font-weight: 800; }
+.asset-mobile-sort,
+.asset-card-list { display: none; }
+
+@media (max-width: 959px) {
+  .asset-table { display: none; }
+  .asset-mobile-sort { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .75rem; }
+  .asset-card-list { display: grid; gap: .75rem; }
+  .asset-card-list > * { min-width: 0; }
+  .asset-card-heading { justify-content: space-between; }
+  .asset-card-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+  .asset-card-metrics > div { display: grid; gap: .2rem; min-width: 0; padding: .7rem; border-radius: var(--radius-element); background: color-mix(in srgb, var(--bg-base) 35%, transparent); }
+  .asset-card-metrics strong { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+}
+
+@media (max-width: 519px) {
+  .asset-market-heading { align-items: flex-start; }
+  .asset-market-heading > :last-child { align-items: flex-start; }
+}
+
 @media (min-width: 520px) { .testnet-badge { display: inline-flex; } }
 
 @media (min-width: 640px) {
@@ -810,30 +860,31 @@ code {
 
 @media (min-width: 768px) {
   .app-shell { padding-bottom: 0; }
-  .app-header { padding-inline: 1.5rem; }
-  .desktop-nav {
-    position: sticky;
-    z-index: 15;
-    top: 3.5rem;
-    display: flex;
-    justify-content: center;
-    border-bottom: 1px solid var(--border-subtle);
-    background: color-mix(in srgb, var(--bg-base) 88%, transparent);
-    backdrop-filter: blur(18px);
+  .app-header {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    padding-inline: 1.5rem;
   }
-  .desktop-nav .nav-link { min-width: 8rem; min-height: 3.25rem; }
+  .desktop-nav {
+    display: flex;
+    min-width: 0;
+    align-self: stretch;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+  .desktop-nav .nav-link { min-height: 100%; padding-inline: .75rem; }
   .desktop-nav .nav-link::before { top: auto; bottom: 0; }
   .mobile-nav { display: none; }
-  .app-main { width: min(100%, 64rem); padding: 3rem 1.5rem 4rem; }
+  .app-main { width: min(100%, 80rem); padding: 3rem 1.5rem 4rem; }
   .screen { max-width: 32rem; margin-inline: auto; }
-  .screen.deposit-screen { max-width: none; }
-  .screen.swap-screen { max-width: none; }
-  .screen.withdraw-screen { max-width: none; }
-  .screen.faucet-screen { max-width: none; }
-  .screen.pool-screen { max-width: none; }
+  .screen.deposit-screen { max-width: 64rem; }
+  .screen.swap-screen { max-width: 64rem; }
+  .screen.withdraw-screen { max-width: 64rem; }
+  .screen.faucet-screen { max-width: 64rem; }
+  .screen.pool-screen { max-width: 64rem; }
   .screen.sets-screen,
   .screen.set-detail-screen,
-  .screen.portfolio-screen { max-width: none; }
+  .screen.portfolio-screen { max-width: 64rem; }
+  .screen.assets-screen { max-width: none; }
   .portfolio-summary,
   .portfolio-summary--wallet { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .portfolio-set-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }

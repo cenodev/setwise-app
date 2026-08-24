@@ -9,3 +9,7 @@ export const setQueryKeys = {
 export const tokenListQueryKeys = {
   all: ["token-list"] as const,
 };
+
+export const assetMetricsQueryKeys = {
+  all: ["asset-metrics"] as const,
+};
