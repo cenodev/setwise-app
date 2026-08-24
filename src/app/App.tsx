@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { LegacyRedirect } from "./LegacyRedirect";
 import { AppShell } from "./AppShell";
-import { setsPath } from "./routes";
+import { assetsPath } from "./routes";
 import { SetDetailLayout } from "../features/sets/SetDetailLayout";
 import { SetDepositTab, SetOverviewTab, SetWithdrawTab } from "../features/sets/SetTabs";
 import { FaucetPage } from "../features/faucet/FaucetPage";
@@ -18,9 +18,9 @@ export function App() {
   return (
     <AppShell>
       <Routes>
-        <Route path="/" element={<Navigate to={setsPath()} replace />} />
+        <Route path="/" element={<AssetsPage />} />
         <Route path="/sets" element={<SetsPage />} />
-        <Route path="/assets" element={<AssetsPage />} />
+        <Route path="/assets" element={<Navigate to={assetsPath()} replace />} />
         <Route path="/assets/:assetId" element={<AssetDetailPage />} />
         <Route path="/sets/:setId" element={<SetDetailLayout />}>
           <Route index element={<Navigate to="overview" replace />} />
@@ -59,7 +59,7 @@ export function App() {
         <Route path="/deposit" element={<LegacyRedirect tab="deposit" />} />
         <Route path="/withdraw" element={<LegacyRedirect tab="withdraw" />} />
 
-        <Route path="*" element={<Navigate to={setsPath()} replace />} />
+        <Route path="*" element={<Navigate to={assetsPath()} replace />} />
       </Routes>
     </AppShell>
   );

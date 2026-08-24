@@ -806,6 +806,11 @@ code {
   border-radius: var(--radius-container);
   background: var(--bg-card);
 }
+.asset-home-hero { max-width: 52rem; margin-inline: auto; text-align: center; }
+.asset-home-hero .astryx-text:not(.eyebrow) { max-width: 42rem; }
+.asset-search-trigger { justify-content: space-between; text-align: left; }
+.asset-market-heading { flex-wrap: wrap; }
+.asset-results { display: grid; gap: 1rem; }
 .asset-detail-link { color: inherit; text-decoration: none; }
 .asset-detail-link:hover strong { color: var(--accent); }
 .asset-detail-heading { flex-wrap: wrap; }
@@ -842,6 +847,11 @@ code {
   .asset-card-metrics strong { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 }
 
+@media (max-width: 519px) {
+  .asset-market-heading { align-items: flex-start; }
+  .asset-market-heading > :last-child { align-items: flex-start; }
+}
+
 @media (min-width: 520px) { .testnet-badge { display: inline-flex; } }
 
 @media (min-width: 640px) {
@@ -864,17 +874,17 @@ code {
   .desktop-nav .nav-link { min-height: 100%; padding-inline: .75rem; }
   .desktop-nav .nav-link::before { top: auto; bottom: 0; }
   .mobile-nav { display: none; }
-  .app-main { width: min(100%, 64rem); padding: 3rem 1.5rem 4rem; }
+  .app-main { width: min(100%, 80rem); padding: 3rem 1.5rem 4rem; }
   .screen { max-width: 32rem; margin-inline: auto; }
-  .screen.deposit-screen { max-width: none; }
-  .screen.swap-screen { max-width: none; }
-  .screen.withdraw-screen { max-width: none; }
-  .screen.faucet-screen { max-width: none; }
-  .screen.pool-screen { max-width: none; }
+  .screen.deposit-screen { max-width: 64rem; }
+  .screen.swap-screen { max-width: 64rem; }
+  .screen.withdraw-screen { max-width: 64rem; }
+  .screen.faucet-screen { max-width: 64rem; }
+  .screen.pool-screen { max-width: 64rem; }
   .screen.sets-screen,
-  .screen.assets-screen,
   .screen.set-detail-screen,
-  .screen.portfolio-screen { max-width: none; }
+  .screen.portfolio-screen { max-width: 64rem; }
+  .screen.assets-screen { max-width: none; }
   .portfolio-summary,
   .portfolio-summary--wallet { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .portfolio-set-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }

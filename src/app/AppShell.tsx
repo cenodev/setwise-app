@@ -18,7 +18,7 @@ export function AppShell({ children }: PropsWithChildren) {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <NavLink className="brand" to={setsPath()} aria-label="Setwise home">
+        <NavLink className="brand" to={assetsPath()} aria-label="Setwise home">
           <img src="/setwise-mark.svg" alt="" width="32" height="32" />
           <span>Setwise</span>
         </NavLink>
@@ -27,6 +27,7 @@ export function AppShell({ children }: PropsWithChildren) {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.to === "/"}
               className={({ isActive }) => (isActive ? "nav-link is-active" : "nav-link")}
             >
               {item.label}
@@ -52,6 +53,7 @@ export function AppShell({ children }: PropsWithChildren) {
           <NavLink
             key={item.to}
             to={item.to}
+            end={item.to === "/"}
             className={({ isActive }) => (isActive ? "nav-link is-active" : "nav-link")}
           >
             {item.label}

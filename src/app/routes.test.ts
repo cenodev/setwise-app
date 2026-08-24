@@ -8,7 +8,7 @@ describe("route helpers", () => {
   });
 
   it("builds swap deep links with an optional selected Set", () => {
-    expect(assetsPath()).toBe("/assets");
+    expect(assetsPath()).toBe("/");
     expect(assetPath("issuer:asset/a")).toBe("/assets/issuer%3Aasset%2Fa");
     expect(swapPath()).toBe("/swap");
     expect(swapPath("bstock-ai")).toBe("/swap?set=bstock-ai");

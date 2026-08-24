@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 
 import { AssetsPage } from "./AssetsPage";
 import { tokenMetadataKey, type TokenMetadata } from "../data/tokens";
@@ -29,6 +29,11 @@ function token(symbol: string, address: string, assetType?: string): TokenMetada
 function tableAssetNames(): string[] {
   const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
   return rows.map((row) => within(row).getAllByRole("cell")[0]?.textContent ?? "");
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}</output>;
 }
 
 describe("AssetsPage sorting", () => {
@@ -67,6 +72,7 @@ describe("AssetsPage sorting", () => {
       <QueryClientProvider client={client}>
         <MemoryRouter>
           <AssetsPage />
+          <LocationProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -133,7 +139,7 @@ describe("AssetsPage sorting", () => {
     expect(screen.getByText("2 assets")).toBeVisible();
   });
 
-  it("paginates the sorted asset set and resets pagination when searching", async () => {
+  it("paginates the sorted asset set", async () => {
     const tokens = Array.from({ length: 51 }, (_, index) => token(
       `ASSET${String(index + 1).padStart(2, "0")}`,
       `0x${(index + 1).toString(16).padStart(40, "0")}`,
@@ -154,12 +160,24 @@ describe("AssetsPage sorting", () => {
     fireEvent.click(within(pagination).getByRole("button", { name: "Go to next page" }));
     expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(2);
     expect(within(screen.getByRole("table")).getByText("ASSET51")).toBeVisible();
+  });
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Search assets" }), {
-      target: { value: "ASSET01" },
-    });
-    expect(within(screen.getByRole("table")).getByText("ASSET01")).toBeVisible();
-    expect(screen.queryByRole("navigation", { name: "Asset pages" })).not.toBeInTheDocument();
+  it("opens search in a modal and navigates to the selected asset", async () => {
+    const { container } = renderPage();
+
+    await screen.findByRole("table");
+    const trigger = screen.getByRole("button", { name: /Search assets, symbols, issuers, or networks/i });
+    expect(container.querySelector(".asset-home-hero")).toContainElement(trigger);
+    fireEvent.click(trigger);
+
+    const dialog = await screen.findByRole("dialog", { name: "Search Setwise assets" });
+    const input = within(dialog).getByRole("textbox", { name: "Search Setwise assets" });
+    await within(dialog).findByText("ALPHA");
+    fireEvent.change(input, { target: { value: "ALPHA" } });
+    fireEvent.click(await within(dialog).findByText("ALPHA"));
+
+    expect(screen.queryByRole("dialog", { name: "Search Setwise assets" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent("/assets/example%3Aalpha");
   });
 
   it("filters assets by grouped market category tabs", async () => {

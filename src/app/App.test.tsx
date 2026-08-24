@@ -171,7 +171,7 @@ describe("Sets routes and navigation", () => {
     expect(screen.queryByRole("link", { name: "Withdraw" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Sets" })[0]).toHaveAttribute("href", "/sets");
     expect(screen.getAllByRole("link", { name: "Portfolio" })[0]).toHaveAttribute("href", "/portfolio");
-    expect(screen.getAllByRole("link", { name: "Explore" })[0]).toHaveAttribute("href", "/assets");
+    expect(screen.getAllByRole("link", { name: "Explore" })[0]).toHaveAttribute("href", "/");
 
     const header = container.querySelector<HTMLElement>(".app-header");
     const desktopNavigation = container.querySelector<HTMLElement>(".desktop-nav");
@@ -188,10 +188,11 @@ describe("Sets routes and navigation", () => {
     expect(screen.getAllByRole("link", { name: "Sets" })[0]).toHaveClass("is-active");
   });
 
-  it("loads /sets as the default landing content", async () => {
+  it("loads asset discovery as the Setwise home page", () => {
     renderApp("/");
-    expect(await screen.findByRole("heading", { name: "Sets" })).toBeVisible();
-    expect(await screen.findByRole("heading", { name: `Set ${runtimeConfig.defaultPoolId}` })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Discover tokenized real-world assets" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Markets" })).toBeVisible();
+    expect(screen.getAllByRole("link", { name: "Explore" })[0]).toHaveClass("is-active");
   });
 
   it("redirects /sets/:setId to the overview tab", async () => {

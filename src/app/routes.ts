@@ -13,11 +13,11 @@ export function setsPath(): string {
 }
 
 export function assetsPath(): string {
-  return "/assets";
+  return "/";
 }
 
 export function assetPath(assetId: string): string {
-  return `${assetsPath()}/${encodeURIComponent(assetId)}`;
+  return `/assets/${encodeURIComponent(assetId)}`;
 }
 
 export function setPath(setId: string, tab: SetTab = "overview"): string {
