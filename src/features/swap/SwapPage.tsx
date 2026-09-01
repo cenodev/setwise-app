@@ -263,6 +263,7 @@ export function SwapPage() {
     setOutputAssetId("");
     setInputNative(false);
     setOutputNative(false);
+    setIntent("exact-input");
     setAmount("");
     setQuote(null);
     setQuoteRequestKey("");
@@ -888,12 +889,14 @@ export function SwapPage() {
     clearExecutable();
   }
 
-  function chooseIntent(nextIntent: SwapIntent) {
-    if (nextIntent === intent) return;
-    setIntent(nextIntent);
-    setAmount("");
-    setQuote(null);
-    setQuoteRequestKey("");
+  function editAmount(nextIntent: SwapIntent, nextAmount: string) {
+    if (!/^\d*\.?\d*$/.test(nextAmount) || (nextIntent === "exact-output" && !exactOutputSupported)) return;
+    if (nextIntent !== intent) {
+      setIntent(nextIntent);
+      setQuote(null);
+      setQuoteRequestKey("");
+    }
+    setAmount(nextAmount);
     clearExecutable();
   }
 
@@ -982,13 +985,6 @@ export function SwapPage() {
             )}
           </select>
         </div>
-        <div className="mode-tabs" aria-label="Swap amount mode">
-          <button type="button" className={intent === "exact-input" ? "is-active" : ""}
-            disabled={busy || transaction.stage === "review"} onClick={() => chooseIntent("exact-input")}>Exact input</button>
-          <button type="button" className={intent === "exact-output" ? "is-active" : ""}
-            disabled={busy || transaction.stage === "review" || !exactOutputSupported}
-            onClick={() => chooseIntent("exact-output")}>Exact output</button>
-        </div>
         <div className="swap-assets">
           <div className="asset-input-card">
             <div className="amount-heading">
@@ -1005,23 +1001,13 @@ export function SwapPage() {
                 <span>Pay with native BNB</span>
               </label>
             )}
-            {intent === "exact-input" ? (
-              <div className="amount-control">
-                <input aria-label="You pay amount" inputMode="decimal" placeholder="0.0" disabled={busy || transaction.stage === "review"}
-                  value={amount} onChange={(event) => {
-                    if (/^\d*\.?\d*$/.test(event.target.value)) {
-                      setAmount(event.target.value);
-                      clearExecutable();
-                    }
-                  }} />
-                <button type="button" disabled={busy || transaction.stage === "review" || maximumInput === 0n}
-                  onClick={() => { setAmount(atomicToDecimal(maximumInput, inputAsset?.decimals ?? 18)); clearExecutable(); }}>Max</button>
-              </div>
-            ) : (
-              <div className="swap-output-amount" aria-label="You pay amount">
-                {displayQuote?.input.amount ?? "—"} <span>{effectiveInputNative ? "BNB" : inputDisplay?.symbol}</span>
-              </div>
-            )}
+            <div className="amount-control">
+              <input aria-label="You pay amount" inputMode="decimal" placeholder="0.0" disabled={busy || transaction.stage === "review"}
+                value={intent === "exact-input" ? amount : quoteMatchesDraft ? displayQuote?.input.amount ?? "" : ""}
+                onChange={(event) => editAmount("exact-input", event.target.value)} />
+              <button type="button" disabled={busy || transaction.stage === "review" || maximumInput === 0n}
+                onClick={() => editAmount("exact-input", atomicToDecimal(maximumInput, inputAsset?.decimals ?? 18))}>Max</button>
+            </div>
             {effectiveInputNative && <p className="quote-note">Gas reserved: {runtimeConfig.nativeGasReserveBnb} BNB.</p>}
             {intent === "exact-input" && amount && amountError && <p className="field-error">{amountError}</p>}
             {insufficientBalance && <p className="field-error">Insufficient {effectiveInputNative ? "BNB after gas reserve" : inputDisplay?.symbol} balance.</p>}
@@ -1042,21 +1028,12 @@ export function SwapPage() {
                 <span>Receive native BNB</span>
               </label>
             )}
-            {intent === "exact-output" ? (
-              <div className="amount-control">
-                <input aria-label="You receive amount" inputMode="decimal" placeholder="0.0" disabled={busy || transaction.stage === "review"}
-                  value={amount} onChange={(event) => {
-                    if (/^\d*\.?\d*$/.test(event.target.value)) {
-                      setAmount(event.target.value);
-                      clearExecutable();
-                    }
-                  }} />
-              </div>
-            ) : (
-              <div className="swap-output-amount" aria-label="You receive amount">
-                {displayQuote?.output.amount ?? "—"} <span>{effectiveOutputNative ? "BNB" : outputDisplay?.symbol}</span>
-              </div>
-            )}
+            <div className="amount-control">
+              <input aria-label="You receive amount" inputMode="decimal" placeholder="0.0"
+                disabled={busy || transaction.stage === "review" || !exactOutputSupported}
+                value={intent === "exact-output" ? amount : quoteMatchesDraft ? displayQuote?.output.amount ?? "" : ""}
+                onChange={(event) => editAmount("exact-output", event.target.value)} />
+            </div>
             {intent === "exact-output" && amount && amountError && <p className="field-error">{amountError}</p>}
           </div>
         </div>
@@ -1172,7 +1149,7 @@ export function SwapPage() {
             </dl>}
             <p className="quote-note">Indicative estimates are never executable. A fresh signed transaction is validated and simulated immediately before swap submission.</p>
           </>
-        ) : <p>{quoteLoading ? "Getting an indicative price…" : `Enter an exact ${intent === "exact-input" ? "input" : "output"} amount to see an estimate.`}</p>}
+        ) : <p>{quoteLoading ? "Getting an indicative price…" : "Enter the amount you want to pay or receive to see an estimate."}</p>}
       </aside>
     </div>
   );

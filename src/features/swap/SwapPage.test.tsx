@@ -461,8 +461,34 @@ describe("SwapPage", () => {
     resolveFirst(indicative("USDT", "TOKEN", "10"));
 
     await waitFor(() => expect(mocks.requestSwapQuote).toHaveBeenCalledTimes(2), { timeout: 1_500 });
-    await waitFor(() => expect(screen.getByLabelText("You receive amount")).toHaveTextContent("40 TOKEN"));
-    expect(screen.getByLabelText("You receive amount")).not.toHaveTextContent("20 TOKEN");
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "You receive amount" })).toHaveValue("40"));
+    expect(screen.getByRole("textbox", { name: "You receive amount" })).not.toHaveValue("20");
+  });
+
+  it("uses the last edited amount field to determine the swap intent", async () => {
+    render(<MemoryRouter><SwapPage /></MemoryRouter>);
+    const pay = screen.getByRole("textbox", { name: "You pay amount" });
+    const receive = screen.getByRole("textbox", { name: "You receive amount" });
+
+    expect(screen.queryByRole("button", { name: "Exact input" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exact output" })).not.toBeInTheDocument();
+
+    fireEvent.change(pay, { target: { value: "10" } });
+    await waitFor(() => expect(receive).toHaveValue("20"), { timeout: 1_500 });
+
+    fireEvent.change(receive, { target: { value: "30" } });
+    await waitFor(() => expect(mocks.requestSwapQuote).toHaveBeenLastCalledWith(expect.objectContaining({
+      outputAmount: "30",
+    })), { timeout: 1_500 });
+    expect(mocks.requestSwapQuote.mock.calls.at(-1)?.[0]).not.toHaveProperty("inputAmount");
+    await waitFor(() => expect(pay).toHaveValue("15"));
+
+    fireEvent.change(pay, { target: { value: "7" } });
+    await waitFor(() => expect(mocks.requestSwapQuote).toHaveBeenLastCalledWith(expect.objectContaining({
+      inputAmount: "7",
+    })), { timeout: 1_500 });
+    expect(mocks.requestSwapQuote.mock.calls.at(-1)?.[0]).not.toHaveProperty("outputAmount");
+    await waitFor(() => expect(receive).toHaveValue("14"));
   });
 
   it("validates a firm quote before confirming an exact ERC-20 approval and submitting", async () => {
@@ -567,7 +593,6 @@ describe("SwapPage", () => {
     mocks.atomicCapability = "ready";
     mocks.firmInputDelta = 1n * 10n ** 18n;
     render(<MemoryRouter><SwapPage /></MemoryRouter>);
-    fireEvent.click(screen.getByRole("button", { name: "Exact output" }));
     fireEvent.change(screen.getByRole("textbox", { name: "You receive amount" }), { target: { value: "20" } });
     const review = await screen.findByRole("button", { name: "Review swap" });
     await waitFor(() => expect(review).toBeEnabled());
@@ -641,7 +666,6 @@ describe("SwapPage", () => {
 
   it("quotes and executes a user-specified exact output", async () => {
     render(<MemoryRouter><SwapPage /></MemoryRouter>);
-    fireEvent.click(screen.getByRole("button", { name: "Exact output" }));
     fireEvent.change(screen.getByRole("textbox", { name: "You receive amount" }), { target: { value: "20" } });
 
     const review = await screen.findByRole("button", { name: "Review swap" });
@@ -652,7 +676,7 @@ describe("SwapPage", () => {
       outputAsset: "TOKEN",
     }));
     expect(mocks.requestSwapQuote.mock.calls[0]?.[0]).not.toHaveProperty("inputAmount");
-    expect(screen.getByLabelText("You pay amount")).toHaveTextContent("10 USDT");
+    expect(screen.getByRole("textbox", { name: "You pay amount" })).toHaveValue("10");
 
     await executeReviewedSwap(review);
 
@@ -668,7 +692,6 @@ describe("SwapPage", () => {
   it("approves a changed final firm input exactly before sequential Router execution", async () => {
     mocks.firmInputDelta = 1n * 10n ** 18n;
     render(<MemoryRouter><SwapPage /></MemoryRouter>);
-    fireEvent.click(screen.getByRole("button", { name: "Exact output" }));
     fireEvent.change(screen.getByRole("textbox", { name: "You receive amount" }), { target: { value: "20" } });
     const review = await screen.findByRole("button", { name: "Review swap" });
     await waitFor(() => expect(review).toBeEnabled());
