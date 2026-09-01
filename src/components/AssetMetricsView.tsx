@@ -111,7 +111,7 @@ export function compactUsd(value: number): string {
 }
 
 export function assetDeploymentMetrics(
-  asset: RwaAsset,
+  asset: Pick<RwaAsset, "tokens">,
   metrics: DexMetricsIndex | undefined,
 ): AssetDeploymentMetric[] {
   return asset.tokens.map((token) => ({
@@ -125,7 +125,7 @@ export function assetDeploymentMetrics(
 }
 
 export function summarizeAssetMetrics(
-  asset: RwaAsset,
+  asset: Pick<RwaAsset, "tokens">,
   metrics: DexMetricsIndex | undefined,
 ): AssetMetricSummary {
   const deployments = assetDeploymentMetrics(asset, metrics);

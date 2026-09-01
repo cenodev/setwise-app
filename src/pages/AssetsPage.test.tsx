@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 
 import { AssetsPage } from "./AssetsPage";
 import { tokenMetadataKey, type TokenMetadata } from "../data/tokens";
@@ -14,55 +14,87 @@ vi.mock("../data/assetMetrics", async (importOriginal) => {
   return { ...actual, fetchAssetMetricsCatalog: mocks.fetchAssetMetricsCatalog };
 });
 
-function token(symbol: string, address: string, assetType?: string): TokenMetadata {
+function token(
+  symbol: string,
+  underlyingSymbol: string,
+  provider: string,
+  address: string,
+  chainId = 1,
+): TokenMetadata {
   return {
     address,
-    assetType,
-    chainId: 1,
-    chainName: "Ethereum",
-    name: `${symbol} asset`,
-    provider: "example",
+    assetType: "equity",
+    chainId,
+    chainName: chainId === 1 ? "Ethereum" : "Polygon",
+    name: `${underlyingSymbol} tokenized stock by ${provider}`,
+    provider,
     symbol,
+    underlyingSymbol,
   };
 }
 
-function tableAssetNames(): string[] {
+function tableStockNames(): string[] {
   const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
   return rows.map((row) => within(row).getAllByRole("cell")[0]?.textContent ?? "");
 }
 
-function LocationProbe() {
-  const location = useLocation();
-  return <output data-testid="location">{location.pathname}</output>;
-}
+describe("AssetsPage", () => {
+  const alphaFirst = token(
+    "xALPHA",
+    "ALPHA",
+    "first-provider",
+    "0x1000000000000000000000000000000000000000",
+  );
+  const alphaSecond = token(
+    "yALPHA",
+    "ALPHA",
+    "second-provider",
+    "0x2000000000000000000000000000000000000000",
+    137,
+  );
+  const beta = token(
+    "xBETA",
+    "BETA",
+    "first-provider",
+    "0x3000000000000000000000000000000000000000",
+  );
+  const gamma = token(
+    "xGAMMA",
+    "GAMMA",
+    "first-provider",
+    "0x4000000000000000000000000000000000000000",
+  );
 
-describe("AssetsPage sorting", () => {
   beforeEach(() => {
-    const alpha = token("ALPHA", "0x1000000000000000000000000000000000000000");
-    const beta = token("BETA", "0x2000000000000000000000000000000000000000");
-    const gamma = token("GAMMA", "0x3000000000000000000000000000000000000000");
     mocks.fetchAssetMetricsCatalog.mockReset();
     mocks.fetchAssetMetricsCatalog.mockResolvedValue({
       cache: { ageSeconds: 30, maxStaleSeconds: 900, status: "fresh" },
-      coverage: { batchCount: 1, pairCount: 2, supportedTokenCount: 3, tokenCount: 3 },
+      coverage: { batchCount: 1, pairCount: 3, supportedTokenCount: 4, tokenCount: 4 },
       generatedAt: "2026-08-11T18:05:00.000Z",
       metrics: new Map([
-        [tokenMetadataKey(alpha.chainId, alpha.address), {
+        [tokenMetadataKey(alphaFirst.chainId, alphaFirst.address), {
           liquidityUsd: 100,
           poolCount: 1,
-          priceUsd: 1,
+          priceUsd: 42,
           topVenue: "uniswap",
           volume24hUsd: 10,
+        }],
+        [tokenMetadataKey(alphaSecond.chainId, alphaSecond.address), {
+          liquidityUsd: 200,
+          poolCount: 1,
+          priceUsd: 41,
+          topVenue: "quickswap",
+          volume24hUsd: 20,
         }],
         [tokenMetadataKey(beta.chainId, beta.address), {
           liquidityUsd: 50,
           poolCount: 1,
-          priceUsd: 1,
+          priceUsd: 20,
           topVenue: "uniswap",
           volume24hUsd: 200,
         }],
       ]),
-      tokens: [alpha, beta, gamma],
+      tokens: [alphaFirst, alphaSecond, beta, gamma],
     });
   });
 
@@ -72,141 +104,87 @@ describe("AssetsPage sorting", () => {
       <QueryClientProvider client={client}>
         <MemoryRouter>
           <AssetsPage />
-          <LocationProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
   }
 
-  it("sorts liquidity and volume while keeping unavailable metrics last", async () => {
+  it("renders one row per underlying stock with aggregated providers and metrics", async () => {
     renderPage();
 
-    const table = await screen.findByRole("table");
-    expect(within(table).getByRole("button", { name: /liquidity.*descending/i })).toBeVisible();
-    expect(tableAssetNames()).toEqual(expect.arrayContaining([expect.stringContaining("ALPHA")]));
-    expect(tableAssetNames().map((name) => name.match(/ALPHA|BETA|GAMMA/)?.[0])).toEqual([
+    const comparison = await screen.findByRole("region", { name: "Underlying stock market comparison" });
+    const table = within(comparison).getByRole("table");
+    expect(within(table).getAllByRole("row")).toHaveLength(3);
+    expect(tableStockNames().map((name) => name.match(/ALPHA|BETA|GAMMA/)?.[0])).toEqual([
+      "ALPHA",
+      "BETA",
+    ]);
+    const alphaRow = within(table).getByRole("link", { name: /ALPHA/i }).closest("tr");
+    expect(alphaRow).not.toBeNull();
+    expect(within(alphaRow!).getByText("2")).toBeVisible();
+    expect(within(alphaRow!).getByText("First Provider, Second Provider")).toBeVisible();
+    expect(within(alphaRow!).getByText("$41.00")).toBeVisible();
+    expect(within(alphaRow!).getByText("$300.00")).toBeVisible();
+    expect(within(alphaRow!).getByRole("link", { name: /ALPHA/i })).toHaveAttribute("href", "/assets/alpha");
+
+    const mobileComparison = screen.getByRole("region", { name: "Mobile underlying stock comparison" });
+    expect(within(mobileComparison).getByRole("link", { name: /ALPHA/i })).toHaveAttribute(
+      "href",
+      "/assets/alpha",
+    );
+    expect(within(mobileComparison).getByText(/2 providers · First Provider, Second Provider/i)).toBeVisible();
+  });
+
+  it("searches by underlying ticker and provider", async () => {
+    renderPage();
+    await screen.findByRole("table");
+    const search = screen.getByRole("textbox", { name: "Search underlying stocks" });
+
+    fireEvent.change(search, { target: { value: "BETA" } });
+    expect(tableStockNames()).toEqual([expect.stringContaining("BETA")]);
+
+    fireEvent.change(search, { target: { value: "second provider" } });
+    expect(tableStockNames()).toEqual([expect.stringContaining("ALPHA")]);
+  });
+
+  it("shows liquid stocks by default and allows unavailable stocks to be included", async () => {
+    renderPage();
+    await screen.findByRole("table");
+    const filter = screen.getByRole("switch", { name: "Only stocks with liquidity" });
+
+    expect(filter).toBeChecked();
+    expect(tableStockNames().map((name) => name.match(/ALPHA|BETA|GAMMA/)?.[0])).toEqual([
+      "ALPHA",
+      "BETA",
+    ]);
+    expect(screen.getByText("2 stocks")).toBeVisible();
+
+    fireEvent.click(filter);
+    expect(filter).not.toBeChecked();
+    expect(tableStockNames().map((name) => name.match(/ALPHA|BETA|GAMMA/)?.[0])).toEqual([
       "ALPHA",
       "BETA",
       "GAMMA",
     ]);
+    expect(screen.getByText("3 stocks")).toBeVisible();
+  });
+
+  it("sorts by volume while leaving unavailable metrics last", async () => {
+    renderPage();
+    const table = await screen.findByRole("table");
+    fireEvent.click(screen.getByRole("switch", { name: "Only stocks with liquidity" }));
 
     fireEvent.click(within(table).getByRole("button", { name: /sort by 24h volume/i }));
-    expect(tableAssetNames().map((name) => name.match(/ALPHA|BETA|GAMMA/)?.[0])).toEqual([
+    expect(tableStockNames().map((name) => name.match(/ALPHA|BETA|GAMMA/)?.[0])).toEqual([
       "ALPHA",
       "BETA",
       "GAMMA",
     ]);
-
     fireEvent.click(within(table).getByRole("button", { name: /24h volume.*ascending/i }));
-    expect(tableAssetNames().map((name) => name.match(/ALPHA|BETA|GAMMA/)?.[0])).toEqual([
+    expect(tableStockNames().map((name) => name.match(/ALPHA|BETA|GAMMA/)?.[0])).toEqual([
       "BETA",
       "ALPHA",
       "GAMMA",
     ]);
-
-    fireEvent.click(within(table).getByRole("button", { name: /sort by liquidity/i }));
-    expect(tableAssetNames().map((name) => name.match(/ALPHA|BETA|GAMMA/)?.[0])).toEqual([
-      "BETA",
-      "ALPHA",
-      "GAMMA",
-    ]);
-  });
-
-  it("uses network logos and omits long descriptions", async () => {
-    renderPage();
-
-    expect(await screen.findAllByRole("img", { name: "Networks: Ethereum" })).not.toHaveLength(0);
-    expect(screen.getAllByRole("link", { name: /ALPHA/i })[0]).toHaveAttribute(
-      "href",
-      "/assets/example%3Aalpha",
-    );
-    expect(screen.queryByText(/Token-holder rights/)).not.toBeInTheDocument();
-  });
-
-  it("filters out assets without positive liquidity", async () => {
-    renderPage();
-
-    await screen.findByRole("table");
-    const liquidityFilter = screen.getByRole("switch", { name: "Only assets with liquidity" });
-    expect(liquidityFilter).not.toBeChecked();
-
-    fireEvent.click(liquidityFilter);
-    expect(liquidityFilter).toBeChecked();
-    expect(tableAssetNames().map((name) => name.match(/ALPHA|BETA|GAMMA/)?.[0])).toEqual([
-      "ALPHA",
-      "BETA",
-    ]);
-    expect(screen.getByText("2 assets")).toBeVisible();
-  });
-
-  it("paginates the sorted asset set", async () => {
-    const tokens = Array.from({ length: 51 }, (_, index) => token(
-      `ASSET${String(index + 1).padStart(2, "0")}`,
-      `0x${(index + 1).toString(16).padStart(40, "0")}`,
-    ));
-    mocks.fetchAssetMetricsCatalog.mockResolvedValue({
-      cache: { ageSeconds: 30, maxStaleSeconds: 900, status: "fresh" },
-      coverage: { batchCount: 2, pairCount: 0, supportedTokenCount: 51, tokenCount: 51 },
-      generatedAt: "2026-08-11T18:05:00.000Z",
-      metrics: new Map(),
-      tokens,
-    });
-    renderPage();
-
-    const pagination = await screen.findByRole("navigation", { name: "Asset pages" });
-    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(51);
-    expect(within(pagination).getByRole("spinbutton", { name: "Go to page" })).toHaveValue(1);
-
-    fireEvent.click(within(pagination).getByRole("button", { name: "Go to next page" }));
-    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(2);
-    expect(within(screen.getByRole("table")).getByText("ASSET51")).toBeVisible();
-  });
-
-  it("opens search in a modal and navigates to the selected asset", async () => {
-    const { container } = renderPage();
-
-    await screen.findByRole("table");
-    const trigger = screen.getByRole("button", { name: /Search assets, symbols, issuers, or networks/i });
-    expect(container.querySelector(".asset-home-hero")).toContainElement(trigger);
-    fireEvent.click(trigger);
-
-    const dialog = await screen.findByRole("dialog", { name: "Search Setwise assets" });
-    const input = within(dialog).getByRole("textbox", { name: "Search Setwise assets" });
-    await within(dialog).findByText("ALPHA");
-    fireEvent.change(input, { target: { value: "ALPHA" } });
-    fireEvent.click(await within(dialog).findByText("ALPHA"));
-
-    expect(screen.queryByRole("dialog", { name: "Search Setwise assets" })).not.toBeInTheDocument();
-    expect(screen.getByTestId("location")).toHaveTextContent("/assets/example%3Aalpha");
-  });
-
-  it("filters assets by grouped market category tabs", async () => {
-    const equity = token("EQUITY", "0x1000000000000000000000000000000000000001", "private-equity");
-    const fund = token("FUND", "0x2000000000000000000000000000000000000002", "etf");
-    const treasury = token("TREASURY", "0x3000000000000000000000000000000000000003", "treasury");
-    const commodity = token("GOLD", "0x4000000000000000000000000000000000000004", "commodity");
-    mocks.fetchAssetMetricsCatalog.mockResolvedValue({
-      cache: { ageSeconds: 30, maxStaleSeconds: 900, status: "fresh" },
-      coverage: { batchCount: 1, pairCount: 0, supportedTokenCount: 4, tokenCount: 4 },
-      generatedAt: "2026-08-11T18:05:00.000Z",
-      metrics: new Map(),
-      tokens: [equity, fund, treasury, commodity],
-    });
-    renderPage();
-
-    const categories = await screen.findByRole("navigation", { name: "Asset categories" });
-    await screen.findByRole("table");
-    expect(tableAssetNames()).toHaveLength(4);
-
-    fireEvent.click(within(categories).getByRole("button", { name: "Equities" }));
-    expect(tableAssetNames().map((name) => name.match(/EQUITY|FUND|TREASURY|GOLD/)?.[0])).toEqual(["EQUITY"]);
-    expect(screen.getByText("1 asset")).toBeVisible();
-
-    fireEvent.click(within(categories).getByRole("button", { name: "Fixed income" }));
-    expect(tableAssetNames().map((name) => name.match(/EQUITY|FUND|TREASURY|GOLD/)?.[0])).toEqual(["TREASURY"]);
-
-    fireEvent.click(within(categories).getByRole("button", { name: /More/ }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Commodities", hidden: true }));
-    expect(tableAssetNames().map((name) => name.match(/EQUITY|FUND|TREASURY|GOLD/)?.[0])).toEqual(["GOLD"]);
   });
 });

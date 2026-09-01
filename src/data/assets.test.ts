@@ -1,4 +1,4 @@
-import { generatedAssetDescription, groupRwaAssets } from "./assets";
+import { generatedAssetDescription, groupRwaAssets, groupUnderlyingStocks } from "./assets";
 import type { TokenMetadata } from "./tokens";
 
 const base: TokenMetadata = {
@@ -21,6 +21,19 @@ describe("RWA asset catalog", () => {
     ]);
     expect(assets).toHaveLength(2);
     expect(assets.find((asset) => asset.provider === "Example Provider")?.tokens).toHaveLength(2);
+  });
+
+  it("groups every provider under one underlying stock", () => {
+    const stocks = groupUnderlyingStocks([
+      base,
+      { ...base, address: "0x2000000000000000000000000000000000000000", provider: "another-provider", symbol: "aNVDA" },
+      { ...base, address: "0x3000000000000000000000000000000000000000", underlyingSymbol: "TSLA", symbol: "TSLAx" },
+    ]);
+
+    expect(stocks).toHaveLength(2);
+    expect(stocks[0]).toMatchObject({ id: "nvda", providers: ["Another Provider", "Example Provider"], symbol: "NVDA" });
+    expect(stocks[0]?.tokens).toHaveLength(2);
+    expect(stocks[1]).toMatchObject({ id: "tsla", symbol: "TSLA" });
   });
 
   it("uses editorial descriptions when present and otherwise generates a qualified fallback", () => {

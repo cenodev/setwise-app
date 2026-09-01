@@ -12,10 +12,49 @@ export type RwaAsset = {
   underlyingSymbol: string | undefined;
 };
 
-function providerLabel(provider: string): string {
+export type UnderlyingStock = {
+  assetType: string | undefined;
+  id: string;
+  logoURI: string | undefined;
+  name: string;
+  offerings: RwaAsset[];
+  providers: string[];
+  symbol: string;
+  tokens: TokenMetadata[];
+};
+
+export function providerLabel(provider: string): string {
   return provider.split(/[-_]/).filter(Boolean).map((part) => (
     part.charAt(0).toUpperCase() + part.slice(1)
   )).join(" ");
+}
+
+export function groupUnderlyingStocks(tokens: readonly TokenMetadata[]): UnderlyingStock[] {
+  const groups = new Map<string, TokenMetadata[]>();
+  for (const token of tokens) {
+    const symbol = (token.underlyingSymbol ?? token.symbol).trim();
+    const id = symbol.toLowerCase();
+    groups.set(id, [...(groups.get(id) ?? []), token]);
+  }
+
+  return [...groups.entries()].map(([id, deployments]) => {
+    const preferred = deployments.find((token) => token.logoURI) ?? deployments[0];
+    const offerings = groupRwaAssets(deployments);
+    const ordered = [...deployments].sort((a, b) => (
+      (a.provider ?? "unknown").localeCompare(b.provider ?? "unknown")
+        || (a.chainName ?? String(a.chainId)).localeCompare(b.chainName ?? String(b.chainId))
+    ));
+    return {
+      assetType: preferred.assetType,
+      id,
+      logoURI: preferred.logoURI,
+      name: preferred.name,
+      offerings,
+      providers: offerings.map(({ provider }) => provider),
+      symbol: preferred.underlyingSymbol ?? preferred.symbol,
+      tokens: ordered,
+    };
+  }).sort((a, b) => a.symbol.localeCompare(b.symbol));
 }
 
 export function generatedAssetDescription(token: TokenMetadata): string {

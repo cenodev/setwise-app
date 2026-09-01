@@ -190,8 +190,9 @@ describe("Sets routes and navigation", () => {
 
   it("loads asset discovery as the Setwise home page", () => {
     renderApp("/");
-    expect(screen.getByRole("heading", { name: "Discover tokenized real-world assets" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Markets" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Compare tokenized stock markets" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Stocks" })).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Search underlying stocks" })).toBeVisible();
     expect(screen.getAllByRole("link", { name: "Explore" })[0]).toHaveClass("is-active");
   });
 
