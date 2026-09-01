@@ -37,6 +37,7 @@ describe("summarizeAssetMetrics", () => {
       liquidityUsd: 0,
       poolCount: 0,
       priceUsd: null,
+      referencePrice: null,
       topVenue: null,
       volume24hUsd: 0,
       ...input,

@@ -1,5 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BreadcrumbItem, Breadcrumbs } from "@astryxdesign/core/Breadcrumbs";
+import { Banner } from "@astryxdesign/core/Banner";
+import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Grid } from "@astryxdesign/core/Grid";
@@ -20,7 +22,12 @@ import {
 } from "../components/AssetMetricsView";
 import { TokenIcon } from "../components/TokenIdentity";
 import { assetsPath } from "../app/routes";
-import { fetchAssetMetricsCatalog } from "../data/assetMetrics";
+import {
+  fetchAssetMetricsCatalog,
+  mergeAssetMetricsRefresh,
+  refreshAssetMetricsForAsset,
+  type AssetMetricsCatalog,
+} from "../data/assetMetrics";
 import { groupUnderlyingStocks, providerLabel } from "../data/assets";
 import { assetMetricsQueryKeys } from "../data/queryKeys";
 import { useTokenCatalog } from "../data/tokens";
@@ -49,6 +56,19 @@ const providerMarketColumns: TableColumn<ProviderMarketRow>[] = [
     header: "Network",
     width: proportional(2),
     renderCell: ({ network }) => <NetworkIdentity network={network} />,
+  },
+  {
+    key: "stockPriceUsd",
+    header: "Stock price",
+    width: proportional(1),
+    align: "end",
+    renderCell: ({ metrics }) => (
+      <Text hasTabularNumbers>
+        {metrics?.referencePrice === null || metrics?.referencePrice === undefined
+          ? "—"
+          : compactUsd(metrics.referencePrice.priceUsd)}
+      </Text>
+    ),
   },
   {
     key: "priceUsd",
@@ -105,6 +125,7 @@ function lowestLiquidPrice(rows: readonly ProviderMarketRow[]): number | null {
 export function AssetDetailPage() {
   const { assetId } = useParams<{ assetId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const catalog = useQuery({
     queryKey: assetMetricsQueryKeys.all,
     queryFn: ({ signal }) => fetchAssetMetricsCatalog(signal),
@@ -118,6 +139,14 @@ export function AssetDetailPage() {
   );
   const normalizedAssetId = assetId?.toLowerCase().split(":").at(-1);
   const stock = stocks.find(({ id }) => id === normalizedAssetId);
+  const refresh = useMutation({
+    mutationFn: () => refreshAssetMetricsForAsset(stock?.symbol ?? ""),
+    onSuccess: (result) => {
+      queryClient.setQueryData<AssetMetricsCatalog>(assetMetricsQueryKeys.all, (current) => (
+        current ? mergeAssetMetricsRefresh(current, result) : current
+      ));
+    },
+  });
   const summary = useMemo(
     () => stock ? summarizeAssetMetrics(stock, catalog.data?.metrics) : undefined,
     [stock, catalog.data?.metrics],
@@ -198,7 +227,16 @@ export function AssetDetailPage() {
                       : "No tokenized markets currently have observed DEX liquidity."}
                   </Text>
                 </VStack>
-                <NetworkLogos networks={summary.networks} />
+                <HStack gap={3} vAlign="center">
+                  <NetworkLogos networks={summary.networks} />
+                  <Button
+                    label={refresh.isPending ? "Refreshing market data" : "Refresh market data"}
+                    variant="secondary"
+                    size="sm"
+                    isLoading={refresh.isPending}
+                    onClick={() => refresh.mutate()}
+                  />
+                </HStack>
               </HStack>
             </header>
 
@@ -290,7 +328,15 @@ export function AssetDetailPage() {
                                 <Text type="supporting" color="secondary">
                                   {network.name}{metrics?.topVenue ? ` · ${metrics.topVenue}` : ""}
                                 </Text>
-                                <Grid columns={{ minWidth: 96, max: 3, repeat: "fit" }} gap={2}>
+                                <Grid columns={{ minWidth: 96, max: 4, repeat: "fit" }} gap={2}>
+                                  <VStack gap={0}>
+                                    <Text type="supporting" color="secondary">Stock price</Text>
+                                    <Text weight="semibold" hasTabularNumbers>
+                                      {metrics?.referencePrice === null || metrics?.referencePrice === undefined
+                                        ? "—"
+                                        : compactUsd(metrics.referencePrice.priceUsd)}
+                                    </Text>
+                                  </VStack>
                                   <VStack gap={0}>
                                     <Text type="supporting" color="secondary">DEX price</Text>
                                     <Text weight="semibold" hasTabularNumbers>
@@ -328,6 +374,13 @@ export function AssetDetailPage() {
             <Text type="supporting" color="secondary">
               Snapshot generated {new Date(catalog.data.generatedAt).toLocaleString()}. Market data is informational and does not represent an executable quote.
             </Text>
+            {refresh.error && (
+              <Banner
+                status="error"
+                title="Refresh failed"
+                description={`${refresh.error.message}. Existing market data has not changed.`}
+              />
+            )}
           </>
         )}
       </VStack>

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { AssetDetailPage } from "./AssetDetailPage";
@@ -7,12 +7,17 @@ import { tokenMetadataKey, type TokenMetadata } from "../data/tokens";
 
 const mocks = vi.hoisted(() => ({
   fetchAssetMetricsCatalog: vi.fn(),
+  refreshAssetMetricsForAsset: vi.fn(),
   useTokenCatalog: vi.fn(),
 }));
 
 vi.mock("../data/assetMetrics", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../data/assetMetrics")>();
-  return { ...actual, fetchAssetMetricsCatalog: mocks.fetchAssetMetricsCatalog };
+  return {
+    ...actual,
+    fetchAssetMetricsCatalog: mocks.fetchAssetMetricsCatalog,
+    refreshAssetMetricsForAsset: mocks.refreshAssetMetricsForAsset,
+  };
 });
 
 vi.mock("../data/tokens", async (importOriginal) => {
@@ -70,6 +75,7 @@ describe("AssetDetailPage", () => {
 
   beforeEach(() => {
     mocks.fetchAssetMetricsCatalog.mockReset();
+    mocks.refreshAssetMetricsForAsset.mockReset();
     mocks.useTokenCatalog.mockReset();
     mocks.useTokenCatalog.mockReturnValue({ data: undefined });
     mocks.fetchAssetMetricsCatalog.mockResolvedValue({
@@ -81,6 +87,15 @@ describe("AssetDetailPage", () => {
           liquidityUsd: 1_250,
           poolCount: 3,
           priceUsd: 42.125,
+          referencePrice: {
+            askUsd: 44.3,
+            asOf: "2026-08-16T20:59:00.000Z",
+            bidUsd: 44.2,
+            priceUsd: 44.25,
+            source: "robinhood",
+            type: "underlying-mid",
+            underlyingSymbol: "ALPHA",
+          },
           topVenue: "uniswap",
           volume24hUsd: 450,
         }],
@@ -88,10 +103,17 @@ describe("AssetDetailPage", () => {
           liquidityUsd: 500,
           poolCount: 2,
           priceUsd: 41.5,
+          referencePrice: null,
           topVenue: "quickswap",
           volume24hUsd: 200,
         }],
       ]),
+      tokens: [ethereum, polygon],
+    });
+    mocks.refreshAssetMetricsForAsset.mockResolvedValue({
+      asset: "ALPHA",
+      generatedAt: "2026-08-16T21:01:00.000Z",
+      metrics: new Map(),
       tokens: [ethereum, polygon],
     });
   });
@@ -112,6 +134,7 @@ describe("AssetDetailPage", () => {
     expect(firstProviderRow).not.toBeNull();
     expect(secondProviderRow).not.toBeNull();
     expect(within(firstProviderRow!).getByText("Best liquidity")).toBeVisible();
+    expect(within(firstProviderRow!).getByText("$44.25")).toBeVisible();
     expect(within(secondProviderRow!).getByText("Best price")).toBeVisible();
     expect(within(firstProviderRow!).getByText("Ethereum")).toBeVisible();
     expect(within(secondProviderRow!).getByText("Polygon")).toBeVisible();
@@ -123,12 +146,52 @@ describe("AssetDetailPage", () => {
     expect(within(mobileComparison).getByText("Second Provider")).toBeVisible();
     expect(within(mobileComparison).getByText("Ethereum · uniswap")).toBeVisible();
     expect(within(mobileComparison).getByText("Polygon · quickswap")).toBeVisible();
+    expect(within(mobileComparison).getAllByText("Stock price")).toHaveLength(2);
+    expect(within(mobileComparison).getByText("$44.25")).toBeVisible();
   });
 
   it("keeps legacy provider-prefixed stock URLs working", async () => {
     renderPage("/assets/first-provider%3Aalpha");
 
     expect(await screen.findByRole("heading", { level: 1, name: "ALPHA" })).toBeVisible();
+  });
+
+  it("refreshes every provider deployment and updates the visible snapshot", async () => {
+    mocks.refreshAssetMetricsForAsset.mockResolvedValueOnce({
+      asset: "ALPHA",
+      generatedAt: "2026-08-16T21:01:00.000Z",
+      metrics: new Map([[tokenMetadataKey(ethereum.chainId, ethereum.address), {
+        liquidityUsd: 2_500,
+        poolCount: 4,
+        priceUsd: 45,
+        referencePrice: null,
+        topVenue: "uniswap",
+        volume24hUsd: 900,
+      }]]),
+      tokens: [ethereum, polygon],
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Refresh market data" }));
+
+    await waitFor(() => expect(mocks.refreshAssetMetricsForAsset).toHaveBeenCalledWith("ALPHA"));
+    await waitFor(() => expect(screen.getAllByText("$45.00").length).toBeGreaterThan(0));
+    expect(screen.getByText(
+      `Snapshot generated ${new Date("2026-08-16T21:01:00.000Z").toLocaleString()}. Market data is informational and does not represent an executable quote.`,
+    )).toBeVisible();
+  });
+
+  it("keeps existing data visible when refresh fails", async () => {
+    mocks.refreshAssetMetricsForAsset.mockRejectedValueOnce(new Error("Provider request failed"));
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Refresh market data" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Refresh failed");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Provider request failed. Existing market data has not changed.",
+    );
+    expect(screen.getAllByText("$41.50").length).toBeGreaterThan(0);
   });
 
   it("renders an explicit not-found state for an unknown stock", async () => {
