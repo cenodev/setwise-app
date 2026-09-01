@@ -7,11 +7,17 @@ import { tokenMetadataKey, type TokenMetadata } from "../data/tokens";
 
 const mocks = vi.hoisted(() => ({
   fetchAssetMetricsCatalog: vi.fn(),
+  useTokenCatalog: vi.fn(),
 }));
 
 vi.mock("../data/assetMetrics", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../data/assetMetrics")>();
   return { ...actual, fetchAssetMetricsCatalog: mocks.fetchAssetMetricsCatalog };
+});
+
+vi.mock("../data/tokens", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../data/tokens")>();
+  return { ...actual, useTokenCatalog: mocks.useTokenCatalog };
 });
 
 function token(
@@ -64,6 +70,8 @@ describe("AssetDetailPage", () => {
 
   beforeEach(() => {
     mocks.fetchAssetMetricsCatalog.mockReset();
+    mocks.useTokenCatalog.mockReset();
+    mocks.useTokenCatalog.mockReturnValue({ data: undefined });
     mocks.fetchAssetMetricsCatalog.mockResolvedValue({
       cache: { ageSeconds: 30, maxStaleSeconds: 900, status: "fresh" },
       coverage: { batchCount: 1, pairCount: 2, supportedTokenCount: 2, tokenCount: 2 },
@@ -127,10 +135,42 @@ describe("AssetDetailPage", () => {
     renderPage("/assets/missing");
 
     expect(await screen.findByRole("heading", { name: "Stock not found" })).toBeVisible();
-    expect(screen.getByText(/underlying stock is not present/i)).toBeVisible();
+    expect(screen.getByText(/stock is not present/i)).toBeVisible();
   });
 
-  it("keeps providers visible when DEX metrics are unavailable", async () => {
+  it("hides provider markets without liquidity", async () => {
+    mocks.fetchAssetMetricsCatalog.mockResolvedValueOnce({
+      cache: { ageSeconds: 30, maxStaleSeconds: 900, status: "fresh" },
+      coverage: { batchCount: 1, pairCount: 1, supportedTokenCount: 2, tokenCount: 2 },
+      generatedAt: "2026-08-16T21:00:45.704Z",
+      metrics: new Map([
+        [tokenMetadataKey(ethereum.chainId, ethereum.address), {
+          liquidityUsd: 1_250,
+          poolCount: 3,
+          priceUsd: 42.125,
+          topVenue: "uniswap",
+          volume24hUsd: 450,
+        }],
+        [tokenMetadataKey(polygon.chainId, polygon.address), {
+          liquidityUsd: 0,
+          poolCount: 0,
+          priceUsd: null,
+          topVenue: null,
+          volume24hUsd: 0,
+        }],
+      ]),
+      tokens: [ethereum, polygon],
+    });
+
+    renderPage();
+
+    const comparison = await screen.findByRole("region", { name: "Tokenized stock provider comparison" });
+    expect(within(comparison).getByText("First Provider")).toBeVisible();
+    expect(within(comparison).queryByText("Second Provider")).not.toBeInTheDocument();
+    expect(screen.getByText(/1 tokenized market from 1 provider/i)).toBeVisible();
+  });
+
+  it("shows an empty state when DEX metrics are unavailable", async () => {
     mocks.fetchAssetMetricsCatalog.mockResolvedValueOnce({
       cache: { ageSeconds: 30, maxStaleSeconds: 900, status: "fresh" },
       coverage: { batchCount: 1, pairCount: 0, supportedTokenCount: 2, tokenCount: 2 },
@@ -141,10 +181,10 @@ describe("AssetDetailPage", () => {
 
     renderPage();
 
-    const comparison = await screen.findByRole("region", { name: "Tokenized stock provider comparison" });
-    const table = within(comparison).getByRole("table");
-    expect(within(table).getByText("First Provider")).toBeVisible();
-    expect(within(table).getByText("Second Provider")).toBeVisible();
-    expect(screen.getByText(/2 tokenized markets from 2 providers/i)).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "No liquid provider markets" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Tokenized stock provider comparison" })).not.toBeInTheDocument();
+    expect(screen.queryByText("First Provider")).not.toBeInTheDocument();
+    expect(screen.queryByText("Second Provider")).not.toBeInTheDocument();
+    expect(screen.getByText(/No tokenized markets currently have observed DEX liquidity/i)).toBeVisible();
   });
 });

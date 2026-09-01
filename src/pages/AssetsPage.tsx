@@ -29,6 +29,7 @@ import { assetPath } from "../app/routes";
 import { fetchAssetMetricsCatalog, type DexMetricsIndex } from "../data/assetMetrics";
 import { groupUnderlyingStocks, type UnderlyingStock } from "../data/assets";
 import { assetMetricsQueryKeys } from "../data/queryKeys";
+import { useTokenCatalog } from "../data/tokens";
 
 interface StockMetricRow extends Record<string, unknown> {
   id: string;
@@ -71,40 +72,16 @@ function buildStockMetricRows(
 const columns: TableColumn<StockMetricRow>[] = [
   {
     key: "stock",
-    header: "Underlying stock",
+    header: "Stock",
     width: proportional(3),
     renderCell: ({ stock }) => (
       <Link className="asset-detail-link" to={assetPath(stock.id)}>
         <HStack gap={3} vAlign="center">
-          <TokenIcon logoURI={stock.logoURI} symbol={stock.symbol} />
-          <VStack gap={0}>
-            <Text weight="bold">{stock.symbol}</Text>
-            <Text type="supporting" color="secondary">
-              {stock.offerings.length} tokenized {stock.offerings.length === 1 ? "offering" : "offerings"}
-            </Text>
-          </VStack>
+          <TokenIcon logoURI={stock.logoURI} shape="roundedSquare" symbol={stock.symbol} />
+          <Text weight="bold">{stock.symbol}</Text>
         </HStack>
       </Link>
     ),
-  },
-  {
-    key: "providers",
-    header: "Providers",
-    width: proportional(2),
-    renderCell: ({ stock }) => (
-      <VStack gap={0}>
-        <Text>{stock.providers.length}</Text>
-        <Text type="supporting" color="secondary" maxLines={1}>
-          {stock.providers.join(", ")}
-        </Text>
-      </VStack>
-    ),
-  },
-  {
-    key: "networks",
-    header: "Networks",
-    width: proportional(1),
-    renderCell: ({ networks }) => <NetworkLogos networks={networks} />,
   },
   {
     key: "lowestPriceUsd",
@@ -129,6 +106,18 @@ const columns: TableColumn<StockMetricRow>[] = [
     sortable: true,
     renderCell: (row) => row.metricsAvailable ? compactUsd(row.volume24hUsd) : "—",
   },
+  {
+    key: "providers",
+    header: "Providers",
+    width: proportional(1),
+    renderCell: ({ stock }) => stock.providers.length,
+  },
+  {
+    key: "networks",
+    header: "Networks",
+    width: proportional(1),
+    renderCell: ({ networks }) => <NetworkLogos networks={networks} />,
+  },
 ];
 
 export function AssetsPage() {
@@ -140,9 +129,10 @@ export function AssetsPage() {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
+  const tokenCatalog = useTokenCatalog();
   const stocks = useMemo(
-    () => groupUnderlyingStocks(catalog.data?.tokens ?? []),
-    [catalog.data?.tokens],
+    () => groupUnderlyingStocks(tokenCatalog.data ?? catalog.data?.tokens ?? []),
+    [catalog.data?.tokens, tokenCatalog.data],
   );
   const metricRows = useMemo(
     () => buildStockMetricRows(stocks, catalog.data?.metrics),
@@ -181,7 +171,7 @@ export function AssetsPage() {
             <Text className="eyebrow">Tokenized stocks</Text>
             <Heading level={1}>Compare tokenized stock markets</Heading>
             <Text color="secondary">
-              Search an underlying stock, then compare its providers by observed DEX price and liquidity.
+              Search a stock, then compare its providers by observed DEX price and liquidity.
             </Text>
           </VStack>
         </header>
@@ -192,7 +182,7 @@ export function AssetsPage() {
               <VStack gap={0}>
                 <Heading id="stock-markets-title" level={2}>Stocks</Heading>
                 <Text type="supporting" color="secondary">
-                  One row per underlying equity across every indexed token provider.
+                  One row per stock across every indexed token provider.
                 </Text>
               </VStack>
               <VStack gap={0} hAlign="end">
@@ -209,7 +199,7 @@ export function AssetsPage() {
 
             <Grid columns={{ minWidth: 240, max: 2, repeat: "fit" }} gap={4} align="end">
               <TextInput
-                label="Search underlying stocks"
+                label="Search stocks"
                 value={searchQuery}
                 onChange={setSearchQuery}
                 placeholder="Search by company, ticker, or provider"
@@ -246,7 +236,7 @@ export function AssetsPage() {
             {catalog.isSuccess && displayedRows.length > 0 && (
               <>
                 <section
-                  aria-label="Underlying stock market comparison"
+                  aria-label="Stock market comparison"
                   className="asset-table asset-desktop-table"
                 >
                   <Table<StockMetricRow>
@@ -261,11 +251,11 @@ export function AssetsPage() {
                   />
                 </section>
                 <section
-                  aria-label="Mobile underlying stock comparison"
+                  aria-label="Mobile stock comparison"
                   className="asset-mobile-list"
                 >
                   <List
-                    header={<Text className="sr-only">Underlying stock results</Text>}
+                    header={<Text className="sr-only">Stock results</Text>}
                     density="spacious"
                     hasDividers
                   >
@@ -275,13 +265,13 @@ export function AssetsPage() {
                         label={row.stock.symbol}
                         href={assetPath(row.stock.id)}
                         startContent={(
-                          <TokenIcon logoURI={row.stock.logoURI} symbol={row.stock.symbol} />
+                          <TokenIcon logoURI={row.stock.logoURI} shape="roundedSquare" symbol={row.stock.symbol} />
                         )}
                         endContent={<NetworkLogos networks={row.networks} />}
                         description={(
                           <VStack gap={2}>
                             <Text type="supporting" color="secondary">
-                              {row.stock.providers.length} {row.stock.providers.length === 1 ? "provider" : "providers"} · {row.stock.providers.join(", ")}
+                              {row.stock.providers.length} {row.stock.providers.length === 1 ? "provider" : "providers"}
                             </Text>
                             <Grid columns={{ minWidth: 96, max: 3, repeat: "fit" }} gap={2}>
                               <VStack gap={0}>

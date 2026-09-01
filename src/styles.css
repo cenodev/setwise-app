@@ -553,6 +553,7 @@ code {
 .token-selector__options li button:disabled { opacity: .45; cursor: not-allowed; }
 .token-identity { display: inline-flex; min-width: 0; align-items: center; gap: .6rem; }
 .token-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border: 1px solid color-mix(in srgb, var(--color-on-dark) 18%, transparent); border-radius: 50%; object-fit: cover; background: var(--color-on-dark); }
+.token-icon--rounded-square { border-radius: var(--radius-element); }
 .token-icon--fallback { border-color: transparent; background: var(--bg-surface-raised); color: var(--accent-hover); font-size: .68rem; font-weight: 900; }
 .token-identity__copy { display: grid; min-width: 0; gap: .08rem; }
 .token-identity__copy strong, .token-identity__copy span, .token-identity__copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -819,9 +820,10 @@ code {
   color: var(--text-tertiary);
   font-size: var(--font-size-xs);
 }
-.asset-network-logos { display: inline-flex; align-items: center; padding-left: .35rem; }
+.asset-network-logos { display: inline-flex; min-width: max-content; flex: 0 0 auto; align-items: center; padding-left: .35rem; }
 .asset-network-logo,
 .asset-network-overflow {
+  flex-shrink: 0;
   width: 1.75rem;
   height: 1.75rem;
   margin-left: -.35rem;
@@ -829,7 +831,7 @@ code {
   border-radius: 50%;
   background: var(--bg-surface-raised);
 }
-.asset-network-logo { display: block; object-fit: cover; }
+.asset-network-logo { display: block; max-width: none; aspect-ratio: 1; object-fit: cover; }
 .asset-network-logo--fallback,
 .asset-network-overflow { display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); font-size: .55rem; font-weight: 800; }
 @media (max-width: 959px) {

@@ -8,6 +8,7 @@ export const setQueryKeys = {
 
 export const tokenListQueryKeys = {
   all: ["token-list"] as const,
+  catalog: ["token-list", "catalog"] as const,
 };
 
 export const assetMetricsQueryKeys = {

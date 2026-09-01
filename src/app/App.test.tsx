@@ -192,7 +192,7 @@ describe("Sets routes and navigation", () => {
     renderApp("/");
     expect(screen.getByRole("heading", { name: "Compare tokenized stock markets" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Stocks" })).toBeVisible();
-    expect(screen.getByRole("textbox", { name: "Search underlying stocks" })).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Search stocks" })).toBeVisible();
     expect(screen.getAllByRole("link", { name: "Explore" })[0]).toHaveClass("is-active");
   });
 

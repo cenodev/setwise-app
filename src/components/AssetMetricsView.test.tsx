@@ -1,4 +1,6 @@
-import { summarizeAssetMetrics } from "./AssetMetricsView";
+import { render } from "@testing-library/react";
+
+import { NetworkLogo, summarizeAssetMetrics } from "./AssetMetricsView";
 import type { DeploymentDexMetrics } from "../data/assetMetrics";
 import type { RwaAsset } from "../data/assets";
 import { tokenMetadataKey, type TokenMetadata } from "../data/tokens";
@@ -58,5 +60,16 @@ describe("summarizeAssetMetrics", () => {
     });
     expect(summary.liquidityUsd).toBeCloseTo(694_576.68);
     expect(summary.networks.map(({ chainId }) => chainId)).toEqual([1, 101]);
+  });
+});
+
+describe("NetworkLogo", () => {
+  it("renders the Base network logo", () => {
+    const { container } = render(<NetworkLogo network={{ chainId: 8453, name: "Base" }} />);
+
+    expect(container.querySelector("img")).toHaveAttribute(
+      "src",
+      "https://icons.llamao.fi/icons/chains/rsz_base.jpg",
+    );
   });
 });

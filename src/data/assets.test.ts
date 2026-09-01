@@ -9,6 +9,7 @@ const base: TokenMetadata = {
   name: "NVIDIA token",
   provider: "example-provider",
   symbol: "NVDAx",
+  underlyingLogoURI: "https://assets.example/NVDA.webp",
   underlyingSymbol: "NVDA",
 };
 
@@ -31,9 +32,24 @@ describe("RWA asset catalog", () => {
     ]);
 
     expect(stocks).toHaveLength(2);
-    expect(stocks[0]).toMatchObject({ id: "nvda", providers: ["Another Provider", "Example Provider"], symbol: "NVDA" });
+    expect(stocks[0]).toMatchObject({
+      id: "nvda",
+      logoURI: "https://assets.example/NVDA.webp",
+      providers: ["Another Provider", "Example Provider"],
+      symbol: "NVDA",
+    });
     expect(stocks[0]?.tokens).toHaveLength(2);
     expect(stocks[1]).toMatchObject({ id: "tsla", symbol: "TSLA" });
+  });
+
+  it("does not use a tokenized asset logo as the underlying stock logo", () => {
+    const [stock] = groupUnderlyingStocks([{
+      ...base,
+      logoURI: "https://assets.example/NVDAx.png",
+      underlyingLogoURI: undefined,
+    }]);
+
+    expect(stock?.logoURI).toBeUndefined();
   });
 
   it("uses editorial descriptions when present and otherwise generates a qualified fallback", () => {

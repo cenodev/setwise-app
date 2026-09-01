@@ -38,7 +38,7 @@ export function groupUnderlyingStocks(tokens: readonly TokenMetadata[]): Underly
   }
 
   return [...groups.entries()].map(([id, deployments]) => {
-    const preferred = deployments.find((token) => token.logoURI) ?? deployments[0];
+    const preferred = deployments.find((token) => token.underlyingLogoURI) ?? deployments[0];
     const offerings = groupRwaAssets(deployments);
     const ordered = [...deployments].sort((a, b) => (
       (a.provider ?? "unknown").localeCompare(b.provider ?? "unknown")
@@ -47,7 +47,7 @@ export function groupUnderlyingStocks(tokens: readonly TokenMetadata[]): Underly
     return {
       assetType: preferred.assetType,
       id,
-      logoURI: preferred.logoURI,
+      logoURI: preferred.underlyingLogoURI,
       name: preferred.name,
       offerings,
       providers: offerings.map(({ provider }) => provider),

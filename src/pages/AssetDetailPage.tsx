@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { BreadcrumbItem, Breadcrumbs } from "@astryxdesign/core/Breadcrumbs";
 import { Card } from "@astryxdesign/core/Card";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Grid } from "@astryxdesign/core/Grid";
 import { HStack, VStack } from "@astryxdesign/core/Layout";
 import { List, ListItem } from "@astryxdesign/core/List";
@@ -22,6 +23,7 @@ import { assetsPath } from "../app/routes";
 import { fetchAssetMetricsCatalog } from "../data/assetMetrics";
 import { groupUnderlyingStocks, providerLabel } from "../data/assets";
 import { assetMetricsQueryKeys } from "../data/queryKeys";
+import { useTokenCatalog } from "../data/tokens";
 
 interface ProviderMarketRow extends AssetDeploymentMetric, Record<string, unknown> {
   bestLiquidity: boolean;
@@ -109,9 +111,10 @@ export function AssetDetailPage() {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
+  const tokenCatalog = useTokenCatalog();
   const stocks = useMemo(
-    () => groupUnderlyingStocks(catalog.data?.tokens ?? []),
-    [catalog.data?.tokens],
+    () => groupUnderlyingStocks(tokenCatalog.data ?? catalog.data?.tokens ?? []),
+    [catalog.data?.tokens, tokenCatalog.data],
   );
   const normalizedAssetId = assetId?.toLowerCase().split(":").at(-1);
   const stock = stocks.find(({ id }) => id === normalizedAssetId);
@@ -121,7 +124,8 @@ export function AssetDetailPage() {
   );
   const markets = useMemo<ProviderMarketRow[]>(() => {
     if (!stock) return [];
-    const deployments = assetDeploymentMetrics(stock, catalog.data?.metrics);
+    const deployments = assetDeploymentMetrics(stock, catalog.data?.metrics)
+      .filter(({ metrics }) => metrics !== undefined && metrics.liquidityUsd > 0);
     const lowestPrice = Math.min(...deployments.flatMap(({ metrics }) => (
       metrics?.priceUsd !== null && metrics?.priceUsd !== undefined && metrics.liquidityUsd > 0
         ? [metrics.priceUsd]
@@ -140,6 +144,7 @@ export function AssetDetailPage() {
     ));
   }, [stock, catalog.data?.metrics]);
   const bestPrice = lowestLiquidPrice(markets);
+  const providerCount = new Set(markets.map(({ provider }) => provider)).size;
 
   return (
     <section className="screen assets-screen">
@@ -174,7 +179,7 @@ export function AssetDetailPage() {
           <Card>
             <VStack gap={2}>
               <Heading level={2}>Stock not found</Heading>
-              <Text>This underlying stock is not present in the current Setwise token list.</Text>
+              <Text>This stock is not present in the current Setwise token list.</Text>
             </VStack>
           </Card>
         )}
@@ -183,12 +188,14 @@ export function AssetDetailPage() {
           <>
             <header className="screen-header">
               <HStack gap={4} vAlign="center" className="asset-detail-heading">
-                <TokenIcon logoURI={stock.logoURI} symbol={stock.symbol} />
+                <TokenIcon logoURI={stock.logoURI} shape="roundedSquare" symbol={stock.symbol} />
                 <VStack gap={1}>
-                  <Text type="supporting" color="secondary">Underlying stock</Text>
+                  <Text type="supporting" color="secondary">Stock</Text>
                   <Heading level={1}>{stock.symbol}</Heading>
                   <Text color="secondary">
-                    Compare {stock.tokens.length} tokenized {stock.tokens.length === 1 ? "market" : "markets"} from {stock.providers.length} {stock.providers.length === 1 ? "provider" : "providers"}.
+                    {markets.length > 0
+                      ? `Compare ${markets.length} tokenized ${markets.length === 1 ? "market" : "markets"} from ${providerCount} ${providerCount === 1 ? "provider" : "providers"}.`
+                      : "No tokenized markets currently have observed DEX liquidity."}
                   </Text>
                 </VStack>
                 <NetworkLogos networks={summary.networks} />
@@ -223,7 +230,7 @@ export function AssetDetailPage() {
               <Card>
                 <VStack gap={1}>
                   <Text type="supporting" color="secondary">Providers</Text>
-                  <Text weight="bold" hasTabularNumbers>{stock.providers.length}</Text>
+                  <Text weight="bold" hasTabularNumbers>{providerCount}</Text>
                 </VStack>
               </Card>
             </Grid>
@@ -233,75 +240,88 @@ export function AssetDetailPage() {
                 <VStack gap={1}>
                   <Heading level={2} id="provider-markets-title">Provider markets</Heading>
                   <Text type="supporting" color="secondary">
-                    Every indexed provider and network, ranked by DEX liquidity. Best price means the lowest observed price in a market with liquidity.
+                    Markets with observed DEX liquidity, ranked by liquidity. Best price means the lowest observed price among these markets.
                   </Text>
                 </VStack>
 
-                <section
-                  className="asset-table asset-desktop-table"
-                  aria-label="Tokenized stock provider comparison"
-                >
-                  <Table<ProviderMarketRow>
-                    data={markets}
-                    columns={providerMarketColumns}
-                    idKey="id"
-                    density="balanced"
-                    dividers="rows"
-                    hasHover
-                    verticalAlign="top"
-                    textOverflow="wrap"
-                  />
-                </section>
-                <section
-                  className="asset-mobile-list"
-                  aria-label="Mobile tokenized stock provider comparison"
-                >
-                  <List
-                    header={<Text className="sr-only">Provider market results</Text>}
-                    density="spacious"
-                    hasDividers
-                  >
-                    {markets.map(({ bestLiquidity, bestPrice: rowBestPrice, id, metrics, network, provider, token }) => (
-                      <ListItem
-                        key={id}
-                        label={provider}
-                        startContent={<NetworkLogos networks={[network]} />}
-                        endContent={<Text type="supporting" color="secondary">{token.symbol}</Text>}
-                        description={(
-                          <VStack gap={2}>
-                            <Text type="supporting" color="secondary">
-                              {network.name}{metrics?.topVenue ? ` · ${metrics.topVenue}` : ""}
-                            </Text>
-                            <Grid columns={{ minWidth: 96, max: 3, repeat: "fit" }} gap={2}>
-                              <VStack gap={0}>
-                                <Text type="supporting" color="secondary">DEX price</Text>
-                                <Text weight="semibold" hasTabularNumbers>
-                                  {metrics?.priceUsd === null || metrics?.priceUsd === undefined
-                                    ? "—"
-                                    : compactUsd(metrics.priceUsd)}
-                                </Text>
-                                {rowBestPrice && <Text type="supporting" color="accent">Best price</Text>}
-                              </VStack>
-                              <VStack gap={0}>
-                                <Text type="supporting" color="secondary">Liquidity</Text>
-                                <Text weight="semibold" hasTabularNumbers>
-                                  {metrics ? compactUsd(metrics.liquidityUsd) : "—"}
-                                </Text>
-                                {bestLiquidity && <Text type="supporting" color="accent">Best liquidity</Text>}
-                              </VStack>
-                              <VStack gap={0}>
-                                <Text type="supporting" color="secondary">24h volume</Text>
-                                <Text weight="semibold" hasTabularNumbers>
-                                  {metrics ? compactUsd(metrics.volume24hUsd) : "—"}
-                                </Text>
-                              </VStack>
-                            </Grid>
-                          </VStack>
-                        )}
+                {markets.length === 0 ? (
+                  <Card>
+                    <EmptyState
+                      title="No liquid provider markets"
+                      description="No indexed provider currently has observed DEX liquidity for this stock."
+                      headingLevel={3}
+                      isCompact
+                    />
+                  </Card>
+                ) : (
+                  <>
+                    <section
+                      className="asset-table asset-desktop-table"
+                      aria-label="Tokenized stock provider comparison"
+                    >
+                      <Table<ProviderMarketRow>
+                        data={markets}
+                        columns={providerMarketColumns}
+                        idKey="id"
+                        density="balanced"
+                        dividers="rows"
+                        hasHover
+                        verticalAlign="top"
+                        textOverflow="wrap"
                       />
-                    ))}
-                  </List>
-                </section>
+                    </section>
+                    <section
+                      className="asset-mobile-list"
+                      aria-label="Mobile tokenized stock provider comparison"
+                    >
+                      <List
+                        header={<Text className="sr-only">Provider market results</Text>}
+                        density="spacious"
+                        hasDividers
+                      >
+                        {markets.map(({ bestLiquidity, bestPrice: rowBestPrice, id, metrics, network, provider, token }) => (
+                          <ListItem
+                            key={id}
+                            label={provider}
+                            startContent={<NetworkLogos networks={[network]} />}
+                            endContent={<Text type="supporting" color="secondary">{token.symbol}</Text>}
+                            description={(
+                              <VStack gap={2}>
+                                <Text type="supporting" color="secondary">
+                                  {network.name}{metrics?.topVenue ? ` · ${metrics.topVenue}` : ""}
+                                </Text>
+                                <Grid columns={{ minWidth: 96, max: 3, repeat: "fit" }} gap={2}>
+                                  <VStack gap={0}>
+                                    <Text type="supporting" color="secondary">DEX price</Text>
+                                    <Text weight="semibold" hasTabularNumbers>
+                                      {metrics?.priceUsd === null || metrics?.priceUsd === undefined
+                                        ? "—"
+                                        : compactUsd(metrics.priceUsd)}
+                                    </Text>
+                                    {rowBestPrice && <Text type="supporting" color="accent">Best price</Text>}
+                                  </VStack>
+                                  <VStack gap={0}>
+                                    <Text type="supporting" color="secondary">Liquidity</Text>
+                                    <Text weight="semibold" hasTabularNumbers>
+                                      {metrics ? compactUsd(metrics.liquidityUsd) : "—"}
+                                    </Text>
+                                    {bestLiquidity && <Text type="supporting" color="accent">Best liquidity</Text>}
+                                  </VStack>
+                                  <VStack gap={0}>
+                                    <Text type="supporting" color="secondary">24h volume</Text>
+                                    <Text weight="semibold" hasTabularNumbers>
+                                      {metrics ? compactUsd(metrics.volume24hUsd) : "—"}
+                                    </Text>
+                                  </VStack>
+                                </Grid>
+                              </VStack>
+                            )}
+                          />
+                        ))}
+                      </List>
+                    </section>
+                  </>
+                )}
               </VStack>
             </section>
 

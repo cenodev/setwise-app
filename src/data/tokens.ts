@@ -23,6 +23,7 @@ export const tokenSchema = z.object({
   sourceUrl: z.string().url().optional(),
   symbol: z.string().min(1),
   tokenStandard: z.string().min(1).optional(),
+  underlyingLogoURI: z.string().url().optional(),
   underlyingSymbol: z.string().min(1).optional(),
 }).passthrough();
 
@@ -110,8 +111,18 @@ export async function fetchTokenCatalog(signal?: AbortSignal): Promise<TokenMeta
 
 export function useTokenMetadata() {
   return useQuery({
-    queryKey: tokenListQueryKeys.all,
-    queryFn: ({ signal }) => fetchTokenList(signal),
+    queryKey: tokenListQueryKeys.catalog,
+    queryFn: ({ signal }) => fetchTokenCatalog(signal),
+    select: createTokenMetadataIndex,
+    staleTime: 60 * 60 * 1_000,
+    retry: 1,
+  });
+}
+
+export function useTokenCatalog() {
+  return useQuery({
+    queryKey: tokenListQueryKeys.catalog,
+    queryFn: ({ signal }) => fetchTokenCatalog(signal),
     staleTime: 60 * 60 * 1_000,
     retry: 1,
   });

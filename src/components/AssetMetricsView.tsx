@@ -41,6 +41,7 @@ const networkIconSlugs: Readonly<Record<number, string>> = {
   1030: "conflux",
   4663: "robinhood-chain",
   5000: "mantle",
+  8453: "base",
   9745: "plasma",
   42161: "arbitrum",
   42220: "celo",

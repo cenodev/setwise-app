@@ -9,16 +9,21 @@ export type TokenIdentityAsset = {
   underlying?: { symbol: string };
 };
 
-type TokenIconProps = { logoURI?: string; symbol: string };
+type TokenIconProps = {
+  logoURI?: string;
+  shape?: "circle" | "roundedSquare";
+  symbol: string;
+};
 
 function initials(symbol: string): string {
   return symbol.trim().split(/[^a-z0-9]+/i).filter(Boolean).map((part) => part[0]).join("").slice(0, 3).toUpperCase() || "?";
 }
 
-export function TokenIcon({ logoURI, symbol }: TokenIconProps) {
+export function TokenIcon({ logoURI, shape = "circle", symbol }: TokenIconProps) {
   const [failedLogo, setFailedLogo] = useState<string>();
-  if (!logoURI || failedLogo === logoURI) return <span className="token-icon token-icon--fallback" aria-hidden="true">{initials(symbol)}</span>;
-  return <img className="token-icon" src={logoURI} alt="" loading="lazy" onError={() => setFailedLogo(logoURI)} />;
+  const className = `token-icon${shape === "roundedSquare" ? " token-icon--rounded-square" : ""}`;
+  if (!logoURI || failedLogo === logoURI) return <span className={`${className} token-icon--fallback`} aria-hidden="true">{initials(symbol)}</span>;
+  return <img className={className} src={logoURI} alt="" loading="lazy" onError={() => setFailedLogo(logoURI)} />;
 }
 
 export function tokenDisplay(asset: TokenIdentityAsset, chainId: number, index?: TokenMetadataIndex) {

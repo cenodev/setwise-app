@@ -15,6 +15,7 @@ const token = {
   logoURI: "https://assets.example/token.png",
   name: "Canonical Token",
   symbol: "CAN",
+  underlyingLogoURI: "https://assets.example/CANO.webp",
   underlyingSymbol: "CANO",
 };
 
