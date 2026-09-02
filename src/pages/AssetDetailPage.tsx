@@ -147,6 +147,9 @@ export function AssetDetailPage() {
       ));
     },
   });
+  const refreshedAt = refresh.data && refresh.data.asset.toLowerCase() === stock?.symbol.toLowerCase()
+    ? refresh.data.generatedAt
+    : undefined;
   const summary = useMemo(
     () => stock ? summarizeAssetMetrics(stock, catalog.data?.metrics) : undefined,
     [stock, catalog.data?.metrics],
@@ -372,7 +375,10 @@ export function AssetDetailPage() {
             </section>
 
             <Text type="supporting" color="secondary">
-              Snapshot generated {new Date(catalog.data.generatedAt).toLocaleString()}. Market data is informational and does not represent an executable quote.
+              {refreshedAt
+                ? `${stock.symbol} provider metrics refreshed ${new Date(refreshedAt).toLocaleString()}. `
+                : "Market data comes from the latest available snapshot and may have been observed at different times. "}
+              Market data is informational and does not represent an executable quote.
             </Text>
             {refresh.error && (
               <Banner

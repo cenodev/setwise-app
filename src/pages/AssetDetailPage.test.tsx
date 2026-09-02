@@ -148,6 +148,8 @@ describe("AssetDetailPage", () => {
     expect(within(mobileComparison).getByText("Polygon · quickswap")).toBeVisible();
     expect(within(mobileComparison).getAllByText("Stock price")).toHaveLength(2);
     expect(within(mobileComparison).getByText("$44.25")).toBeVisible();
+    expect(screen.getByText(/may have been observed at different times/i)).toBeVisible();
+    expect(screen.queryByText(/provider metrics refreshed/i)).not.toBeInTheDocument();
   });
 
   it("keeps legacy provider-prefixed stock URLs working", async () => {
@@ -177,7 +179,7 @@ describe("AssetDetailPage", () => {
     await waitFor(() => expect(mocks.refreshAssetMetricsForAsset).toHaveBeenCalledWith("ALPHA"));
     await waitFor(() => expect(screen.getAllByText("$45.00").length).toBeGreaterThan(0));
     expect(screen.getByText(
-      `Snapshot generated ${new Date("2026-08-16T21:01:00.000Z").toLocaleString()}. Market data is informational and does not represent an executable quote.`,
+      `ALPHA provider metrics refreshed ${new Date("2026-08-16T21:01:00.000Z").toLocaleString()}. Market data is informational and does not represent an executable quote.`,
     )).toBeVisible();
   });
 
