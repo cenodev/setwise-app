@@ -150,6 +150,11 @@ describe("AssetDetailPage", () => {
     expect(within(mobileComparison).getByText("$44.25")).toBeVisible();
     expect(screen.getByText(/may have been observed at different times/i)).toBeVisible();
     expect(screen.queryByText(/provider metrics refreshed/i)).not.toBeInTheDocument();
+
+    const providerMarkets = screen.getByRole("region", { name: "Provider markets" });
+    const refreshButton = within(providerMarkets).getByRole("button", { name: "Refresh market data" });
+    expect(refreshButton.querySelector("svg")).not.toBeNull();
+    expect(refreshButton.compareDocumentPosition(comparison) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("keeps legacy provider-prefixed stock URLs working", async () => {

@@ -1,15 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BreadcrumbItem, Breadcrumbs } from "@astryxdesign/core/Breadcrumbs";
 import { Banner } from "@astryxdesign/core/Banner";
-import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Grid } from "@astryxdesign/core/Grid";
+import { Icon } from "@astryxdesign/core/Icon";
+import { IconButton } from "@astryxdesign/core/IconButton";
 import { HStack, VStack } from "@astryxdesign/core/Layout";
 import { List, ListItem } from "@astryxdesign/core/List";
 import { proportional, Table, type TableColumn } from "@astryxdesign/core/Table";
 import { Heading, Text } from "@astryxdesign/core/Text";
-import { useMemo } from "react";
+import { useMemo, type SVGProps } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
@@ -37,6 +38,17 @@ interface ProviderMarketRow extends AssetDeploymentMetric, Record<string, unknow
   bestPrice: boolean;
   id: string;
   provider: string;
+}
+
+function RefreshIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M20 6v5h-5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 18v-5h5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6.1 9A7 7 0 0 1 20 11" strokeLinecap="round" />
+      <path d="M17.9 15A7 7 0 0 1 4 13" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 const providerMarketColumns: TableColumn<ProviderMarketRow>[] = [
@@ -230,16 +242,7 @@ export function AssetDetailPage() {
                       : "No tokenized markets currently have observed DEX liquidity."}
                   </Text>
                 </VStack>
-                <HStack gap={3} vAlign="center">
-                  <NetworkLogos networks={summary.networks} />
-                  <Button
-                    label={refresh.isPending ? "Refreshing market data" : "Refresh market data"}
-                    variant="secondary"
-                    size="sm"
-                    isLoading={refresh.isPending}
-                    onClick={() => refresh.mutate()}
-                  />
-                </HStack>
+                <NetworkLogos networks={summary.networks} />
               </HStack>
             </header>
 
@@ -278,12 +281,23 @@ export function AssetDetailPage() {
 
             <section aria-labelledby="provider-markets-title">
               <VStack gap={4}>
-                <VStack gap={1}>
-                  <Heading level={2} id="provider-markets-title">Provider markets</Heading>
-                  <Text type="supporting" color="secondary">
-                    Markets with observed DEX liquidity, ranked by liquidity. Best price means the lowest observed price among these markets.
-                  </Text>
-                </VStack>
+                <HStack gap={4} hAlign="between" vAlign="start" width="100%">
+                  <VStack gap={1}>
+                    <Heading level={2} id="provider-markets-title">Provider markets</Heading>
+                    <Text type="supporting" color="secondary">
+                      Markets with observed DEX liquidity, ranked by liquidity. Best price means the lowest observed price among these markets.
+                    </Text>
+                  </VStack>
+                  <IconButton
+                    label="Refresh market data"
+                    icon={<Icon icon={RefreshIcon} color="inherit" />}
+                    variant="ghost"
+                    size="sm"
+                    isLoading={refresh.isPending}
+                    tooltip="Refresh market data"
+                    onClick={() => refresh.mutate()}
+                  />
+                </HStack>
 
                 {markets.length === 0 ? (
                   <Card>
