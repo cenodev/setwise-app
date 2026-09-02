@@ -285,6 +285,7 @@ export function AssetDetailPage() {
                     size="sm"
                     variant="section"
                     dividers={["bottom"]}
+                    startContent={<Text className="sr-only">Provider markets</Text>}
                     endContent={(
                       <IconButton
                         label="Refresh market data"

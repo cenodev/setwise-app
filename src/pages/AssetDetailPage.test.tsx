@@ -153,7 +153,10 @@ describe("AssetDetailPage", () => {
 
     const providerMarkets = screen.getByRole("region", { name: "Provider markets" });
     const refreshButton = within(providerMarkets).getByRole("button", { name: "Refresh market data" });
+    const toolbar = within(providerMarkets).getByRole("toolbar", { name: "Provider market actions" });
     expect(refreshButton.querySelector("svg")).not.toBeNull();
+    expect(toolbar.firstElementChild).toHaveTextContent("Provider markets");
+    expect(toolbar.children.item(1)).toContainElement(refreshButton);
     expect(refreshButton.compareDocumentPosition(comparison) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
