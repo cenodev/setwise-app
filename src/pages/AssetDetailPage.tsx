@@ -10,6 +10,7 @@ import { HStack, VStack } from "@astryxdesign/core/Layout";
 import { List, ListItem } from "@astryxdesign/core/List";
 import { proportional, Table, type TableColumn } from "@astryxdesign/core/Table";
 import { Heading, Text } from "@astryxdesign/core/Text";
+import { Toolbar } from "@astryxdesign/core/Toolbar";
 import { ArrowClockwise } from "@phosphor-icons/react";
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -271,110 +272,116 @@ export function AssetDetailPage() {
 
             <section aria-labelledby="provider-markets-title">
               <VStack gap={4}>
-                <HStack gap={4} hAlign="between" vAlign="start" width="100%">
-                  <VStack gap={1}>
-                    <Heading level={2} id="provider-markets-title">Provider markets</Heading>
-                    <Text type="supporting" color="secondary">
-                      Markets with observed DEX liquidity, ranked by liquidity. Best price means the lowest observed price among these markets.
-                    </Text>
-                  </VStack>
-                  <IconButton
-                    label="Refresh market data"
-                    icon={<Icon icon={ArrowClockwise} color="inherit" />}
-                    variant="ghost"
-                    size="sm"
-                    isLoading={refresh.isPending}
-                    tooltip="Refresh market data"
-                    onClick={() => refresh.mutate()}
-                  />
-                </HStack>
+                <VStack gap={1}>
+                  <Heading level={2} id="provider-markets-title">Provider markets</Heading>
+                  <Text type="supporting" color="secondary">
+                    Markets with observed DEX liquidity, ranked by liquidity. Best price means the lowest observed price among these markets.
+                  </Text>
+                </VStack>
 
-                {markets.length === 0 ? (
-                  <Card>
+                <section className="asset-table">
+                  <Toolbar
+                    label="Provider market actions"
+                    size="sm"
+                    variant="section"
+                    dividers={["bottom"]}
+                    endContent={(
+                      <IconButton
+                        label="Refresh market data"
+                        icon={<Icon icon={ArrowClockwise} color="inherit" />}
+                        variant="ghost"
+                        isLoading={refresh.isPending}
+                        tooltip="Refresh market data"
+                        onClick={() => refresh.mutate()}
+                      />
+                    )}
+                  />
+
+                  {markets.length === 0 ? (
                     <EmptyState
                       title="No liquid provider markets"
                       description="No indexed provider currently has observed DEX liquidity for this stock."
                       headingLevel={3}
                       isCompact
                     />
-                  </Card>
-                ) : (
-                  <>
-                    <section
-                      className="asset-table asset-desktop-table"
-                      aria-label="Tokenized stock provider comparison"
-                    >
-                      <Table<ProviderMarketRow>
-                        data={markets}
-                        columns={providerMarketColumns}
-                        idKey="id"
-                        density="balanced"
-                        dividers="rows"
-                        hasHover
-                        verticalAlign="top"
-                        textOverflow="wrap"
-                      />
-                    </section>
-                    <section
-                      className="asset-mobile-list"
-                      aria-label="Mobile tokenized stock provider comparison"
-                    >
-                      <List
-                        header={<Text className="sr-only">Provider market results</Text>}
-                        density="spacious"
-                        hasDividers
+                  ) : (
+                    <>
+                      <section
+                        className="asset-desktop-table"
+                        aria-label="Tokenized stock provider comparison"
                       >
-                        {markets.map(({ bestLiquidity, bestPrice: rowBestPrice, id, metrics, network, provider, token }) => (
-                          <ListItem
-                            key={id}
-                            label={provider}
-                            startContent={<NetworkLogos networks={[network]} />}
-                            endContent={<Text type="supporting" color="secondary">{token.symbol}</Text>}
-                            description={(
-                              <VStack gap={2}>
-                                <Text type="supporting" color="secondary">
-                                  {network.name}{metrics?.topVenue ? ` · ${metrics.topVenue}` : ""}
-                                </Text>
-                                <Grid columns={{ minWidth: 96, max: 4, repeat: "fit" }} gap={2}>
-                                  <VStack gap={0}>
-                                    <Text type="supporting" color="secondary">Stock price</Text>
-                                    <Text weight="semibold" hasTabularNumbers>
-                                      {metrics?.referencePrice === null || metrics?.referencePrice === undefined
-                                        ? "—"
-                                        : compactUsd(metrics.referencePrice.priceUsd)}
-                                    </Text>
-                                  </VStack>
-                                  <VStack gap={0}>
-                                    <Text type="supporting" color="secondary">DEX price</Text>
-                                    <Text weight="semibold" hasTabularNumbers>
-                                      {metrics?.priceUsd === null || metrics?.priceUsd === undefined
-                                        ? "—"
-                                        : compactUsd(metrics.priceUsd)}
-                                    </Text>
-                                    {rowBestPrice && <Text type="supporting" color="accent">Best price</Text>}
-                                  </VStack>
-                                  <VStack gap={0}>
-                                    <Text type="supporting" color="secondary">Liquidity</Text>
-                                    <Text weight="semibold" hasTabularNumbers>
-                                      {metrics ? compactUsd(metrics.liquidityUsd) : "—"}
-                                    </Text>
-                                    {bestLiquidity && <Text type="supporting" color="accent">Best liquidity</Text>}
-                                  </VStack>
-                                  <VStack gap={0}>
-                                    <Text type="supporting" color="secondary">24h volume</Text>
-                                    <Text weight="semibold" hasTabularNumbers>
-                                      {metrics ? compactUsd(metrics.volume24hUsd) : "—"}
-                                    </Text>
-                                  </VStack>
-                                </Grid>
-                              </VStack>
-                            )}
-                          />
-                        ))}
-                      </List>
-                    </section>
-                  </>
-                )}
+                        <Table<ProviderMarketRow>
+                          data={markets}
+                          columns={providerMarketColumns}
+                          idKey="id"
+                          density="balanced"
+                          dividers="rows"
+                          hasHover
+                          verticalAlign="top"
+                          textOverflow="wrap"
+                        />
+                      </section>
+                      <section
+                        className="asset-mobile-list asset-mobile-list--embedded"
+                        aria-label="Mobile tokenized stock provider comparison"
+                      >
+                        <List
+                          header={<Text className="sr-only">Provider market results</Text>}
+                          density="spacious"
+                          hasDividers
+                        >
+                          {markets.map(({ bestLiquidity, bestPrice: rowBestPrice, id, metrics, network, provider, token }) => (
+                            <ListItem
+                              key={id}
+                              label={provider}
+                              startContent={<NetworkLogos networks={[network]} />}
+                              endContent={<Text type="supporting" color="secondary">{token.symbol}</Text>}
+                              description={(
+                                <VStack gap={2}>
+                                  <Text type="supporting" color="secondary">
+                                    {network.name}{metrics?.topVenue ? ` · ${metrics.topVenue}` : ""}
+                                  </Text>
+                                  <Grid columns={{ minWidth: 96, max: 4, repeat: "fit" }} gap={2}>
+                                    <VStack gap={0}>
+                                      <Text type="supporting" color="secondary">Stock price</Text>
+                                      <Text weight="semibold" hasTabularNumbers>
+                                        {metrics?.referencePrice === null || metrics?.referencePrice === undefined
+                                          ? "—"
+                                          : compactUsd(metrics.referencePrice.priceUsd)}
+                                      </Text>
+                                    </VStack>
+                                    <VStack gap={0}>
+                                      <Text type="supporting" color="secondary">DEX price</Text>
+                                      <Text weight="semibold" hasTabularNumbers>
+                                        {metrics?.priceUsd === null || metrics?.priceUsd === undefined
+                                          ? "—"
+                                          : compactUsd(metrics.priceUsd)}
+                                      </Text>
+                                      {rowBestPrice && <Text type="supporting" color="accent">Best price</Text>}
+                                    </VStack>
+                                    <VStack gap={0}>
+                                      <Text type="supporting" color="secondary">Liquidity</Text>
+                                      <Text weight="semibold" hasTabularNumbers>
+                                        {metrics ? compactUsd(metrics.liquidityUsd) : "—"}
+                                      </Text>
+                                      {bestLiquidity && <Text type="supporting" color="accent">Best liquidity</Text>}
+                                    </VStack>
+                                    <VStack gap={0}>
+                                      <Text type="supporting" color="secondary">24h volume</Text>
+                                      <Text weight="semibold" hasTabularNumbers>
+                                        {metrics ? compactUsd(metrics.volume24hUsd) : "—"}
+                                      </Text>
+                                    </VStack>
+                                  </Grid>
+                                </VStack>
+                              )}
+                            />
+                          ))}
+                        </List>
+                      </section>
+                    </>
+                  )}
+                </section>
               </VStack>
             </section>
 
