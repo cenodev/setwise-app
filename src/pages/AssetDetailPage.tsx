@@ -10,7 +10,8 @@ import { HStack, VStack } from "@astryxdesign/core/Layout";
 import { List, ListItem } from "@astryxdesign/core/List";
 import { proportional, Table, type TableColumn } from "@astryxdesign/core/Table";
 import { Heading, Text } from "@astryxdesign/core/Text";
-import { useMemo, type SVGProps } from "react";
+import { ArrowClockwise } from "@phosphor-icons/react";
+import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
@@ -38,17 +39,6 @@ interface ProviderMarketRow extends AssetDeploymentMetric, Record<string, unknow
   bestPrice: boolean;
   id: string;
   provider: string;
-}
-
-function RefreshIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path d="M20 6v5h-5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M4 18v-5h5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M6.1 9A7 7 0 0 1 20 11" strokeLinecap="round" />
-      <path d="M17.9 15A7 7 0 0 1 4 13" strokeLinecap="round" />
-    </svg>
-  );
 }
 
 const providerMarketColumns: TableColumn<ProviderMarketRow>[] = [
@@ -290,7 +280,7 @@ export function AssetDetailPage() {
                   </VStack>
                   <IconButton
                     label="Refresh market data"
-                    icon={<Icon icon={RefreshIcon} color="inherit" />}
+                    icon={<Icon icon={ArrowClockwise} color="inherit" />}
                     variant="ghost"
                     size="sm"
                     isLoading={refresh.isPending}
