@@ -4,7 +4,7 @@ import type { Address, Hash } from "viem";
 import { isAddressEqual } from "viem";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 
-import { requiredChainId } from "../../config/chains";
+import { setwiseTestnetChainId } from "../../config/chains";
 import { bscTestnetDeployment, type FaucetTokenMetadata } from "../../config/deployment";
 import { runtimeConfig } from "../../config/env";
 import { erc20Abi, faucetAbi } from "../../data/chain/abis";
@@ -81,7 +81,7 @@ async function watchAsset(asset: FaucetTokenMetadata): Promise<void> {
 
 export function FaucetPage() {
   const { address, chainId, isConnected } = useAccount();
-  const publicClient = usePublicClient({ chainId: requiredChainId });
+  const publicClient = usePublicClient({ chainId: setwiseTestnetChainId });
   const { writeContractAsync } = useWriteContract();
   const queryClient = useQueryClient();
   const online = useOnline();
@@ -135,7 +135,7 @@ export function FaucetPage() {
   const hasSufficientInventory = stateQuery.data?.assets.every((asset) => asset.inventory >= asset.claimAmount) ?? false;
   const availability = useMemo(() => faucetAvailability({
     connected: isConnected,
-    correctChain: chainId === requiredChainId,
+    correctChain: chainId === setwiseTestnetChainId,
     online,
     paused: stateQuery.data?.paused ?? false,
     nextEligibleAt: stateQuery.data?.nextEligibleAt ?? 0n,

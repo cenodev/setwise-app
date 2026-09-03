@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import { setwiseTestnetChainId } from "../config/chains";
 import { LegacyRedirect } from "./LegacyRedirect";
 import { AppShell } from "./AppShell";
 import { assetsPath } from "./routes";
@@ -36,7 +37,7 @@ export function App() {
               <h1>Swap assets</h1>
               <p>Exchange supported Set assets using exact-input or exact-output quotes on BSC Testnet.</p>
             </header>
-            <WalletGate><SwapPage /></WalletGate>
+            <WalletGate sourceChainId={setwiseTestnetChainId}><SwapPage /></WalletGate>
             <aside className="disclosure" role="note">
               <strong>Testnet only.</strong> Contracts are unaudited, tokenized assets carry issuer and market risk, and this is not investment advice.
             </aside>
@@ -50,7 +51,7 @@ export function App() {
               <h1>Get mock assets</h1>
               <p>Claim mUSDT and every configured mock bStock in one rate-limited transaction.</p>
             </header>
-            <WalletGate><FaucetPage /></WalletGate>
+            <WalletGate sourceChainId={setwiseTestnetChainId}><FaucetPage /></WalletGate>
           </div>
         } />
 

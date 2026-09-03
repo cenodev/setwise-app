@@ -3,8 +3,8 @@ import type { PropsWithChildren } from "react";
 import { Link } from "react-router-dom";
 import { useAccount, useSwitchChain } from "wagmi";
 
-import { requiredChainId } from "../../config/chains";
 import { runtimeConfig } from "../../config/env";
+import { getWalletNetworkRequirement } from "./network";
 
 function ConnectAction() {
   const { open } = useAppKit();
@@ -15,9 +15,19 @@ function ConnectAction() {
   );
 }
 
-export function WalletGate({ children }: PropsWithChildren) {
+type WalletGateProps = PropsWithChildren<{
+  destinationChainId?: number;
+  sourceChainId: number;
+}>;
+
+export function WalletGate({ children, destinationChainId, sourceChainId }: WalletGateProps) {
   const { chainId, isConnected } = useAccount();
   const switchChain = useSwitchChain();
+  const networkRequirement = getWalletNetworkRequirement({
+    connectedChainId: isConnected ? chainId : undefined,
+    destinationChainId: destinationChainId ?? sourceChainId,
+    sourceChainId,
+  });
 
   if (!runtimeConfig.walletConfigured) {
     return (
@@ -33,7 +43,7 @@ export function WalletGate({ children }: PropsWithChildren) {
     );
   }
 
-  if (!isConnected) {
+  if (!isConnected || networkRequirement.kind === "disconnected") {
     return (
       <section className="gate-card" aria-labelledby="wallet-connect-title">
         <p className="eyebrow">External wallet</p>
@@ -45,19 +55,30 @@ export function WalletGate({ children }: PropsWithChildren) {
     );
   }
 
-  if (chainId !== requiredChainId) {
+  if (networkRequirement.kind === "unsupported-source") {
+    return (
+      <section className="gate-card" aria-labelledby="network-unsupported-title">
+        <p className="eyebrow eyebrow--critical">Unsupported network</p>
+        <h2 id="network-unsupported-title">This source network is not configured</h2>
+        <p>Wallet execution is unavailable for source chain {networkRequirement.sourceChainId}.</p>
+      </section>
+    );
+  }
+
+  if (networkRequirement.kind === "switch") {
+    const { sourceNetwork } = networkRequirement;
     return (
       <section className="gate-card" aria-labelledby="network-switch-title">
         <p className="eyebrow eyebrow--critical">Wrong network</p>
-        <h2 id="network-switch-title">BSC Testnet is required</h2>
+        <h2 id="network-switch-title">{sourceNetwork.name} is required</h2>
         <p>Switch networks before requesting prices or submitting transactions.</p>
         <button
           className="primary-button"
           type="button"
           disabled={switchChain.isPending}
-          onClick={() => switchChain.switchChain({ chainId: requiredChainId })}
+          onClick={() => switchChain.switchChain({ chainId: sourceNetwork.id })}
         >
-          {switchChain.isPending ? "Switching network…" : "Switch to BSC Testnet"}
+          {switchChain.isPending ? "Switching network…" : `Switch to ${sourceNetwork.name}`}
         </button>
       </section>
     );

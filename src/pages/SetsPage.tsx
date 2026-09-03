@@ -1,7 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { requiredChainId } from "../config/chains";
+import { setwiseTestnetChainId } from "../config/chains";
 import { setQueryKeys } from "../data/queryKeys";
 import {
   loadSetDirectoryStates,
@@ -36,7 +36,7 @@ export function SetsPage() {
   const tokenMetadata = useTokenMetadata();
 
   const sets = sortSets(
-    (poolsQuery.data ?? []).map((pool) => toSetDefinition(pool, requiredChainId)),
+    (poolsQuery.data ?? []).map((pool) => toSetDefinition(pool, setwiseTestnetChainId)),
   );
   const fingerprint = setDirectoryFingerprint(sets);
   const statesQuery = useQuery({

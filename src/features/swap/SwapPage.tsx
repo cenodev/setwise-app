@@ -12,7 +12,7 @@ import {
   useWriteContract,
 } from "wagmi";
 
-import { requiredChainId } from "../../config/chains";
+import { setwiseTestnetChainId } from "../../config/chains";
 import { bscTestnetDeployment } from "../../config/deployment";
 import { TokenIdentity, tokenDisplay } from "../../components/TokenIdentity";
 import { TokenSelector } from "../../components/TokenSelector";
@@ -199,12 +199,15 @@ function currentTimestamp() {
   return Date.now();
 }
 
+// The current /swap route remains pinned to its deployed Setwise source chain.
+const sourceChainId = setwiseTestnetChainId;
+
 export function SwapPage() {
   const { address, chainId, connector } = useAccount();
-  const publicClient = usePublicClient({ chainId: requiredChainId });
+  const publicClient = usePublicClient({ chainId: sourceChainId });
   const capabilityQuery = useCapabilities({
     account: address,
-    chainId: requiredChainId,
+    chainId: sourceChainId,
     query: { enabled: Boolean(address), retry: false },
   });
   const { sendCallsAsync } = useSendCalls();
@@ -221,7 +224,7 @@ export function SwapPage() {
     queryFn: ({ signal }) => getPools(signal),
     staleTime: 60_000,
   });
-  const setResolution = resolveSet(selectedSetId, registryQuery.data, requiredChainId);
+  const setResolution = resolveSet(selectedSetId, registryQuery.data, sourceChainId);
   const resolvedPoolId = setResolution.status === "ready" ? setResolution.definition.id : selectedSetId;
 
   const [inputAssetId, setInputAssetId] = useState("");
@@ -294,7 +297,7 @@ export function SwapPage() {
     () => [...(poolQuery.data?.assets ?? [])].sort((left, right) => left.index - right.index),
     [poolQuery.data?.assets],
   );
-  const tokenChainId = poolQuery.data?.chain.id ?? requiredChainId;
+  const tokenChainId = poolQuery.data?.chain.id ?? sourceChainId;
 
   const defaultPair = useMemo(() => {
     const enabled = poolQuery.data?.pairs?.find((pair) => pair.enabled
@@ -323,7 +326,7 @@ export function SwapPage() {
     enabled: Boolean(address && publicClient && poolQuery.data),
     queryFn: async (): Promise<SwapChainState> => {
       if (!address || !publicClient || !poolQuery.data) throw new Error("Wallet and Set are required");
-      if (poolQuery.data.id !== resolvedPoolId || poolQuery.data.chain.id !== requiredChainId) {
+      if (poolQuery.data.id !== resolvedPoolId || poolQuery.data.chain.id !== sourceChainId) {
         throw new Error("Set discovery does not match the selected Set and chain");
       }
       return readSwapChainState({ account: address, assets, client: publicClient, routerAddress });
@@ -436,7 +439,7 @@ export function SwapPage() {
         validateIndicativeSwap({
           specifiedAmountAtomic: amountAtomic,
           intent,
-          chainId: requiredChainId,
+          chainId: sourceChainId,
           inputAsset,
           outputAsset,
           poolAddress: poolQuery.data.contract.address,
@@ -498,7 +501,7 @@ export function SwapPage() {
   }, [executionContext, transaction.stage]);
 
   const canReview = Boolean(
-    address && chainId === requiredChainId && publicClient && quote && quoteFresh && quoteMatchesDraft
+    address && chainId === sourceChainId && publicClient && quote && quoteFresh && quoteMatchesDraft
     && !quoteLoading && online && !busy && !amountError && pairSupported && !insufficientBalance
     && !insufficientGas && !tradingPaused,
   );
@@ -514,7 +517,7 @@ export function SwapPage() {
     const timer = window.setTimeout(() => {
       const result = atomicBatchResult({
         error: batchStatus.error,
-        expectedChainId: requiredChainId,
+        expectedChainId: sourceChainId,
         status: batchStatus.data,
       });
       if (result.kind === "pending") return;
@@ -583,7 +586,7 @@ export function SwapPage() {
 
       const requestFirm = async () => {
         const currentConnection = connectionRef.current;
-        if (!onlineRef.current || !currentConnection.online || currentConnection.chainId !== requiredChainId
+        if (!onlineRef.current || !currentConnection.online || currentConnection.chainId !== sourceChainId
           || !currentConnection.address || !isAddressEqual(currentConnection.address, address)) {
           throw new Error("Wallet, network, or connectivity changed before the executable quote request");
         }
@@ -618,7 +621,7 @@ export function SwapPage() {
           address,
           allowance: latestAllowance,
           balance: latestBalance,
-          chainId: requiredChainId,
+          chainId: sourceChainId,
           firm,
           indicative: quote,
           inputAsset,
@@ -639,7 +642,7 @@ export function SwapPage() {
         setFirmQuote(firm);
 
         const beforeWallet = connectionRef.current;
-        if (!beforeWallet.online || beforeWallet.chainId !== requiredChainId
+        if (!beforeWallet.online || beforeWallet.chainId !== sourceChainId
           || !beforeWallet.address || !isAddressEqual(beforeWallet.address, address)) {
           throw new Error("Wallet, network, or connectivity changed before atomic wallet confirmation");
         }
@@ -647,7 +650,7 @@ export function SwapPage() {
           throw new Error("Executable quote expired before the atomic wallet request could open");
         }
         const activity = createSwapActivity({
-          chainId: requiredChainId,
+          chainId: sourceChainId,
           input: { amount: firm.input.amount, symbol: effectiveInputNative ? "BNB" : inputAsset.symbol },
           output: { amount: firm.output.amount, symbol: effectiveOutputNative ? "BNB" : outputAsset.symbol },
           setId: resolvedPoolId,
@@ -661,7 +664,7 @@ export function SwapPage() {
           const result = await sendCallsAsync({
             account: address,
             calls,
-            chainId: requiredChainId,
+            chainId: sourceChainId,
             forceAtomic: true,
           });
           markActivityPending(activity.id);
@@ -703,7 +706,7 @@ export function SwapPage() {
         address,
         allowance: latestAllowance,
         balance: latestBalance,
-        chainId: requiredChainId,
+        chainId: sourceChainId,
         firm,
         indicative: quote,
         inputAsset,
@@ -739,7 +742,7 @@ export function SwapPage() {
       assertSwapPreflightContext(reviewedContext, { ...preflightContextRef.current, online: onlineRef.current });
       if (!preflightChain.data) throw new Error("Wallet balances are unavailable during Set Router preflight. Retry.");
       if (!preflightPoolState.data) throw new Error("Set state is unavailable during Router preflight. Retry.");
-      if (preflightPoolState.data.chainId !== requiredChainId
+      if (preflightPoolState.data.chainId !== sourceChainId
         || preflightPoolState.data.poolId !== poolQuery.data.id
         || !isAddressEqual(preflightPoolState.data.poolAddress, poolQuery.data.contract.address)) {
         throw new Error("Selected Set state changed during Router preflight. Review again.");
@@ -753,7 +756,7 @@ export function SwapPage() {
         address,
         allowance: latestAllowance,
         balance: preflightBalance,
-        chainId: requiredChainId,
+        chainId: sourceChainId,
         firm,
         indicative: quote,
         inputAsset,
@@ -771,7 +774,7 @@ export function SwapPage() {
         balance: preflightBalance,
         chainId: chainId ?? 0,
         client: publicClient,
-        expectedChainId: requiredChainId,
+        expectedChainId: sourceChainId,
         firmInput: firmInputAtomic,
         gasReserve,
         inputNative: effectiveInputNative,
@@ -787,7 +790,7 @@ export function SwapPage() {
       setFirmQuote(firm);
 
       const beforeWallet = connectionRef.current;
-      if (!onlineRef.current || !beforeWallet.online || beforeWallet.chainId !== requiredChainId
+      if (!onlineRef.current || !beforeWallet.online || beforeWallet.chainId !== sourceChainId
         || !beforeWallet.address || !isAddressEqual(beforeWallet.address, address)) {
         throw new Error("Wallet, network, or connectivity changed before wallet confirmation");
       }
@@ -796,7 +799,7 @@ export function SwapPage() {
         throw new Error("Executable quote expired before a wallet request could open");
       }
       const activity = createSwapActivity({
-        chainId: requiredChainId,
+        chainId: sourceChainId,
         input: { amount: firm.input.amount, symbol: effectiveInputNative ? "BNB" : inputAsset.symbol },
         output: { amount: firm.output.amount, symbol: effectiveOutputNative ? "BNB" : outputAsset.symbol },
         setId: resolvedPoolId,
@@ -905,7 +908,7 @@ export function SwapPage() {
   }
 
   const availableSets = (registryQuery.data ?? [])
-    .map((pool) => resolveSet(pool.id, registryQuery.data, requiredChainId))
+    .map((pool) => resolveSet(pool.id, registryQuery.data, sourceChainId))
     .filter((r): r is Extract<typeof r, { status: "ready" }> => r.status === "ready")
     .map((r) => r.definition);
 
@@ -934,7 +937,7 @@ export function SwapPage() {
 
   const stateConfigurationError = poolQuery.data && poolStateQuery.data
     && (poolStateQuery.data.poolId !== poolQuery.data.id
-      || poolStateQuery.data.chainId !== requiredChainId
+      || poolStateQuery.data.chainId !== sourceChainId
       || !isAddressEqual(poolStateQuery.data.poolAddress, poolQuery.data.contract.address))
     ? new Error("Set state does not match the selected Set and chain")
     : null;

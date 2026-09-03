@@ -3,7 +3,7 @@ import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { createConfig, http, type Config } from "wagmi";
 import { injected } from "wagmi/connectors";
 
-import { requiredChain, requiredChainId, supportedNetworks } from "./chains";
+import { setwiseTestnetChainId, setwiseTestnetNetwork, walletNetworks } from "./chains";
 import { runtimeConfig } from "./env";
 
 const metadata = {
@@ -15,10 +15,10 @@ const metadata = {
 
 function createFallbackConfig(): Config {
   return createConfig({
-    chains: [requiredChain],
+    chains: [setwiseTestnetNetwork],
     connectors: [injected()],
     transports: {
-      [requiredChainId]: http(runtimeConfig.bscTestnetRpcUrl),
+      [setwiseTestnetChainId]: http(runtimeConfig.bscTestnetRpcUrl),
     },
   });
 }
@@ -29,15 +29,15 @@ function createWalletConfig(): Config {
   }
 
   const wagmiAdapter = new WagmiAdapter({
-    networks: [...supportedNetworks],
+    networks: [...walletNetworks],
     projectId: runtimeConfig.reownProjectId,
     ssr: false,
   });
 
   createAppKit({
     adapters: [wagmiAdapter],
-    networks: [...supportedNetworks],
-    defaultNetwork: requiredChain,
+    networks: [...walletNetworks],
+    defaultNetwork: setwiseTestnetNetwork,
     projectId: runtimeConfig.reownProjectId,
     metadata,
     allWallets: "SHOW",

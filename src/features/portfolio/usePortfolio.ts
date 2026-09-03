@@ -2,7 +2,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-q
 import { useMemo } from "react";
 import { useAccount, usePublicClient } from "wagmi";
 
-import { requiredChainId } from "../../config/chains";
+import { setwiseTestnetChainId } from "../../config/chains";
 import {
   portfolioWalletPositionsQueryKey,
   readPortfolioWalletPositions,
@@ -136,7 +136,7 @@ function buildView(input: {
 export function usePortfolio(): UsePortfolioResult {
   const queryClient = useQueryClient();
   const { address, chainId, isConnected } = useAccount();
-  const publicClient = usePublicClient({ chainId: requiredChainId });
+  const publicClient = usePublicClient({ chainId: setwiseTestnetChainId });
   const connection = useMemo<PoolPositionConnection>(() => (
     isConnected && address && chainId
       ? { account: address, chainId, status: "connected" }
@@ -149,7 +149,7 @@ export function usePortfolio(): UsePortfolioResult {
     staleTime: 60_000,
   });
   const definitions = useMemo(
-    () => (registryQuery.data ?? []).map((pool) => toSetDefinition(pool, requiredChainId)),
+    () => (registryQuery.data ?? []).map((pool) => toSetDefinition(pool, setwiseTestnetChainId)),
     [registryQuery.data],
   );
   const fingerprint = portfolioRegistryFingerprint(definitions);
@@ -181,7 +181,7 @@ export function usePortfolio(): UsePortfolioResult {
   const readable = useMemo(() => readableSnapshots(snapshots), [snapshots]);
   const clients = useMemo(() => {
     const result = new Map<number, PoolPositionClient>();
-    if (publicClient) result.set(requiredChainId, publicClient);
+    if (publicClient) result.set(setwiseTestnetChainId, publicClient);
     return result;
   }, [publicClient]);
   const walletQueryKey = portfolioWalletPositionsQueryKey({ connection, snapshots: readable });
@@ -202,7 +202,7 @@ export function usePortfolio(): UsePortfolioResult {
       clients,
       connection,
       snapshots: readable,
-      supportedChainIds: new Set([requiredChainId]),
+      supportedChainIds: new Set([setwiseTestnetChainId]),
     }),
     refetchOnWindowFocus: true,
     retry: false,
