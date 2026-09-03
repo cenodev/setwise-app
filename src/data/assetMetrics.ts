@@ -187,14 +187,12 @@ export function mergeAssetMetricsRefresh(
   const metricValues = [...metrics.values()];
   return {
     ...catalog,
-    cache: { ...catalog.cache, ageSeconds: 0, status: "fresh" },
     coverage: {
       ...catalog.coverage,
       pairCount: metricValues.reduce((total, metric) => total + metric.poolCount, 0),
       referencePriceCount: metricValues.filter((metric) => metric.referencePrice !== null).length,
       tokenCount: tokens.length,
     },
-    generatedAt: refresh.generatedAt,
     metrics,
     tokens,
   };

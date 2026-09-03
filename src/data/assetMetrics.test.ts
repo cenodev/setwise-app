@@ -153,7 +153,8 @@ describe("cached asset metrics", () => {
 
     const merged = mergeAssetMetricsRefresh(catalog, refresh);
 
-    expect(merged.generatedAt).toBe(refresh.generatedAt);
+    expect(merged.generatedAt).toBe(catalog.generatedAt);
+    expect(merged.cache).toEqual(catalog.cache);
     expect(merged.metrics.get("1:unrelated")?.topVenue).toBe("other-dex");
     expect(merged.metrics.get(tokenMetadataKey(56, address))?.topVenue).toBe("pancakeswap");
     expect(merged.coverage.pairCount).toBe(3);

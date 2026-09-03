@@ -1,14 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BreadcrumbItem, Breadcrumbs } from "@astryxdesign/core/Breadcrumbs";
 import { Banner } from "@astryxdesign/core/Banner";
-import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Grid } from "@astryxdesign/core/Grid";
+import { Icon } from "@astryxdesign/core/Icon";
+import { IconButton } from "@astryxdesign/core/IconButton";
 import { HStack, VStack } from "@astryxdesign/core/Layout";
 import { List, ListItem } from "@astryxdesign/core/List";
 import { proportional, Table, type TableColumn } from "@astryxdesign/core/Table";
 import { Heading, Text } from "@astryxdesign/core/Text";
+import { Toolbar } from "@astryxdesign/core/Toolbar";
+import { ArrowClockwise } from "@phosphor-icons/react";
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -147,6 +150,9 @@ export function AssetDetailPage() {
       ));
     },
   });
+  const refreshedAt = refresh.data && refresh.data.asset.toLowerCase() === stock?.symbol.toLowerCase()
+    ? refresh.data.generatedAt
+    : undefined;
   const summary = useMemo(
     () => stock ? summarizeAssetMetrics(stock, catalog.data?.metrics) : undefined,
     [stock, catalog.data?.metrics],
@@ -227,16 +233,7 @@ export function AssetDetailPage() {
                       : "No tokenized markets currently have observed DEX liquidity."}
                   </Text>
                 </VStack>
-                <HStack gap={3} vAlign="center">
-                  <NetworkLogos networks={summary.networks} />
-                  <Button
-                    label={refresh.isPending ? "Refreshing market data" : "Refresh market data"}
-                    variant="secondary"
-                    size="sm"
-                    isLoading={refresh.isPending}
-                    onClick={() => refresh.mutate()}
-                  />
-                </HStack>
+                <NetworkLogos networks={summary.networks} />
               </HStack>
             </header>
 
@@ -282,97 +279,118 @@ export function AssetDetailPage() {
                   </Text>
                 </VStack>
 
-                {markets.length === 0 ? (
-                  <Card>
+                <section className="asset-table">
+                  <Toolbar
+                    label="Provider market actions"
+                    size="sm"
+                    variant="section"
+                    dividers={["bottom"]}
+                    startContent={<Text className="sr-only">Provider markets</Text>}
+                    endContent={(
+                      <IconButton
+                        label="Refresh market data"
+                        icon={<Icon icon={ArrowClockwise} color="inherit" />}
+                        variant="ghost"
+                        isLoading={refresh.isPending}
+                        tooltip="Refresh market data"
+                        onClick={() => refresh.mutate()}
+                      />
+                    )}
+                  />
+
+                  {markets.length === 0 ? (
                     <EmptyState
                       title="No liquid provider markets"
                       description="No indexed provider currently has observed DEX liquidity for this stock."
                       headingLevel={3}
                       isCompact
                     />
-                  </Card>
-                ) : (
-                  <>
-                    <section
-                      className="asset-table asset-desktop-table"
-                      aria-label="Tokenized stock provider comparison"
-                    >
-                      <Table<ProviderMarketRow>
-                        data={markets}
-                        columns={providerMarketColumns}
-                        idKey="id"
-                        density="balanced"
-                        dividers="rows"
-                        hasHover
-                        verticalAlign="top"
-                        textOverflow="wrap"
-                      />
-                    </section>
-                    <section
-                      className="asset-mobile-list"
-                      aria-label="Mobile tokenized stock provider comparison"
-                    >
-                      <List
-                        header={<Text className="sr-only">Provider market results</Text>}
-                        density="spacious"
-                        hasDividers
+                  ) : (
+                    <>
+                      <section
+                        className="asset-desktop-table"
+                        aria-label="Tokenized stock provider comparison"
                       >
-                        {markets.map(({ bestLiquidity, bestPrice: rowBestPrice, id, metrics, network, provider, token }) => (
-                          <ListItem
-                            key={id}
-                            label={provider}
-                            startContent={<NetworkLogos networks={[network]} />}
-                            endContent={<Text type="supporting" color="secondary">{token.symbol}</Text>}
-                            description={(
-                              <VStack gap={2}>
-                                <Text type="supporting" color="secondary">
-                                  {network.name}{metrics?.topVenue ? ` · ${metrics.topVenue}` : ""}
-                                </Text>
-                                <Grid columns={{ minWidth: 96, max: 4, repeat: "fit" }} gap={2}>
-                                  <VStack gap={0}>
-                                    <Text type="supporting" color="secondary">Stock price</Text>
-                                    <Text weight="semibold" hasTabularNumbers>
-                                      {metrics?.referencePrice === null || metrics?.referencePrice === undefined
-                                        ? "—"
-                                        : compactUsd(metrics.referencePrice.priceUsd)}
-                                    </Text>
-                                  </VStack>
-                                  <VStack gap={0}>
-                                    <Text type="supporting" color="secondary">DEX price</Text>
-                                    <Text weight="semibold" hasTabularNumbers>
-                                      {metrics?.priceUsd === null || metrics?.priceUsd === undefined
-                                        ? "—"
-                                        : compactUsd(metrics.priceUsd)}
-                                    </Text>
-                                    {rowBestPrice && <Text type="supporting" color="accent">Best price</Text>}
-                                  </VStack>
-                                  <VStack gap={0}>
-                                    <Text type="supporting" color="secondary">Liquidity</Text>
-                                    <Text weight="semibold" hasTabularNumbers>
-                                      {metrics ? compactUsd(metrics.liquidityUsd) : "—"}
-                                    </Text>
-                                    {bestLiquidity && <Text type="supporting" color="accent">Best liquidity</Text>}
-                                  </VStack>
-                                  <VStack gap={0}>
-                                    <Text type="supporting" color="secondary">24h volume</Text>
-                                    <Text weight="semibold" hasTabularNumbers>
-                                      {metrics ? compactUsd(metrics.volume24hUsd) : "—"}
-                                    </Text>
-                                  </VStack>
-                                </Grid>
-                              </VStack>
-                            )}
-                          />
-                        ))}
-                      </List>
-                    </section>
-                  </>
-                )}
+                        <Table<ProviderMarketRow>
+                          data={markets}
+                          columns={providerMarketColumns}
+                          idKey="id"
+                          density="balanced"
+                          dividers="rows"
+                          hasHover
+                          verticalAlign="top"
+                          textOverflow="wrap"
+                        />
+                      </section>
+                      <section
+                        className="asset-mobile-list asset-mobile-list--embedded"
+                        aria-label="Mobile tokenized stock provider comparison"
+                      >
+                        <List
+                          header={<Text className="sr-only">Provider market results</Text>}
+                          density="spacious"
+                          hasDividers
+                        >
+                          {markets.map(({ bestLiquidity, bestPrice: rowBestPrice, id, metrics, network, provider, token }) => (
+                            <ListItem
+                              key={id}
+                              label={provider}
+                              startContent={<NetworkLogos networks={[network]} />}
+                              endContent={<Text type="supporting" color="secondary">{token.symbol}</Text>}
+                              description={(
+                                <VStack gap={2}>
+                                  <Text type="supporting" color="secondary">
+                                    {network.name}{metrics?.topVenue ? ` · ${metrics.topVenue}` : ""}
+                                  </Text>
+                                  <Grid columns={{ minWidth: 96, max: 4, repeat: "fit" }} gap={2}>
+                                    <VStack gap={0}>
+                                      <Text type="supporting" color="secondary">Stock price</Text>
+                                      <Text weight="semibold" hasTabularNumbers>
+                                        {metrics?.referencePrice === null || metrics?.referencePrice === undefined
+                                          ? "—"
+                                          : compactUsd(metrics.referencePrice.priceUsd)}
+                                      </Text>
+                                    </VStack>
+                                    <VStack gap={0}>
+                                      <Text type="supporting" color="secondary">DEX price</Text>
+                                      <Text weight="semibold" hasTabularNumbers>
+                                        {metrics?.priceUsd === null || metrics?.priceUsd === undefined
+                                          ? "—"
+                                          : compactUsd(metrics.priceUsd)}
+                                      </Text>
+                                      {rowBestPrice && <Text type="supporting" color="accent">Best price</Text>}
+                                    </VStack>
+                                    <VStack gap={0}>
+                                      <Text type="supporting" color="secondary">Liquidity</Text>
+                                      <Text weight="semibold" hasTabularNumbers>
+                                        {metrics ? compactUsd(metrics.liquidityUsd) : "—"}
+                                      </Text>
+                                      {bestLiquidity && <Text type="supporting" color="accent">Best liquidity</Text>}
+                                    </VStack>
+                                    <VStack gap={0}>
+                                      <Text type="supporting" color="secondary">24h volume</Text>
+                                      <Text weight="semibold" hasTabularNumbers>
+                                        {metrics ? compactUsd(metrics.volume24hUsd) : "—"}
+                                      </Text>
+                                    </VStack>
+                                  </Grid>
+                                </VStack>
+                              )}
+                            />
+                          ))}
+                        </List>
+                      </section>
+                    </>
+                  )}
+                </section>
               </VStack>
             </section>
 
             <Text type="supporting" color="secondary">
-              Snapshot generated {new Date(catalog.data.generatedAt).toLocaleString()}. Market data is informational and does not represent an executable quote.
+              {refreshedAt
+                ? `${stock.symbol} provider metrics refreshed ${new Date(refreshedAt).toLocaleString()}. `
+                : "Market data comes from the latest available snapshot and may have been observed at different times. "}
+              Market data is informational and does not represent an executable quote.
             </Text>
             {refresh.error && (
               <Banner
