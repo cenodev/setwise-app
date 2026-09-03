@@ -14,20 +14,14 @@ export const setwiseTestnetNetwork = bscTestnet;
 export const setwiseTestnetChainId = setwiseTestnetNetwork.id;
 
 export const walletNetworks = [setwiseTestnetNetwork, ...routedSwapNetworks] as const;
+export type WalletNetwork = (typeof walletNetworks)[number];
 export type WalletChainId = (typeof walletNetworks)[number]["id"];
-
-/** @deprecated Use an operation's explicit source chain. */
-export const requiredChain = setwiseTestnetNetwork;
-/** @deprecated Use an operation's explicit source chain ID. */
-export const requiredChainId = setwiseTestnetChainId;
-/** @deprecated Use walletNetworks when configuring wallet connectivity. */
-export const supportedNetworks = [setwiseTestnetNetwork] as const;
 
 const routedSwapNetworkByChainId = new Map<RoutedSwapChainId, (typeof routedSwapNetworks)[number]>(
   routedSwapNetworks.map((network) => [network.id, network]),
 );
 
-const walletNetworkByChainId = new Map<WalletChainId, (typeof walletNetworks)[number]>(
+const walletNetworkByChainId = new Map<WalletChainId, WalletNetwork>(
   walletNetworks.map((network) => [network.id, network]),
 );
 
@@ -39,6 +33,6 @@ export function getRoutedSwapNetwork(chainId: number) {
   return routedSwapNetworkByChainId.get(chainId as RoutedSwapChainId);
 }
 
-export function getWalletNetwork(chainId: number) {
+export function getWalletNetwork(chainId: number): WalletNetwork | undefined {
   return walletNetworkByChainId.get(chainId as WalletChainId);
 }

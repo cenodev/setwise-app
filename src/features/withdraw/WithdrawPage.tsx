@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { isAddressEqual, type Address, type Hash } from "viem";
 import { useAccount, usePublicClient, useSendTransaction, useWriteContract } from "wagmi";
 
-import { requiredChainId } from "../../config/chains";
+import { setwiseTestnetChainId } from "../../config/chains";
 import { TokenIdentity } from "../../components/TokenIdentity";
 import { TokenSelector } from "../../components/TokenSelector";
 import { runtimeConfig } from "../../config/env";
@@ -144,7 +144,7 @@ function validateIndicativeQuote(input: {
 }) {
   const { amountAtomic, assets, lpToken, mode, outputAssetId, poolAddress, poolId, quote } = input;
   if (quote.stateSnapshot.poolId !== poolId) throw new Error("Indicative quote targets the wrong Set");
-  if (quote.stateSnapshot.chainId !== requiredChainId) throw new Error("Indicative quote targets the wrong chain");
+  if (quote.stateSnapshot.chainId !== setwiseTestnetChainId) throw new Error("Indicative quote targets the wrong chain");
   if (!isAddressEqual(quote.stateSnapshot.poolAddress, poolAddress)) {
     throw new Error("Indicative quote targets an unexpected pool");
   }
@@ -209,7 +209,7 @@ export function WithdrawPage({ onBusyChange, pool, poolState, refreshPoolState }
     enabled: Boolean(address && publicClient),
     queryFn: async (): Promise<ChainWithdrawalState> => {
       if (!address || !publicClient) throw new Error("Wallet and Set are required");
-      if (pool.chain.id !== requiredChainId
+      if (pool.chain.id !== setwiseTestnetChainId
         || poolState.poolId !== pool.id
         || poolState.chainId !== pool.chain.id
         || !isAddressEqual(poolState.poolAddress, pool.contract.address)) {
@@ -419,7 +419,7 @@ export function WithdrawPage({ onBusyChange, pool, poolState, refreshPoolState }
         }
         setTransaction({ stage: "wallet" });
         const activity = createWithdrawalActivity({
-          chainId: requiredChainId,
+          chainId: setwiseTestnetChainId,
           mode,
           outputs: quote.outputs.map((output) => ({
             amount: output.amount,
@@ -450,7 +450,7 @@ export function WithdrawPage({ onBusyChange, pool, poolState, refreshPoolState }
         });
         validateFirmWithdrawal({
           address,
-          chainId: requiredChainId,
+          chainId: setwiseTestnetChainId,
           firm,
           indicative: quote,
           outputAssetId: effectiveSelectedAssetId,
@@ -465,7 +465,7 @@ export function WithdrawPage({ onBusyChange, pool, poolState, refreshPoolState }
         }
         setTransaction({ stage: "wallet" });
         const activity = createWithdrawalActivity({
-          chainId: requiredChainId,
+          chainId: setwiseTestnetChainId,
           mode,
           outputs: [{
             amount: firm.output.amount,
@@ -543,7 +543,7 @@ export function WithdrawPage({ onBusyChange, pool, poolState, refreshPoolState }
     return <section className="withdraw-card" aria-live="polite">Loading Set assets and unlocked shares…</section>;
   }
   const stateConfigurationError = poolState.poolId !== pool.id
-      || poolState.chainId !== requiredChainId
+      || poolState.chainId !== setwiseTestnetChainId
       || !isAddressEqual(poolState.poolAddress, pool.contract.address)
     ? new Error("Set state does not match the selected Set and chain")
     : null;

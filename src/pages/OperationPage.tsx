@@ -1,4 +1,5 @@
 import { WalletGate } from "../features/wallet/WalletGate";
+import { setwiseTestnetChainId } from "../config/chains";
 
 type Operation = "swap" | "deposit" | "withdraw";
 
@@ -31,7 +32,7 @@ export function OperationPage({ operation }: { operation: Operation }) {
         <p>{copy.description}</p>
       </header>
 
-      <WalletGate>
+      <WalletGate sourceChainId={setwiseTestnetChainId}>
         <section className="prototype-card">
           <p className="eyebrow">Scaffold ready</p>
           <h2>{copy.title} comes next</h2>

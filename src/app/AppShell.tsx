@@ -1,7 +1,6 @@
 import type { PropsWithChildren } from "react";
 import { NavLink } from "react-router-dom";
 
-import { NetworkBanner } from "../features/wallet/NetworkBanner";
 import { WalletButton } from "../features/wallet/WalletButton";
 import { PwaStatus } from "../features/pwa/PwaStatus";
 import { activityPath, assetsPath, portfolioPath, setsPath, swapPath } from "./routes";
@@ -39,7 +38,6 @@ export function AppShell({ children }: PropsWithChildren) {
       </header>
 
       <div className="banner-stack">
-        <NetworkBanner />
         <PwaStatus />
         <div className="risk-line" role="note">
           Unaudited testnet prototype. Do not move mainnet funds.

@@ -77,7 +77,7 @@ export function SetDepositTab() {
         <h2>Deposit into this Set</h2>
         <p>Deposit one asset or build the Set’s target portfolio and receive Setwise shares.</p>
       </header>
-      <WalletGate>
+      <WalletGate sourceChainId={pool.chain.id}>
         <DepositPage
           key={definition.id}
           onNavigationLockChange={setNavigationLocked}
@@ -121,7 +121,7 @@ export function SetWithdrawTab() {
         <h2>Withdraw from this Set</h2>
         <p>Burn unlocked Setwise shares for every Set asset or one selected asset.</p>
       </header>
-      <WalletGate>
+      <WalletGate sourceChainId={pool.chain.id}>
         <WithdrawPage
           key={definition.id}
           onBusyChange={setNavigationLocked}

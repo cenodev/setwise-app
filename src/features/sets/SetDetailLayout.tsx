@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useParams } from "react-router-dom";
 
 import { SET_TABS, setPath, setsPath } from "../../app/routes";
-import { requiredChainId } from "../../config/chains";
+import { setwiseTestnetChainId } from "../../config/chains";
 import { runtimeConfig } from "../../config/env";
 import { setQueryKeys } from "../../data/queryKeys";
 import { getPool, getPoolState, type Pool, type PoolState } from "../../data/rfq/deposits";
@@ -76,7 +76,7 @@ export function SetDetailLayout() {
     queryFn: ({ signal }) => getPools(signal),
     staleTime: 60_000,
   });
-  const resolution = resolveSet(setId, poolsQuery.data, requiredChainId);
+  const resolution = resolveSet(setId, poolsQuery.data, setwiseTestnetChainId);
   const definition = resolution.status === "ready" || resolution.status === "unsupported-chain"
     ? resolution.definition
     : undefined;

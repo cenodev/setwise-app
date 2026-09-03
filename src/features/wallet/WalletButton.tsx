@@ -2,7 +2,6 @@ import { useAppKit } from "@reown/appkit/react";
 import { formatUnits } from "viem";
 import { useAccount, useBalance } from "wagmi";
 
-import { requiredChainId } from "../../config/chains";
 import { runtimeConfig } from "../../config/env";
 import { truncateAddress, truncateDecimal } from "../../lib/format";
 
@@ -11,9 +10,9 @@ function ConfiguredWalletButton() {
   const { address, chainId, isConnected } = useAccount();
   const balance = useBalance({
     address,
-    chainId: requiredChainId,
+    chainId,
     query: {
-      enabled: Boolean(address) && chainId === requiredChainId,
+      enabled: Boolean(address && chainId),
     },
   });
 
@@ -22,7 +21,7 @@ function ConfiguredWalletButton() {
     : null;
 
   const label = isConnected && address
-    ? `${truncateAddress(address)}${formattedBalance ? ` · ${formattedBalance} BNB` : ""}`
+    ? `${truncateAddress(address)}${formattedBalance ? ` · ${formattedBalance} ${balance.data?.symbol ?? ""}` : ""}`
     : "Connect wallet";
 
   return (
