@@ -11,6 +11,7 @@ describe("resolveRuntimeConfig", () => {
     expect(config.walletConfigured).toBe(false);
     expect(config.reownProjectId).toBeNull();
     expect(config.rfqApiUrl).toBe("https://setwise-rfq-api.datadex.workers.dev");
+    expect(config.swapRouterApiUrl).toBe("http://localhost:8787");
     expect(config.tokenListUrl).toBe("https://raw.githubusercontent.com/cenodev/setwise-token-list/main/data/token-list.json");
   });
 
@@ -20,11 +21,13 @@ describe("resolveRuntimeConfig", () => {
       VITE_ASSET_METRICS_API_URL: "https://metrics.setwise.example/",
       VITE_REOWN_PROJECT_ID: "project-id",
       VITE_RFQ_API_URL: "https://rfq.setwise.example/",
+      VITE_SWAP_ROUTER_API_URL: "https://swap-router.setwise.example/",
     });
 
     expect(config.appUrl).toBe("https://app.setwise.example");
     expect(config.assetMetricsApiUrl).toBe("https://metrics.setwise.example");
     expect(config.rfqApiUrl).toBe("https://rfq.setwise.example");
+    expect(config.swapRouterApiUrl).toBe("https://swap-router.setwise.example");
     expect(config.walletConfigured).toBe(true);
   });
 

@@ -7,6 +7,7 @@ export type PublicRuntimeConfig = {
   nativeGasReserveBnb: string;
   reownProjectId: string | null;
   rfqApiUrl: string;
+  swapRouterApiUrl: string;
   tokenListUrl: string;
   walletConfigured: boolean;
 };
@@ -20,6 +21,7 @@ type PublicEnv = Partial<Record<
   | "VITE_POOL_ID"
   | "VITE_REOWN_PROJECT_ID"
   | "VITE_RFQ_API_URL"
+  | "VITE_SWAP_ROUTER_API_URL"
   | "VITE_TOKEN_LIST_URL",
   string
 >>;
@@ -65,6 +67,10 @@ export function resolveRuntimeConfig(
     rfqApiUrl: normalizeUrl(
       env.VITE_RFQ_API_URL,
       "https://setwise-rfq-api.datadex.workers.dev",
+    ),
+    swapRouterApiUrl: normalizeUrl(
+      env.VITE_SWAP_ROUTER_API_URL,
+      "http://localhost:8787",
     ),
     tokenListUrl: normalizeUrl(
       env.VITE_TOKEN_LIST_URL,
