@@ -49,4 +49,3 @@ is needed, the wallet targets the route's source chain, never its destination ch
 
 These modules represent route intent only. They do not request an external routed quote, build an external
 transaction, or submit one. The only executable behavior remains the existing BSC Testnet Setwise flow.
-

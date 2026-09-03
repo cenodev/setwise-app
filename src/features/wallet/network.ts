@@ -25,4 +25,3 @@ export function getWalletNetworkRequirement(
   if (context.connectedChainId === context.sourceChainId) return { kind: "ready", sourceNetwork };
   return { kind: "switch", sourceNetwork };
 }
-

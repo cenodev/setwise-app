@@ -33,4 +33,3 @@ describe("routed wallet network requirements", () => {
     })).toEqual({ kind: "unsupported-source", sourceChainId: 999 });
   });
 });
-

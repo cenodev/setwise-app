@@ -35,4 +35,3 @@ export function createRoutedSwapPlan(input: Readonly<{
     sourceChainId: input.sourceAsset.chainId,
   };
 }
-

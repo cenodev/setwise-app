@@ -45,4 +45,3 @@ export function findTokenDeployment<T extends TokenDeploymentIdentity>(
 ): T | undefined {
   return index.get(tokenDeploymentKey(identity));
 }
-
