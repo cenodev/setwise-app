@@ -49,3 +49,9 @@ is needed, the wallet targets the route's source chain, never its destination ch
 
 These modules represent route intent only. They do not request an external routed quote, build an external
 transaction, or submit one. The only executable behavior remains the existing BSC Testnet Setwise flow.
+
+The routed swap page (`/swap/routed`) composes these foundations into the first quote-and-review experience:
+destination markets are built from the token catalog through `createRoutedMarketCatalog` (routed chains and
+EVM addresses only, grouped by underlying without collapsing issuers), source assets come from the
+canonical-stablecoin allowlist, and wallet switching targets the route's source chain. See
+`docs/architecture/swap-router.md` for the quote contract and review flow.
