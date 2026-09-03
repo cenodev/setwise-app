@@ -73,8 +73,34 @@ prepared swap, full and partial-provider capabilities, no-route and expired erro
 and all five execution statuses. App tests exercise routed swaps entirely against these fixtures; no live
 router or provider credentials are required.
 
+## The routed swap page (`/swap/routed`)
+
+`src/features/swap/RoutedSwapPage.tsx` is the first UI consumer of the router contract. It stops at **route
+review**: quotes are requested, compared, and reviewed — approval and submission arrive in a separate change.
+
+- **Selection.** The user picks a source chain (any of the four routed networks; chains without an approved
+  canonical stablecoin or without router support are visible but disabled), a canonical stablecoin (USDC or
+  USDT from `sourceAssetsByChain`), an exact-input amount, and one destination market: an issuer deployment
+  chosen from `createRoutedMarketCatalog`. The selected output is always a concrete market deployment
+  (underlying, issuer, chain, contract address); different issuers for the same underlying stay distinct.
+- **Preselection.** Provider-market rows on asset detail link to `/swap/routed?chain=<id>&token=<address>`.
+  The linked deployment resolves exactly or the page shows an explicit unavailable-market error — it never
+  silently substitutes another issuer's token.
+- **Quote discipline.** Requests use the same debounce (450 ms), `AbortController`, sequence counter, and
+  draft request-key checks as the Setwise pool swap: a response may only replace the draft when its key
+  matches the current draft identity (source chain + token, amount, destination chain + token, recipient),
+  so obsolete responses can never overwrite the user's current route.
+- **Review identity.** A review binds the quote to its source chain, destination chain, both token
+  contracts, guaranteed minimum output, slippage bound, and a freshness countdown tied to `expiresAt`.
+  Same-chain and cross-chain quotes render through the same panel; both explain that the wallet transacts
+  only on the source chain, and cross-chain routes surface the underlying bridge leg from `steps`.
+- **Execution gating.** Review requires the connected wallet to be on the route's source chain (per
+  `getWalletNetworkRequirement` semantics), a known sufficient stablecoin balance, and a fresh,
+  draft-matching quote. Editing the amount, wallet, source chain, stablecoin, or destination market
+  invalidates the executable state.
+
 ## Relationship to the Setwise RFQ flow
 
-The swap-router integration is additive. The existing Setwise RFQ client (`src/data/rfq`) and its BSC Testnet
-execution path are unchanged and remain the only executable Setwise flow; routed mainnet swaps build on the
-multi-chain market foundations in `docs/architecture/multi-chain-markets.md`.
+The swap-router integration is additive. The existing Setwise RFQ client (`src/data/rfq`), its BSC Testnet
+execution path, and the `/swap` pool route are unchanged and remain the only executable Setwise flow; routed
+mainnet swaps build on the multi-chain market foundations in `docs/architecture/multi-chain-markets.md`.

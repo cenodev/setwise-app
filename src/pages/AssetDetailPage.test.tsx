@@ -166,6 +166,22 @@ describe("AssetDetailPage", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "ALPHA" })).toBeVisible();
   });
 
+  it("links routed-chain provider markets to a preselected swap route without collapsing issuers", async () => {
+    renderPage();
+
+    await screen.findByRole("heading", { level: 1, name: "ALPHA" });
+    const ethereumSwapLinks = screen.getAllByRole("link", {
+      name: "Swap into First Provider xALPHA on Ethereum",
+    });
+    expect(ethereumSwapLinks).toHaveLength(2);
+    const expectedPath = `/swap/routed?chain=1&token=${encodeURIComponent("0x1000000000000000000000000000000000000000")}`;
+    for (const link of ethereumSwapLinks) {
+      expect(link).toHaveAttribute("href", expectedPath);
+    }
+    // Non-routed deployments (Polygon) are not offered a routed swap.
+    expect(screen.queryByRole("link", { name: /Swap into Second Provider/ })).not.toBeInTheDocument();
+  });
+
   it("refreshes every provider deployment and updates the visible snapshot", async () => {
     mocks.refreshAssetMetricsForAsset.mockResolvedValueOnce({
       asset: "ALPHA",
