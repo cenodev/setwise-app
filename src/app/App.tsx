@@ -7,6 +7,7 @@ import { assetsPath } from "./routes";
 import { SetDetailLayout } from "../features/sets/SetDetailLayout";
 import { SetDepositTab, SetOverviewTab, SetWithdrawTab } from "../features/sets/SetTabs";
 import { FaucetPage } from "../features/faucet/FaucetPage";
+import { RoutedSwapPage } from "../features/swap/RoutedSwapPage";
 import { SwapPage } from "../features/swap/SwapPage";
 import { WalletGate } from "../features/wallet/WalletGate";
 import { ActivityPage } from "../pages/ActivityPage";
@@ -40,6 +41,19 @@ export function App() {
             <WalletGate sourceChainId={setwiseTestnetChainId}><SwapPage /></WalletGate>
             <aside className="disclosure" role="note">
               <strong>Testnet only.</strong> Contracts are unaudited, tokenized assets carry issuer and market risk, and this is not investment advice.
+            </aside>
+          </div>
+        } />
+        <Route path="/swap/routed" element={
+          <div className="screen swap-screen">
+            <header className="screen-header">
+              <p className="eyebrow">Trade</p>
+              <h1>Swap into a market</h1>
+              <p>Spend a canonical stablecoin on a supported network and acquire one explicitly selected issuer market. Routes stop at review.</p>
+            </header>
+            <RoutedSwapPage />
+            <aside className="disclosure" role="note">
+              <strong>Route review only.</strong> Approval and submission are handled separately. Tokenized assets carry issuer and market risk, and this is not investment advice.
             </aside>
           </div>
         } />

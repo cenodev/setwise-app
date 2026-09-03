@@ -489,6 +489,15 @@ code {
 .action-reason { margin: -.4rem 0 0; color: var(--text-tertiary); font-size: .76rem; text-align: center; }
 .quote-card.is-refreshing > :not(.quote-title) { opacity: .52; }
 
+.routed-market-address {
+  overflow-wrap: anywhere;
+  font-family: var(--font-family-code);
+}
+.routed-review { display: block; }
+.routed-review-heading { justify-content: space-between; }
+.routed-quote-card ul { border: 1px solid var(--border-subtle); border-radius: var(--radius-element); }
+.routed-quote-card li[aria-current="true"] { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
 .deposit-layout { display: grid; gap: 1rem; }
 .deposit-card {
   min-width: 0;

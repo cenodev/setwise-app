@@ -109,6 +109,9 @@ vi.mock("../features/withdraw/WithdrawPage", () => ({
 vi.mock("../features/swap/SwapPage", () => ({
   SwapPage: () => <section aria-label="Swap integration">Swap form</section>,
 }));
+vi.mock("../features/swap/RoutedSwapPage", () => ({
+  RoutedSwapPage: () => <section aria-label="Routed swap integration">Routed swap form</section>,
+}));
 vi.mock("../features/faucet/FaucetPage", () => ({
   FaucetPage: () => <section aria-label="Faucet integration">Faucet form</section>,
 }));
@@ -392,6 +395,14 @@ describe("Sets routes and navigation", () => {
     renderApp("/swap");
     expect(screen.getByRole("heading", { name: "Swap assets" })).toBeVisible();
     expect(screen.getByText(/supported Set assets/i)).toBeVisible();
+  });
+
+  it("loads the routed market-swap route alongside the Set pool swap", () => {
+    renderApp("/swap/routed");
+    expect(screen.getByRole("heading", { name: "Swap into a market" })).toBeVisible();
+    expect(screen.getByLabelText("Routed swap integration")).toBeVisible();
+    // The Setwise pool swap route is unchanged.
+    expect(screen.getAllByRole("link", { name: "Trade" })[0]).toHaveAttribute("href", "/swap");
   });
 
   it("retains the testnet faucet utility route", () => {
