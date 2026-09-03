@@ -493,6 +493,13 @@ code {
   overflow-wrap: anywhere;
   font-family: var(--font-family-code);
 }
+.routed-market-swap-link {
+  color: var(--info);
+  font-size: .78rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.routed-market-swap-link:hover { color: var(--accent-hover); }
 .routed-review { display: block; }
 .routed-review-heading { justify-content: space-between; }
 .routed-quote-card ul { border: 1px solid var(--border-subtle); border-radius: var(--radius-element); }

@@ -13,8 +13,9 @@ import { Heading, Text } from "@astryxdesign/core/Text";
 import { Toolbar } from "@astryxdesign/core/Toolbar";
 import { ArrowClockwise } from "@phosphor-icons/react";
 import { useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { routedSwapPath } from "../app/routes";
 import {
   assetDeploymentMetrics,
   compactUsd,
@@ -25,6 +26,7 @@ import {
 } from "../components/AssetMetricsView";
 import { TokenIcon } from "../components/TokenIdentity";
 import { assetsPath } from "../app/routes";
+import { isRoutedSwapChainId } from "../config/chains";
 import {
   fetchAssetMetricsCatalog,
   mergeAssetMetricsRefresh,
@@ -113,6 +115,23 @@ const providerMarketColumns: TableColumn<ProviderMarketRow>[] = [
     header: "Top venue",
     width: proportional(1),
     renderCell: ({ metrics }) => metrics?.topVenue ?? "—",
+  },
+  {
+    key: "swap",
+    header: "Trade",
+    width: proportional(1),
+    align: "end",
+    renderCell: ({ network, token }) => (
+      isRoutedSwapChainId(token.chainId) ? (
+        <Link
+          className="routed-market-swap-link"
+          to={routedSwapPath({ address: token.address, chainId: token.chainId })}
+          aria-label={`Swap into ${providerLabel(token.provider ?? "unknown")} ${token.symbol} on ${network.name}`}
+        >
+          Swap
+        </Link>
+      ) : null
+    ),
   },
 ];
 
@@ -336,7 +355,20 @@ export function AssetDetailPage() {
                               key={id}
                               label={provider}
                               startContent={<NetworkLogos networks={[network]} />}
-                              endContent={<Text type="supporting" color="secondary">{token.symbol}</Text>}
+                              endContent={(
+                                <VStack gap={1} hAlign="end">
+                                  <Text type="supporting" color="secondary">{token.symbol}</Text>
+                                  {isRoutedSwapChainId(token.chainId) && (
+                                    <Link
+                                      className="routed-market-swap-link"
+                                      to={routedSwapPath({ address: token.address, chainId: token.chainId })}
+                                      aria-label={`Swap into ${provider} ${token.symbol} on ${network.name}`}
+                                    >
+                                      Swap
+                                    </Link>
+                                  )}
+                                </VStack>
+                              )}
                               description={(
                                 <VStack gap={2}>
                                   <Text type="supporting" color="secondary">
