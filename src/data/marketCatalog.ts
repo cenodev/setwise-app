@@ -2,7 +2,8 @@ import type { Address } from "viem";
 
 import { isRoutedSwapChainId, routedSwapNetworks, type RoutedSwapChainId } from "../config/chains";
 import { tokenDeploymentKey } from "./tokenDeployments";
-import { providerLabel, type TokenMetadata } from "./assets";
+import { providerLabel } from "./assets";
+import type { TokenMetadata } from "./tokens";
 
 /**
  * UI-facing destination market option. Money is identified only by
