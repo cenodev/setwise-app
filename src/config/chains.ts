@@ -12,6 +12,7 @@ export type RoutedSwapChainId = (typeof routedSwapNetworks)[number]["id"];
  */
 export const setwiseTestnetNetwork = bscTestnet;
 export const setwiseTestnetChainId = setwiseTestnetNetwork.id;
+export const setwiseExecutionNetworks = [setwiseTestnetNetwork] as const;
 
 export const walletNetworks = [setwiseTestnetNetwork, ...routedSwapNetworks] as const;
 export type WalletNetwork = (typeof walletNetworks)[number];
@@ -27,6 +28,10 @@ const walletNetworkByChainId = new Map<WalletChainId, WalletNetwork>(
 
 export function isRoutedSwapChainId(chainId: number): chainId is RoutedSwapChainId {
   return routedSwapNetworkByChainId.has(chainId as RoutedSwapChainId);
+}
+
+export function isSetwiseExecutionChainId(chainId: number): chainId is typeof setwiseTestnetChainId {
+  return chainId === setwiseTestnetChainId;
 }
 
 export function getRoutedSwapNetwork(chainId: number) {

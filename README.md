@@ -72,6 +72,7 @@ one Set's values under another Set.
 ## Documentation
 
 - [Multi-Set architecture](docs/architecture/multi-set.md)
+- [Multi-chain market and wallet foundations](docs/architecture/multi-chain-markets.md)
 - [Deployment and BSC Testnet runbook](docs/runbook.md)
 - [Local fixture guide](docs/testing/multi-set-fixtures.md)
 

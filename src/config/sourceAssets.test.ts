@@ -2,11 +2,13 @@ import {
   getSourceAssets,
   requireSourceAsset,
   requireSourceAssetDeployment,
+  sourceAssetsByChain,
   UnsupportedSourceAssetDeploymentError,
 } from "./sourceAssets";
 
 describe("canonical routed source assets", () => {
   it("uses chain-specific addresses and decimals for USDC and USDT", () => {
+    expect(new Set(Object.keys(sourceAssetsByChain).map(Number))).toEqual(new Set([1, 56, 8453, 4663]));
     expect(requireSourceAsset(1, "USDC")).toMatchObject({ chainId: 1, decimals: 6 });
     expect(requireSourceAsset(56, "USDC")).toMatchObject({ chainId: 56, decimals: 18 });
     expect(requireSourceAsset(8453, "USDT")).toMatchObject({ chainId: 8453, decimals: 6 });

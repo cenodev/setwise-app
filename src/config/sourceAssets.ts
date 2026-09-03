@@ -15,11 +15,7 @@ export type SourceAssetDeployment = TokenDeployment & Readonly<{
   symbol: SourceAssetSymbol;
 }>;
 
-/**
- * Explicit source deployments approved for route discovery. This is an allowlist,
- * not a symbol lookup: a chain with no verified deployment remains unsupported.
- */
-export const canonicalSourceAssets = [
+const ethereumSourceAssets = [
   {
     address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     assetProvider: "circle",
@@ -34,6 +30,9 @@ export const canonicalSourceAssets = [
     decimals: 6,
     symbol: "USDT",
   },
+] as const satisfies readonly SourceAssetDeployment[];
+
+const bnbSourceAssets = [
   {
     address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
     assetProvider: "binance-peg",
@@ -48,6 +47,9 @@ export const canonicalSourceAssets = [
     decimals: 18,
     symbol: "USDT",
   },
+] as const satisfies readonly SourceAssetDeployment[];
+
+const baseSourceAssets = [
   {
     address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     assetProvider: "circle",
@@ -64,6 +66,21 @@ export const canonicalSourceAssets = [
   },
 ] as const satisfies readonly SourceAssetDeployment[];
 
+/**
+ * Explicit source deployments approved for route discovery. Every routed chain
+ * has an entry; an empty entry deliberately means that symbols on that chain are
+ * unsupported until a canonical contract is verified and added here.
+ */
+export const sourceAssetsByChain = {
+  1: ethereumSourceAssets,
+  56: bnbSourceAssets,
+  8453: baseSourceAssets,
+  4663: [],
+} as const satisfies Record<RoutedSwapChainId, readonly SourceAssetDeployment[]>;
+
+export const canonicalSourceAssets: readonly SourceAssetDeployment[] =
+  Object.values(sourceAssetsByChain).flat();
+
 const sourceAssetsByDeployment = createTokenDeploymentIndex(canonicalSourceAssets);
 const sourceAssetsByChainAndSymbol = new Map<string, SourceAssetDeployment>(
   canonicalSourceAssets.map((asset) => [`${asset.chainId}:${asset.symbol}`, asset]),
@@ -77,7 +94,7 @@ export class UnsupportedSourceAssetDeploymentError extends Error {
 }
 
 export function getSourceAssets(chainId: RoutedSwapChainId): readonly SourceAssetDeployment[] {
-  return canonicalSourceAssets.filter((asset) => asset.chainId === chainId);
+  return sourceAssetsByChain[chainId];
 }
 
 export function requireSourceAsset(
