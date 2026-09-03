@@ -673,7 +673,9 @@ export function RoutedSwapPage() {
                             : `${formatRoutedOutput(quote.amountOut, outputDecimals)} ${selectedMarket?.symbol ?? ""}`}
                         </Text>
                         <Text type="supporting" color="secondary">
-                          {isSameChainQuote(quote) ? "Same chain" : "Cross-chain"}
+                          {isSameChainQuote(quote)
+                            ? "Same chain"
+                            : `Cross-chain → ${resolveChain(quote.intent.destinationAsset.chainId)}`}
                         </Text>
                       </VStack>
                     )}
