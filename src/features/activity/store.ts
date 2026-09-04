@@ -46,6 +46,27 @@ export const resumableRoutedLifecycles: readonly RoutedSwapLifecycle[] = [
   "unknown",
 ];
 
+/**
+ * Forward-only lifecycle ordering. `unknown` sits with the in-flight states so
+ * an outage can resolve into any outcome, but a settled outcome never
+ * regresses — concurrent writers (page tracking and background resume) stay
+ * consistent.
+ */
+const lifecycleRank: Record<RoutedSwapLifecycle, number> = {
+  prepared: 0,
+  "source-submitted": 1,
+  "destination-pending": 2,
+  unknown: 2,
+  delivered: 3,
+  "partially-delivered": 3,
+  refunded: 3,
+  failed: 3,
+};
+
+export function isRoutedLifecycleRegression(existing: RoutedSwapLifecycle, next: RoutedSwapLifecycle): boolean {
+  return lifecycleRank[next] < lifecycleRank[existing];
+}
+
 export function isResumableRoutedLifecycle(lifecycle: RoutedSwapLifecycle): boolean {
   return resumableRoutedLifecycles.includes(lifecycle);
 }
@@ -259,6 +280,7 @@ export function markRoutedSwapLifecycle(
 ): void {
   const existing = readActivity(storage).find((record) => record.id === id);
   if (!existing || existing.operation !== "swap" || !existing.routed) return;
+  if (isRoutedLifecycleRegression(existing.routed.lifecycle, lifecycle)) return;
   const routed: RoutedSwapTracking = {
     ...existing.routed,
     lifecycle,
@@ -271,7 +293,11 @@ export function markRoutedSwapLifecycle(
     hash: changes.sourceHash ?? existing.hash,
     routed,
     status: routedLifecycleStatus(lifecycle),
-    submitted: lifecycle !== "prepared" ? true : existing.submitted,
+    // Only a source hash (or a prior submission) marks the record as submitted;
+    // a pre-submission failure stays an attempt that moved no funds.
+    submitted: lifecycle === "prepared"
+      ? existing.submitted
+      : existing.submitted === true || changes.sourceHash !== undefined,
   }, storage);
 }
 

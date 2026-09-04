@@ -243,6 +243,21 @@ export function isTerminalRoutedLifecycle(lifecycle: RoutedSwapLifecycle): boole
     || lifecycle === "refunded" || lifecycle === "failed";
 }
 
+/** Execution stages that correspond to a tracked lifecycle; others are app-local. */
+export function lifecycleForExecutionStage(stage: RoutedExecutionStage): RoutedSwapLifecycle | null {
+  switch (stage) {
+    case "confirming": return "source-submitted";
+    case "tracking": return "destination-pending";
+    case "delivered":
+    case "partially-delivered":
+    case "refunded":
+    case "failed":
+    case "unknown":
+      return stage;
+    default: return null;
+  }
+}
+
 /** Human guidance shown beside each settled (or unsettled) routed outcome. */
 export function routedRecoveryGuidance(lifecycle: RoutedSwapLifecycle): string {
   switch (lifecycle) {
