@@ -59,12 +59,14 @@ export const slippageBpsSchema = z.number().int().min(0).max(MAX_SLIPPAGE_BPS);
 
 /**
  * Exact-input swap intent. Exact-output intents are not supported by the
- * router contract.
+ * router contract. `sender` is the wallet that holds the input funds and
+ * signs the source transaction; `recipient` receives the destination asset.
  */
 export const swapIntentSchema = z.object({
   sourceAsset: assetReferenceSchema,
   destinationAsset: assetReferenceSchema,
   amountIn: positiveAmountSchema,
+  sender: evmAddressSchema,
   recipient: evmAddressSchema,
   slippageBps: slippageBpsSchema,
 });

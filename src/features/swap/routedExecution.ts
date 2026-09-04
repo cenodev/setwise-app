@@ -154,7 +154,7 @@ export function buildRoutedSubmission(input: { account: Address; prepared: SwapR
   };
   const nativeInput = isAddressEqual(intent.sourceAsset.address, NATIVE_ASSET_ADDRESS);
 
-  if (!isAddressEqual(account, intent.recipient)) {
+  if (!isAddressEqual(account, intent.sender)) {
     throw new Error("The prepared swap requires a different sender than the connected wallet.");
   }
   if (transaction.chainId !== intent.sourceAsset.chainId) {
@@ -184,7 +184,7 @@ export function buildRoutedSubmission(input: { account: Address; prepared: SwapR
   }
   if (approval.chainId !== intent.sourceAsset.chainId
     || !isAddressEqual(approval.token, intent.sourceAsset.address)
-    || !isAddressEqual(approval.owner, intent.recipient)) {
+    || !isAddressEqual(approval.owner, intent.sender)) {
     throw new Error("The normalized approval does not cover the reviewed source token and sender.");
   }
   if (!isAddressEqual(approval.spender, transaction.to)) {

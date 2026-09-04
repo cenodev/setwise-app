@@ -43,6 +43,7 @@ const intentInput = {
   sourceAsset: sameChainIntent.sourceAsset,
   destinationAsset: sameChainIntent.destinationAsset,
   amountIn: sameChainIntent.amountIn,
+  sender: sameChainIntent.sender,
   recipient: sameChainIntent.recipient,
 };
 
@@ -56,7 +57,7 @@ describe("requestSwapQuotes", () => {
     const quotes = await requestSwapQuotes({ intent: intentInput, signal: controller.signal });
 
     expect(quotes).toHaveLength(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:8787/v1/quotes");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://setwise-swap-router.datadex.workers.dev/v1/quotes");
     const init = lastInit(fetchMock);
     expect(init.method).toBe("POST");
     expect(init.cache).toBe("no-store");
@@ -154,7 +155,7 @@ describe("getSwapRouterCapabilities", () => {
     const capabilities = await getSwapRouterCapabilities();
 
     expect(capabilities.chains.map((chain) => chain.chainId)).toEqual([1, 56, 8453, 4663]);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:8787/v1/capabilities");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://setwise-swap-router.datadex.workers.dev/v1/capabilities");
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.method).toBe("GET");
     expect(init.cache).toBe("no-store");
@@ -171,7 +172,7 @@ describe("prepareRoutedSwap", () => {
 
     expect(prepared.transaction.chainId).toBe(56);
     expect(prepared.approval?.token).toBe(sameChainIntent.sourceAsset.address);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:8787/v1/swap");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://setwise-swap-router.datadex.workers.dev/v1/swap");
     expect(JSON.parse(lastInit(fetchMock).body as string)).toEqual({
       providerId: sameChainQuote.providerId,
       quoteId: sameChainQuote.quoteId,
@@ -209,7 +210,7 @@ describe("requestSwapExecutionStatus", () => {
     const status = await requestSwapExecutionStatus({ quote: sameChainQuote, transactionHash: FIXTURE_TX_HASH });
 
     expect(status.state).toBe("confirmed");
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:8787/v1/swaps/status");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://setwise-swap-router.datadex.workers.dev/v1/swaps/status");
     expect(JSON.parse(lastInit(fetchMock).body as string)).toEqual({
       providerId: sameChainQuote.providerId,
       quoteId: sameChainQuote.quoteId,

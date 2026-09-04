@@ -33,6 +33,7 @@ const destinationMarket = {
 const draft = {
   amountAtomic: 25_000_000n,
   destinationMarket,
+  sender: "0x4000000000000000000000000000000000000000",
   recipient: "0x4000000000000000000000000000000000000000",
   sourceAsset: sourceUsdc,
 };
@@ -43,14 +44,16 @@ describe("buildRoutedSwapIntent", () => {
     expect(intent).toEqual({
       amountIn: "25000000",
       destinationAsset: { address: "0xAbC0000000000000000000000000000000000001", chainId: 8453 },
+      sender: "0x4000000000000000000000000000000000000000",
       recipient: "0x4000000000000000000000000000000000000000",
       slippageBps: 50,
       sourceAsset: { address: sourceUsdc.address, chainId: 56 },
     });
   });
 
-  it("rejects a draft without a valid recipient", () => {
+  it("rejects a draft without a valid recipient or sender", () => {
     expect(() => buildRoutedSwapIntent({ ...draft, recipient: "0xnot-an-address" })).toThrow(/recipient/i);
+    expect(() => buildRoutedSwapIntent({ ...draft, sender: "0xnot-an-address" })).toThrow(/sender/i);
   });
 });
 
@@ -181,6 +184,7 @@ describe("fixture alignment", () => {
         symbol: "USDT",
         underlying: { symbol: "USDT" },
       },
+      sender: crossChainIntent.sender,
       recipient: crossChainIntent.recipient,
       sourceAsset: requireSourceAsset(1, "USDC"),
     });

@@ -43,6 +43,7 @@ export const sameChainIntent: SwapIntent = swapIntentSchema.parse({
   sourceAsset: { chainId: 56, address: BSC_USDC },
   destinationAsset: { chainId: 56, address: BSC_USDT },
   amountIn: "25000000000000000000",
+  sender: FIXTURE_SENDER,
   recipient: FIXTURE_SENDER,
   slippageBps: 50,
 });
@@ -95,6 +96,7 @@ export const crossChainIntent: SwapIntent = swapIntentSchema.parse({
   sourceAsset: { chainId: 1, address: ETHEREUM_USDC },
   destinationAsset: { chainId: 56, address: BSC_USDT },
   amountIn: "25000000",
+  sender: FIXTURE_SENDER,
   recipient: FIXTURE_SENDER,
   slippageBps: 50,
 });

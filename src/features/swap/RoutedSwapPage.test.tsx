@@ -96,6 +96,7 @@ function routedQuote(overrides: Partial<SwapQuote> = {}): SwapQuote {
   const intent = {
     amountIn: "25000000",
     destinationAsset: { address: nvdaBackedEthereum, chainId: 1 },
+    sender: wallet,
     recipient: wallet,
     slippageBps: 50,
     sourceAsset: { address: ETHEREUM_USDC, chainId: 1 },
@@ -133,6 +134,7 @@ function statusFixture(state: SwapExecutionStatus["state"]): SwapExecutionStatus
     intent: {
       amountIn: "25000000",
       destinationAsset: { address: nvdaBackedEthereum, chainId: 1 },
+      sender: wallet,
       recipient: wallet,
       slippageBps: 50,
       sourceAsset: { address: ETHEREUM_USDC, chainId: 1 },
@@ -284,6 +286,7 @@ describe("quote requests", () => {
     expect(call.intent).toEqual({
       amountIn: "25000000",
       destinationAsset: { address: nvdaBackedEthereum, chainId: 1 },
+      sender: wallet,
       recipient: wallet,
       slippageBps: 50,
       sourceAsset: { address: ETHEREUM_USDC, chainId: 1 },
@@ -497,6 +500,7 @@ describe("route execution", () => {
     const revalidationRequest = mocks.requestSwapQuotes.mock.lastCall?.[0];
     expect(revalidationRequest?.intent).toEqual(expect.objectContaining({
       amountIn: "25000000",
+      sender: wallet,
       recipient: wallet,
     }));
     expect(mocks.writeContractAsync).toHaveBeenCalledWith(expect.objectContaining({

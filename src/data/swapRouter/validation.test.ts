@@ -44,6 +44,7 @@ describe("assertQuotePreservesIntent", () => {
     ["a different destination chain", echoIntent(sameChainQuote, { destinationAsset: { ...sameChainIntent.destinationAsset, chainId: 8453 } })],
     ["a different destination token", echoIntent(sameChainQuote, { destinationAsset: { chainId: 56, address: sameChainIntent.sourceAsset.address } })],
     ["a different input amount", echoIntent(sameChainQuote, { amountIn: "1" })],
+    ["a different sender", echoIntent(sameChainQuote, { sender: otherWallet })],
     ["a different recipient", echoIntent(sameChainQuote, { recipient: otherWallet })],
     ["a different slippage", echoIntent(sameChainQuote, { slippageBps: 100 })],
     ["an inverted route", { ...sameChainQuote, steps: [{ ...sameChainQuote.steps[0], fromAsset: sameChainIntent.destinationAsset, toAsset: sameChainIntent.sourceAsset }] }],
