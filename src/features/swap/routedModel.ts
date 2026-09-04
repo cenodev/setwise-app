@@ -1,4 +1,5 @@
 import type { AssetReference, RouteStep, SwapQuote } from "../../data/swapRouter/schema";
+import type { QuoteDiagnostic } from "../../data/swapRouter/schema";
 import type { SwapIntentInput } from "../../data/swapRouter/client";
 import { DEFAULT_SLIPPAGE_BPS } from "../../data/swapRouter/schema";
 import { SwapRouterApiError } from "../../data/swapRouter/errors";
@@ -164,6 +165,68 @@ const noRouteCodes = new Set(["UNSUPPORTED_ROUTE", "NO_QUOTES"]);
 
 export function isNoRouteError(error: unknown): error is SwapRouterApiError {
   return error instanceof SwapRouterApiError && noRouteCodes.has(error.code);
+}
+
+export type ProviderFailureNote = Readonly<{
+  providerId: string;
+  /** Short human-readable reason derived from the router's diagnostic message. */
+  reason: string;
+}>;
+
+function humanizeProviderMessage(message: string): string {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("no_liquidity") || normalized.includes("no route") || normalized.includes("no route for")) {
+    return "no route for this market right now";
+  }
+  if (normalized.includes("upstream_unavailable") || normalized.includes("upstream provider is unavailable")) {
+    return "temporarily unavailable";
+  }
+  if (normalized.includes("unsupported")) {
+    return "does not support this route";
+  }
+  if (normalized.includes("timeout") || normalized.includes("timed out")) {
+    return "timed out on this request";
+  }
+  const withoutCode = message.replace(/^[A-Z][A-Z0-9_]*:\s*/, "").trim();
+  return withoutCode.length > 0 ? withoutCode.slice(0, 140) : "did not return a quote";
+}
+
+/**
+ * Display-only per-provider failure notes from a successful quote response's
+ * diagnostics (for example one provider down while another quoted). Never
+ * identifies money; safe to render verbatim.
+ */
+export function providerFailureNotes(
+  diagnostics: readonly QuoteDiagnostic[],
+): readonly ProviderFailureNote[] {
+  const seen = new Set<string>();
+  const notes: ProviderFailureNote[] = [];
+  for (const diagnostic of diagnostics) {
+    if (seen.has(diagnostic.providerId)) continue;
+    seen.add(diagnostic.providerId);
+    notes.push({ providerId: diagnostic.providerId, reason: humanizeProviderMessage(diagnostic.message) });
+  }
+  return notes;
+}
+
+/**
+ * Display-only per-provider failure notes from a failed quote request's error
+ * envelope details (paths look like `providers.<id>`). Returns an empty list
+ * when the error carries no per-provider detail.
+ */
+export function quoteErrorProviderNotes(error: unknown): readonly ProviderFailureNote[] {
+  if (!(error instanceof SwapRouterApiError)) return [];
+  const seen = new Set<string>();
+  const notes: ProviderFailureNote[] = [];
+  for (const detail of error.details) {
+    const match = detail.path !== undefined ? /^providers\.(.+)$/.exec(detail.path) : null;
+    if (!match?.[1]) continue;
+    const providerId = match[1];
+    if (seen.has(providerId)) continue;
+    seen.add(providerId);
+    notes.push({ providerId, reason: humanizeProviderMessage(detail.message) });
+  }
+  return notes;
 }
 
 /**

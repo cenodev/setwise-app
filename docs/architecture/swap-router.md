@@ -39,8 +39,8 @@ setwise-swap-router ── normalizes, ranks, policy-checks ──▶ versioned 
 
 | Module         | Responsibility                                                                                          |
 | -------------- | ------------------------------------------------------------------------------------------------------- |
-| `schema.ts`    | zod schemas and types for capabilities, exact-input intents, quotes, approvals, transactions, fees, steps, and execution status. |
-| `errors.ts`    | `SwapRouterApiError` and the client-side error codes.                                                   |
+| `schema.ts`    | zod schemas and types for capabilities, exact-input intents, quotes, quote diagnostics, approvals, transactions, fees, steps, and execution status. |
+| `errors.ts`    | `SwapRouterApiError` (with optional envelope `details`) and the client-side error codes.                |
 | `validation.ts`| Fail-closed identity checks between request and response.                                               |
 | `client.ts`    | Abortable, `no-store` HTTP clients with stable error mapping.                                           |
 | `fixtures.ts`  | Deterministic normalized fixtures for tests.                                                            |
@@ -81,16 +81,28 @@ reviews, and then executes the route from the user's wallet, tracking cross-chai
 
 - **Selection.** The user picks a source chain (any of the four routed networks; chains without an approved
   canonical stablecoin or without router support are visible but disabled), a canonical stablecoin (USDC or
-  USDT from `sourceAssetsByChain`), an exact-input amount, and one destination market: an issuer deployment
-  chosen from `createRoutedMarketCatalog`. The selected output is always a concrete market deployment
-  (underlying, issuer, chain, contract address); different issuers for the same underlying stay distinct.
+  USDT from `sourceAssetsByChain`), an exact-input amount, and one destination market chosen through the
+  market picker   modal (`src/features/swap/MarketPickerModal.tsx`): searchable by stock, token, issuer, or
+  address, filterable by network and issuer provider, grouped by underlying with token logos, and annotated
+  with per-chain route-provider coverage from capabilities. The modal keeps a fixed footprint (standard
+  600 px dialog with a constant-height scrollable results region, fullscreen below 640 px) so filtering
+  never resizes or recenters it. The selected output is always a concrete market
+  deployment (underlying, issuer, chain, contract address); different issuers for the same underlying stay
+  distinct.
 - **Preselection.** Provider-market rows on asset detail link to `/swap/routed?chain=<id>&token=<address>`.
   The linked deployment resolves exactly or the page shows an explicit unavailable-market error — it never
   silently substitutes another issuer's token.
 - **Quote discipline.** Requests use the same debounce (450 ms), `AbortController`, sequence counter, and
   draft request-key checks as the Setwise pool swap: a response may only replace the draft when its key
   matches the current draft identity (source chain + token, amount, destination chain + token, recipient),
-  so obsolete responses can never overwrite the user's current route.
+  so obsolete responses can never overwrite the user's current route. Quotes are fetched with
+  `requestSwapQuotesWithDiagnostics`, which additionally returns the router's per-provider diagnostics;
+  error envelopes keep their per-path `details`. The page renders both as human-readable per-provider notes
+  (`providerFailureNotes` / `quoteErrorProviderNotes`): a degraded provider alongside live quotes shows a
+  limited-coverage banner, and a no-route response names each provider's reason instead of a bare empty
+  state. Quotes refresh in the background while editing with the user's route-provider selection preserved
+  across router quote-id rotations; review and execution freeze refresh so the reviewed amounts never shift.
+  The comparison panel offers a route-provider filter when several providers quote.
 - **Review identity.** A review binds the quote to its source chain, destination chain, both token
   contracts, guaranteed minimum output, slippage bound, and a freshness countdown tied to `expiresAt`.
   Same-chain and cross-chain quotes render through the same panel; both explain that the wallet transacts
@@ -99,9 +111,11 @@ reviews, and then executes the route from the user's wallet, tracking cross-chai
   `getWalletNetworkRequirement` semantics), a known sufficient stablecoin balance, and a fresh,
   draft-matching quote. Editing the amount, wallet, source chain, stablecoin, or destination market
   invalidates the executable state.
-- **Execution (`routedExecution.ts`).** Confirming a review re-requests the route and requires the exact
-  reviewed quote to still be offered with identical economics (`revalidateReviewedQuote`); expired,
-  no-longer-offered, or re-issued-but-different quotes block execution. The prepared swap is then rebuilt into
+- **Execution (`routedExecution.ts`).** Confirming a review re-requests the route and requires a route with
+  identical economics to still be offered (`revalidateReviewedQuote`); the match is by economics (provider,
+  chains, chain-qualified assets, exact input, sender/recipient, slippage, quoted outputs), not by the opaque
+  quote id, because the router rotates quote ids on every `/v1/quotes` call even for identical economics.
+  Expired or changed routes block execution. The prepared swap is then rebuilt into
   the only wallet-eligible submission (`buildRoutedSubmission`): the wallet account must equal the intent
   recipient, the transaction must target the source chain, value must match the input mode, and — for token
   inputs — the normalized approval spender must equal the prepared transaction target, scoped to the reviewed

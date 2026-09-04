@@ -1,11 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 
 import { RoutedSwapPage } from "./RoutedSwapPage";
 import { readActivity } from "../activity/store";
 import { SwapRouterApiError } from "../../data/swapRouter/errors";
-import { swapQuoteSchema, type SwapExecutionStatus, type SwapQuote } from "../../data/swapRouter/schema";
+import { swapQuoteSchema, type QuoteDiagnostic, type SwapExecutionStatus, type SwapQuote } from "../../data/swapRouter/schema";
 import { partialProviderCapabilities, swapRouterCapabilities } from "../../data/swapRouter/fixtures";
 
 const wallet = "0x2000000000000000000000000000000000000000";
@@ -41,6 +41,7 @@ const mocks = vi.hoisted(() => {
     prepareRoutedSwap: vi.fn(),
     readContract: vi.fn(),
     requestSwapQuotes: vi.fn<(input: { intent: SwapQuote["intent"]; signal?: AbortSignal }) => Promise<SwapQuote[]>>(),
+    requestSwapQuotesWithDiagnostics: vi.fn<(input: { intent: SwapQuote["intent"]; signal?: AbortSignal }) => Promise<{ diagnostics: QuoteDiagnostic[]; quotes: SwapQuote[] }>>(),
     requestSwapExecutionStatus: vi.fn(),
     sendTransactionAsync: vi.fn(),
     switchChain: vi.fn<(input: { chainId: number }) => Promise<void>>(),
@@ -80,6 +81,7 @@ vi.mock("../../data/swapRouter/client", async (importOriginal) => ({
   getSwapRouterCapabilities: mocks.getSwapRouterCapabilities,
   prepareRoutedSwap: mocks.prepareRoutedSwap,
   requestSwapQuotes: mocks.requestSwapQuotes,
+  requestSwapQuotesWithDiagnostics: mocks.requestSwapQuotesWithDiagnostics,
   requestSwapExecutionStatus: mocks.requestSwapExecutionStatus,
 }));
 
@@ -187,6 +189,10 @@ beforeEach(() => {
   mocks.waitForTransactionReceipt.mockResolvedValue({ status: "success" });
   mocks.getSwapRouterCapabilities.mockResolvedValue(swapRouterCapabilities);
   mocks.requestSwapQuotes.mockResolvedValue([routedQuote()]);
+  mocks.requestSwapQuotesWithDiagnostics.mockImplementation(async (input) => ({
+    diagnostics: [],
+    quotes: await mocks.requestSwapQuotes(input),
+  }));
   mocks.requestSwapExecutionStatus.mockResolvedValue(statusFixture("confirmed"));
   mocks.prepareRoutedSwap.mockImplementation(({ quote }: { quote: SwapQuote }) => Promise.resolve({
     approval: {
@@ -245,7 +251,7 @@ describe("route builder", () => {
   it("preselects the exact deep-linked market without substituting another issuer", async () => {
     renderPage(`/swap/routed?chain=8453&token=${nvdaBase}`);
     expect(await screen.findByText("Backed · NVDAx · 0xAbC0…0001 on Base")).toBeVisible();
-    expect(screen.queryByText(/0xAbC0…0003/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Backed · NVDAx · 0xAbC0…0003 on Ethereum")).not.toBeInTheDocument();
   });
 
   it("fails explicitly when a deep-linked market is unavailable instead of substituting one", async () => {
@@ -274,6 +280,17 @@ describe("route builder", () => {
       address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       functionName: "balanceOf",
     })));
+  });
+
+  it("picks a market through the picker modal without substituting issuers", async () => {
+    renderPage();
+    expect(await screen.findByText("Backed · NVDAx · 0xAbC0…0003 on Ethereum")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /NVDA · Backed on Ethereum/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Choose a market" });
+    expect(within(dialog).getByText("TSLA")).toBeVisible();
+    fireEvent.click(within(dialog).getByRole("button", { name: /TSLAx · Backed/ }));
+    expect(await screen.findByText("Backed · TSLAx · 0xAbC0…0004 on Base")).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: "Choose a market" })).not.toBeInTheDocument();
   });
 });
 
@@ -353,6 +370,30 @@ describe("quote requests", () => {
     renderPage();
     typeAmount("25");
     expect(await screen.findByRole("alert")).toHaveTextContent(/unreachable/i);
+  });
+
+  it("explains limited provider coverage from quote diagnostics", async () => {
+    mocks.requestSwapQuotesWithDiagnostics.mockResolvedValueOnce({
+      diagnostics: [{ providerId: "0x", code: "UPSTREAM_UNAVAILABLE", message: "upstream provider is unavailable" }],
+      quotes: [routedQuote()],
+    });
+    renderPage();
+    typeAmount("25");
+    expect(await screen.findByText("Limited provider coverage", {}, { timeout: 4_000 })).toBeVisible();
+    expect(screen.getByText(/0x.+temporarily unavailable/)).toBeVisible();
+    expect(screen.getByText("aggregator-a")).toBeVisible();
+  });
+
+  it("shows per-provider reasons when no provider can quote", async () => {
+    mocks.requestSwapQuotes.mockRejectedValue(new SwapRouterApiError("NO_QUOTES", "no provider could quote", 422, [
+      { path: "providers.0x", message: "UPSTREAM_UNAVAILABLE: upstream provider is unavailable" },
+      { path: "providers.lifi", message: "NO_LIQUIDITY: no route for this market" },
+    ]));
+    renderPage();
+    typeAmount("25");
+    expect(await screen.findByRole("heading", { name: "No route available" }, { timeout: 4_000 })).toBeVisible();
+    expect(screen.getByText(/0x.+temporarily unavailable/)).toBeVisible();
+    expect(screen.getByText(/lifi.+no route for this market/)).toBeVisible();
   });
 
   it("auto-refreshes quotes when the earliest expiry passes", async () => {
@@ -451,10 +492,12 @@ describe("route review", () => {
     ]);
     renderPage();
     typeAmount("25");
-    await screen.findByText("zerox");
+    await screen.findByRole("button", { name: "All providers" });
     fireEvent.click(screen.getByRole("button", { name: "Review route" }));
     await screen.findByRole("status", { name: "Routed swap review" }, { timeout: 4_000 });
-    fireEvent.click(screen.getByRole("button", { name: /zerox/ }));
+    // The provider filter chips duplicate provider names, so target the quote
+    // row by its unique guaranteed minimum instead of the provider label.
+    fireEvent.click(screen.getByRole("button", { name: /24676/ }));
     expect(screen.queryByRole("status", { name: "Routed swap review" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review route" })).toBeEnabled();
   });

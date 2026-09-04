@@ -8,15 +8,22 @@ import { useAccount, usePublicClient, useSendTransaction, useSwitchChain, useWri
 import { Badge } from "@astryxdesign/core/Badge";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Button } from "@astryxdesign/core/Button";
+import { Card } from "@astryxdesign/core/Card";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Grid } from "@astryxdesign/core/Grid";
+import { Heading } from "@astryxdesign/core/Heading";
 import { HStack, VStack } from "@astryxdesign/core/Layout";
 import { List, ListItem } from "@astryxdesign/core/List";
 import { MetadataList, MetadataListItem } from "@astryxdesign/core/MetadataList";
+import { ProgressBar } from "@astryxdesign/core/ProgressBar";
+import { Section } from "@astryxdesign/core/Section";
 import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
-import { Selector } from "@astryxdesign/core/Selector";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
+import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { Text } from "@astryxdesign/core/Text";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { TokenIcon } from "../../components/TokenIdentity";
+import { MarketPickerModal } from "./MarketPickerModal";
 
 import {
   readRoutedSwapMarketParam,
@@ -47,7 +54,7 @@ import {
   getSwapRouterCapabilities,
   prepareRoutedSwap,
   requestSwapExecutionStatus,
-  requestSwapQuotes,
+  requestSwapQuotesWithDiagnostics,
   type SwapIntentInput,
 } from "../../data/swapRouter/client";
 import { swapRouterQueryKeys } from "../../data/queryKeys";
@@ -64,12 +71,15 @@ import {
   formatRoutedOutput,
   isNoRouteError,
   isSameChainQuote,
+  providerFailureNotes,
+  quoteErrorProviderNotes,
   quoteFresh,
   quoteSecondsRemaining,
   routedAmountError,
   routedQuoteRequestKey,
   routedSwapErrorMessage,
   summarizeRoutedFees,
+  type ProviderFailureNote,
   type RoutedAssetResolver,
   type RoutedChainResolver,
 } from "./routedModel";
@@ -109,14 +119,6 @@ function chainName(chainId: number): string {
   return getRoutedSwapNetwork(chainId)?.name ?? `Chain ${chainId}`;
 }
 
-function marketLabel(market: RoutedMarketOption): string {
-  return `${market.assetProvider.name} · ${chainName(market.chainId)}`;
-}
-
-function marketOptionId(market: RoutedMarketOption): string {
-  return `${market.chainId}:${market.address.toLowerCase()}`;
-}
-
 function executionStageTitle(stage: RoutedExecutionStage): string {
   switch (stage) {
     case "revalidating": return "Revalidating the reviewed route";
@@ -144,41 +146,94 @@ function executionStageTitle(stage: RoutedExecutionStage): string {
 function executionStageMessage(stage: RoutedExecutionStage): string | null {
   switch (stage) {
     case "revalidating": return "Re-requesting the reviewed route and verifying the exact quote before any wallet request opens.";
+    case "switching": return "Aligning your wallet with the route source chain. Approve the network switch in your wallet.";
+    case "checking": return "Rechecking balances, gas, and route state before any approval is requested.";
     case "approval-wallet": return "The exact input amount is approved to the verified route spender. Nothing else is approved.";
     case "approval-confirming": return "Waiting for the exact approval to confirm on chain.";
+    case "simulating": return "Simulating the prepared transaction against the source chain before your wallet opens.";
     case "wallet": return "One transaction on the source chain, signed only by your wallet. Setwise never custodies keys or broadcasts for you.";
     case "confirming": return "Waiting for the source transaction to confirm before settlement tracking starts.";
     case "tracking": return "The source transaction confirmed. Polling the route provider for destination settlement.";
     case "delivered": return "Both legs are complete. Verify the evidence below in the chain explorers.";
+    case "partially-delivered": return "The route delivered only part of the expected output. Review the provider detail before retrying.";
+    case "refunded": return "The route failed after submission and the input was refunded. Verify the refund before retrying.";
+    case "failed": return "The route failed on chain and no destination tokens were delivered. Review the source transaction before retrying.";
+    case "unknown": return "The provider could not confirm settlement. Verify the source transaction; tracking continues automatically.";
+    case "rejected": return "Rejected in your wallet. Nothing was submitted; review the route and try again.";
+    case "approval-failed": return "Token approval was rejected or failed. No swap was submitted.";
+    case "expired": return "The reviewed quote expired before the wallet opened. Refresh the estimates and review again.";
+    case "stale": return "The reviewed route changed while revalidating. Review the refreshed quotes again.";
+    case "error": return "Execution failed before submission. Review the message and try again.";
     default: return null;
+  }
+}
+
+const EXECUTION_ORDER: readonly RoutedExecutionStage[] = [
+  "revalidating",
+  "switching",
+  "checking",
+  "approval-wallet",
+  "approval-confirming",
+  "simulating",
+  "wallet",
+  "confirming",
+  "tracking",
+];
+
+function executionProgress(stage: RoutedExecutionStage): number {
+  const index = EXECUTION_ORDER.indexOf(stage);
+  if (index >= 0) return Math.round(((index + 1) / (EXECUTION_ORDER.length + 1)) * 100);
+  if (stage === "delivered") return 100;
+  if (stage === "partially-delivered" || stage === "refunded" || stage === "failed" || stage === "unknown") return 100;
+  return 0;
+}
+
+function executionStatusVariant(stage: RoutedExecutionStage): "success" | "warning" | "error" | "accent" | "neutral" {
+  switch (stage) {
+    case "delivered": return "success";
+    case "partially-delivered":
+    case "refunded":
+    case "unknown":
+    case "expired":
+    case "stale": return "warning";
+    case "failed":
+    case "approval-failed":
+    case "error": return "error";
+    case "rejected": return "neutral";
+    default: return "accent";
   }
 }
 
 function WalletConnectCard() {
   const { open } = useAppKit();
   return (
-    <section className="gate-card" aria-labelledby="routed-wallet-connect-title">
-      <p className="eyebrow">External wallet</p>
-      <h2 id="routed-wallet-connect-title">Connect your wallet to route a swap</h2>
-      <p>Route quotes are requested for your wallet address. Setwise will never ask for your seed phrase or private key.</p>
-      <button className="primary-button" type="button" onClick={() => void open({ view: "Connect" })}>
-        Connect wallet
-      </button>
-    </section>
+    <Card>
+      <VStack gap={3}>
+        <Text type="label" color="accent">External wallet</Text>
+        <Heading level={2}>Connect your wallet to route a swap</Heading>
+        <Text color="secondary">
+          Route quotes are requested for your wallet address. Setwise will never ask for your seed phrase or private key.
+        </Text>
+        <Button label="Connect wallet" variant="primary" onClick={() => void open({ view: "Connect" })} />
+      </VStack>
+    </Card>
   );
 }
 
 function WalletConfigCard() {
   return (
-    <section className="gate-card" aria-labelledby="routed-wallet-config-title">
-      <p className="eyebrow">Configuration required</p>
-      <h2 id="routed-wallet-config-title">Add a Reown project ID</h2>
-      <p>
-        Copy <code>.env.example</code> to <code>.env.local</code>, set
-        <code> VITE_REOWN_PROJECT_ID</code>, and restart the development server.
-      </p>
-      <p className="gate-help">After wallet setup, use the <Link to="/faucet">testnet asset faucet</Link> to fund a new wallet.</p>
-    </section>
+    <Card>
+      <VStack gap={3}>
+        <Text type="label" color="accent">Configuration required</Text>
+        <Heading level={2}>Add a Reown project ID</Heading>
+        <Text color="secondary">
+          Copy <code>.env.example</code> to <code>.env.local</code>, set <code>VITE_REOWN_PROJECT_ID</code>, and restart the development server.
+        </Text>
+        <Text type="supporting" color="secondary">
+          After wallet setup, use the <Link to="/faucet">testnet asset faucet</Link> to fund a new wallet.
+        </Text>
+      </VStack>
+    </Card>
   );
 }
 
@@ -225,10 +280,21 @@ export function RoutedSwapPage() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quoteRefresh, setQuoteRefresh] = useState(0);
+  const [quoteProviderNotes, setQuoteProviderNotes] = useState<readonly ProviderFailureNote[]>([]);
+  const [routeProviderFilter, setRouteProviderFilter] = useState("all");
+  const [marketPickerOpen, setMarketPickerOpen] = useState(false);
   const [stage, setStage] = useState<RoutedStage>("editing");
   const [execution, setExecution] = useState<RoutedExecutionView | null>(null);
   const [now, setNow] = useState(currentTimestamp);
   const quoteSequence = useRef(0);
+  const quotesRef = useRef<SwapQuote[]>([]);
+  const selectedQuoteIdRef = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    quotesRef.current = quotes ?? [];
+  }, [quotes]);
+  useLayoutEffect(() => {
+    selectedQuoteIdRef.current = selectedQuoteId;
+  }, [selectedQuoteId]);
   const tracking = useRef<{ activityId: string | null; quote: SwapQuote | null; sourceHash: Hash | null }>({
     activityId: null,
     quote: null,
@@ -296,7 +362,6 @@ export function RoutedSwapPage() {
   ), [eligibleMarkets, underlyingChoice]);
 
   const selectedMarket = preselectedMarket === undefined ? defaultMarket : preselectedMarket;
-  const underlying = selectedMarket?.underlying.symbol ?? underlyingChoice ?? "";
 
   // ——— Chain reads ——————————————————————————————————————————————
   const sourceClient = usePublicClient({ chainId: sourceChainId });
@@ -357,14 +422,17 @@ export function RoutedSwapPage() {
 
   useEffect(() => {
     const sequence = ++quoteSequence.current;
-    // Execution owns the route identity; freeze quote refresh until it ends.
-    if (executing) return;
+    // Review and execution own the route identity; freeze quote refresh while
+    // the user reviews or executes so the reviewed amounts never shift under
+    // them and a rotated quoteId can never orphan the selection.
+    if (executing || stage === "review") return;
     if (!online || !draft) {
       const reset = window.setTimeout(() => {
         setQuoteLoading(false);
         setQuotes(null);
         setQuotesRequestKey("");
         setSelectedQuoteId(null);
+        setQuoteProviderNotes([]);
       }, 0);
       return () => window.clearTimeout(reset);
     }
@@ -376,11 +444,24 @@ export function RoutedSwapPage() {
     }, 0);
     const requestTimer = window.setTimeout(() => {
       const intent: SwapIntentInput = buildRoutedSwapIntent(draft);
-      void requestSwapQuotes({ intent, signal: controller.signal }).then((nextQuotes) => {
+      const previousSelectedId = selectedQuoteIdRef.current;
+      const previousProvider = previousSelectedId
+        ? quotesRef.current.find((quote) => quote.quoteId === previousSelectedId)?.providerId
+        : undefined;
+      void requestSwapQuotesWithDiagnostics({ intent, signal: controller.signal }).then(({ diagnostics, quotes: nextQuotes }) => {
         if (sequence !== quoteSequence.current || controller.signal.aborted) return;
         setQuotes(nextQuotes);
         setQuotesRequestKey(requestedKey);
-        setSelectedQuoteId(nextQuotes[0]?.quoteId ?? null);
+        setQuoteProviderNotes(providerFailureNotes(diagnostics));
+        // Preserve the user's provider selection across router id rotations
+        // and market moves; fall back to the ranked best quote.
+        const stillOffered = previousSelectedId
+          ? nextQuotes.find((quote) => quote.quoteId === previousSelectedId)?.quoteId
+          : undefined;
+        const sameProvider = previousProvider
+          ? nextQuotes.find((quote) => quote.providerId === previousProvider)?.quoteId
+          : undefined;
+        setSelectedQuoteId(stillOffered ?? sameProvider ?? nextQuotes[0]?.quoteId ?? null);
         if (nextQuotes.length > 0) {
           const earliest = Math.min(...nextQuotes.map((quote) => Date.parse(quote.expiresAt)));
           window.setTimeout(() => setQuoteRefresh((value) => value + 1), Math.max(earliest - Date.now(), 0) + 20);
@@ -390,8 +471,10 @@ export function RoutedSwapPage() {
         if (isNoRouteError(error)) {
           setQuotes([]);
           setQuotesRequestKey(requestedKey);
+          setQuoteProviderNotes(quoteErrorProviderNotes(error));
           return;
         }
+        setQuoteProviderNotes([]);
         setQuoteError(routedSwapErrorMessage(error));
       }).finally(() => {
         if (!controller.signal.aborted && sequence === quoteSequence.current) setQuoteLoading(false);
@@ -402,7 +485,7 @@ export function RoutedSwapPage() {
       window.clearTimeout(loadingTimer);
       window.clearTimeout(requestTimer);
     };
-  }, [currentRequestKey, draft, executing, online, quoteRefresh]);
+  }, [currentRequestKey, draft, executing, online, quoteRefresh, stage]);
 
   useEffect(() => {
     if (!quotes || quotes.length === 0) return;
@@ -432,18 +515,6 @@ export function RoutedSwapPage() {
     if (executing) return;
     if (next !== "USDC" && next !== "USDT") return;
     setSourceSymbolChoice(next);
-    clearExecutable();
-  }
-
-  function chooseUnderlying(next: string) {
-    if (executing) return;
-    const firstMarket = eligibleMarkets.find((market) => market.underlying.symbol === next) ?? null;
-    setUnderlyingChoice(next);
-    if (firstMarket) {
-      setSearchParams({ chain: String(firstMarket.chainId), token: firstMarket.address }, { replace: true });
-    } else {
-      setSearchParams({}, { replace: true });
-    }
     clearExecutable();
   }
 
@@ -559,7 +630,7 @@ export function RoutedSwapPage() {
 
       // 1. Revalidate the exact reviewed route immediately before any wallet
       // request opens; expired or mismatched quotes are blocked here.
-      const freshQuotes = await requestSwapQuotes({ intent: reviewed.intent });
+      const { quotes: freshQuotes } = await requestSwapQuotesWithDiagnostics({ intent: reviewed.intent });
       const freshQuote = revalidateReviewedQuote({ freshQuotes, now: Date.now(), reviewed });
 
       // 2. Prepare through the router; the client already validates that the
@@ -680,6 +751,7 @@ export function RoutedSwapPage() {
         data: submission.data,
         to: submission.to,
         value: submission.value,
+        ...(submission.gas !== undefined ? { gas: submission.gas } : {}),
       });
       submitted = true;
       tracking.current.sourceHash = sourceHash;
@@ -810,6 +882,19 @@ export function RoutedSwapPage() {
   const destinationDecimals = marketDecimalsQuery.data;
   const secondsRemaining = selectedQuote ? quoteSecondsRemaining(selectedQuote, now) : null;
 
+  const routeProviders = useMemo(
+    () => [...new Set((quotes ?? []).map((quote) => quote.providerId))].sort(),
+    [quotes],
+  );
+  const effectiveRouteProviderFilter = routeProviders.includes(routeProviderFilter)
+    ? routeProviderFilter
+    : "all";
+  const visibleQuotes = useMemo(() => {
+    if (!quotesMatchDraft || !quotes) return quotes;
+    if (effectiveRouteProviderFilter === "all") return quotes;
+    return quotes.filter((quote) => quote.providerId === effectiveRouteProviderFilter);
+  }, [effectiveRouteProviderFilter, quotes, quotesMatchDraft]);
+
   if (!runtimeConfig.walletConfigured) {
     return <WalletConfigCard />;
   }
@@ -819,156 +904,197 @@ export function RoutedSwapPage() {
 
   if (preselectedMarket === null && marketParam) {
     return (
-      <section className="swap-card" role="alert">
-        <VStack gap={3}>
-          <Text weight="bold">This market is not available for routed swaps</Text>
-          <Text type="supporting" color="secondary">
-            {`The linked deployment ${truncateAddress(marketParam.address)} on ${chainName(marketParam.chainId)} is not in
-            the current Setwise market catalog. No other issuer market was selected in its place.`}
-          </Text>
-          <HStack gap={2}>
-            <Button
-              label="Choose another market"
-              variant="secondary"
-              onClick={() => setSearchParams({}, { replace: true })}
-            />
-          </HStack>
-        </VStack>
-      </section>
+      <div role="alert">
+        <Card>
+          <VStack gap={3}>
+            <HStack gap={2} vAlign="center">
+              <StatusDot variant="error" label="Market unavailable" />
+              <Heading level={2}>This market is not available for routed swaps</Heading>
+            </HStack>
+            <Text type="supporting" color="secondary">
+              {`The linked deployment ${truncateAddress(marketParam.address)} on ${chainName(marketParam.chainId)} is not in
+              the current Setwise market catalog. No other issuer market was selected in its place.`}
+            </Text>
+            <HStack gap={2}>
+              <Button
+                label="Choose another market"
+                variant="secondary"
+                onClick={() => setSearchParams({}, { replace: true })}
+              />
+            </HStack>
+          </VStack>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <div className="swap-layout routed-swap-layout">
-      <section className="swap-card swap-form" aria-labelledby="routed-swap-title">
-        <h2 id="routed-swap-title" className="sr-only">Route a stablecoin swap</h2>
+    <VStack gap={4}>
+      <Section>
+        <VStack gap={4}>
+          <VStack gap={2}>
+            <Heading level={2}>Route a stablecoin swap</Heading>
+            <Text type="supporting" color="secondary">
+              Spend a canonical stablecoin on the source chain and receive one explicitly selected issuer market.
+              Quotes are point-in-time estimates bound to the exact chains and contracts shown.
+            </Text>
+          </VStack>
 
-        <div className="field-group">
-          <span className="field-label" id="routed-source-chain-label">Pay from</span>
-          <SegmentedControl
-            label="Source chain"
-            value={String(sourceChainId)}
-            onChange={chooseSourceChain}
-            layout="fill"
-          >
-            {sourceChainOptions.map(({ enabled, hasSourceAssets, network }) => (
-              <SegmentedControlItem
-                key={network.id}
-                value={String(network.id)}
-                label={network.name}
-                isDisabled={!hasSourceAssets || !enabled || executing}
-              />
-            ))}
-          </SegmentedControl>
-          <Text type="supporting" color="secondary">
-            Canonical stablecoins only. Wallet execution always happens on the source chain.
-          </Text>
-        </div>
-
-        {sourceAsset && (
-          <div className="field-group">
-            <span className="field-label" id="routed-stablecoin-label">Stablecoin</span>
+          <VStack gap={2}>
+            <Text type="label" weight="semibold">Pay from</Text>
             <SegmentedControl
-              label="Source stablecoin"
-              value={sourceAsset.symbol}
-              onChange={chooseSourceSymbol}
+              label="Source chain"
+              value={String(sourceChainId)}
+              onChange={chooseSourceChain}
               layout="fill"
             >
-              {getSourceAssets(sourceChainId).map((asset) => (
-                <SegmentedControlItem key={asset.symbol} value={asset.symbol} label={asset.symbol} isDisabled={executing} />
+              {sourceChainOptions.map(({ enabled, hasSourceAssets, network }) => (
+                <SegmentedControlItem
+                  key={network.id}
+                  value={String(network.id)}
+                  label={network.name}
+                  isDisabled={!hasSourceAssets || !enabled || executing}
+                />
               ))}
             </SegmentedControl>
-          </div>
-        )}
-
-        {sourceAsset && (
-          <div className="asset-input-card">
-            <div className="amount-heading">
-              <span>You pay</span>
-              <span>
-                Balance{" "}
-                {balanceKnown
-                  ? `${formatTokenAmount(balance, sourceAsset.decimals)} ${sourceAsset.symbol}`
-                  : sourceAsset.symbol}
-              </span>
-            </div>
-            <div className="amount-control">
-              <input
-                aria-label="You pay amount"
-                inputMode="decimal"
-                placeholder="0.0"
-                value={amount}
-                disabled={executing}
-                onChange={(event) => editAmount(event.target.value)}
-              />
-              <button
-                type="button"
-                disabled={executing || !balanceKnown || balance === 0n}
-                onClick={() => editAmount(atomicToDecimal(balance ?? 0n, sourceAsset.decimals))}
-              >
-                Max
-              </button>
-            </div>
-            {amount && amountError && <p className="field-error">{amountError}</p>}
-            {insufficientBalance && (
-              <p className="field-error">Insufficient {sourceAsset.symbol} balance for this route.</p>
-            )}
-          </div>
-        )}
-
-        <div className="field-group">
-          <span className="field-label">Receive</span>
-          <Selector
-            label="Stock"
-            options={marketCatalog.underlyings
-              .filter((symbol) => marketCatalog.marketsForUnderlying(symbol).length > 0)
-              .map((symbol) => ({ value: symbol, label: symbol }))}
-            value={underlying}
-            onChange={chooseUnderlying}
-            placeholder="Choose a stock"
-            isDisabled={executing}
-          />
-          <Selector
-            label="Issuer market"
-            description="Each issuer deployment is a distinct market; none are substituted."
-            options={eligibleMarkets.map((market) => ({
-              value: marketOptionId(market),
-              label: marketLabel(market),
-            }))}
-            value={selectedMarket ? marketOptionId(selectedMarket) : ""}
-            onChange={(value) => {
-              const market = eligibleMarkets.find((candidate) => marketOptionId(candidate) === value);
-              if (market) chooseMarket(market);
-            }}
-            placeholder="Choose an issuer market"
-            isDisabled={executing}
-          />
-          {selectedMarket && (
-            <Text type="supporting" color="secondary" className="routed-market-address">
-              {`${selectedMarket.assetProvider.name} · ${selectedMarket.symbol} · ${truncateAddress(selectedMarket.address)} on ${chainName(selectedMarket.chainId)}`}
+            <Text type="supporting" color="secondary">
+              Canonical stablecoins only. Wallet execution always happens on the source chain.
+              Robinhood Chain has no approved stablecoins yet.
             </Text>
-          )}
-        </div>
+          </VStack>
 
-        {selectedMarket && !sameChainAsDestination && (
-          <div className="notice" role="note">
-            Cross-chain route: your wallet signs only on {chainName(sourceChainId)}; the route delivers{" "}
-            {selectedMarket.underlying.symbol} on {chainName(selectedMarket.chainId)}.
-          </div>
-        )}
-        {selectedMarket && sameChainAsDestination && (
-          <div className="notice" role="note">
-            Same-chain route: your wallet transacts only on {chainName(sourceChainId)}.
-          </div>
-        )}
-        {!online && <div className="warning-panel">Offline — reconnect to request route quotes.</div>}
-      </section>
+          {sourceAsset && (
+            <VStack gap={2}>
+              <Text type="label" weight="semibold">Stablecoin</Text>
+              <SegmentedControl
+                label="Source stablecoin"
+                value={sourceAsset.symbol}
+                onChange={chooseSourceSymbol}
+                layout="fill"
+              >
+                {getSourceAssets(sourceChainId).map((asset) => (
+                  <SegmentedControlItem key={asset.symbol} value={asset.symbol} label={asset.symbol} isDisabled={executing} />
+                ))}
+              </SegmentedControl>
+            </VStack>
+          )}
+
+          {sourceAsset && (
+            <Card variant="muted">
+              <VStack gap={2}>
+                <HStack gap={2} vAlign="center">
+                  <VStack gap={0}>
+                    <Text type="label" weight="semibold">You pay</Text>
+                    <Text type="supporting" color="secondary">
+                      Balance{" "}
+                      {balanceKnown
+                        ? `${formatTokenAmount(balance, sourceAsset.decimals)} ${sourceAsset.symbol}`
+                        : balanceQuery.isPending ? "Checking…" : sourceAsset.symbol}
+                    </Text>
+                  </VStack>
+                  <HStack gap={2}>
+                    <Button
+                      label="Max"
+                      variant="secondary"
+                      size="sm"
+                      isDisabled={executing || !balanceKnown || balance === 0n}
+                      onClick={() => editAmount(atomicToDecimal(balance ?? 0n, sourceAsset.decimals))}
+                    />
+                  </HStack>
+                </HStack>
+                <TextInput
+                  label="You pay amount"
+                  value={amount}
+                  onChange={(value) => editAmount(value)}
+                  placeholder="0.0"
+                  isDisabled={executing}
+                  status={amount && amountError
+                    ? { type: "error", message: amountError }
+                    : insufficientBalance
+                      ? { type: "error", message: `Insufficient ${sourceAsset.symbol} balance for this route.` }
+                      : undefined}
+                />
+              </VStack>
+            </Card>
+          )}
+
+          <VStack gap={2}>
+            <Text type="label" weight="semibold">Receive</Text>
+            <Button
+              label={selectedMarket
+                ? `${selectedMarket.underlying.symbol} · ${selectedMarket.assetProvider.name} on ${chainName(selectedMarket.chainId)}`
+                : eligibleMarkets.length === 0 ? "No markets available" : "Choose a market"}
+              variant="secondary"
+              isDisabled={executing || eligibleMarkets.length === 0}
+              onClick={() => setMarketPickerOpen(true)}
+            />
+            <Text type="supporting" color="secondary">
+              Each issuer deployment is a distinct market; none are substituted. Browse by stock, network, and issuer.
+            </Text>
+            {selectedMarket && (
+              <HStack gap={2} vAlign="center">
+                <TokenIcon logoURI={selectedMarket.underlying.logoURI ?? selectedMarket.logoURI} symbol={selectedMarket.underlying.symbol} />
+                <Text type="supporting" color="secondary">
+                  {`${selectedMarket.assetProvider.name} · ${selectedMarket.symbol} · ${truncateAddress(selectedMarket.address)} on ${chainName(selectedMarket.chainId)}`}
+                </Text>
+              </HStack>
+            )}
+          </VStack>
+          <MarketPickerModal
+            capabilities={capabilities}
+            eligibleMarkets={eligibleMarkets}
+            isOpen={marketPickerOpen}
+            onOpenChange={setMarketPickerOpen}
+            onSelect={chooseMarket}
+            selectedMarket={selectedMarket}
+          />
+
+          {selectedMarket && !sameChainAsDestination && (
+            <Banner
+              status="info"
+              title={`Cross-chain route to ${chainName(selectedMarket.chainId)}`}
+              description={`Your wallet signs only on ${chainName(sourceChainId)}; the route delivers ${selectedMarket.underlying.symbol} on ${chainName(selectedMarket.chainId)}.`}
+            />
+          )}
+          {selectedMarket && sameChainAsDestination && (
+            <Banner
+              status="info"
+              title="Same-chain route"
+              description={`Your wallet transacts only on ${chainName(sourceChainId)}.`}
+            />
+          )}
+          {!online && (
+            <Banner status="warning" title="Offline" description="Reconnect to request route quotes." />
+          )}
+          {balanceQuery.error && address && (
+            <Banner
+              status="warning"
+              title="Balance check unavailable"
+              description="The stablecoin balance could not be read. Review is blocked until the balance loads."
+            />
+          )}
+          {marketDecimalsQuery.error && selectedMarket && (
+            <Banner
+              status="warning"
+              title="Output display estimated"
+              description="The destination token decimals could not be read on chain. Amounts below show base units until the read succeeds."
+            />
+          )}
+        </VStack>
+      </Section>
 
       <aside className="swap-card quote-card" aria-live="polite">
-        <div className="quote-title">
-          <h2>Route comparison</h2>
-          {quoteLoading && <span>Refreshing</span>}
-        </div>
+        <VStack gap={3}>
+          <HStack gap={2} vAlign="center">
+            <Heading level={2}>Route comparison</Heading>
+            {quoteLoading && <Badge label="Refreshing" variant="info" />}
+            {selectedQuote && selectedQuoteIsFresh && secondsRemaining !== null && (
+              <Text type="supporting" color="secondary">Fresh for {secondsRemaining}s</Text>
+            )}
+            {selectedQuote && !selectedQuoteIsFresh && (
+              <Badge label="Expired" variant="warning" />
+            )}
+          </HStack>
 
         {capabilitiesQuery.error && (
           <Banner
@@ -986,11 +1112,20 @@ export function RoutedSwapPage() {
         )}
 
         {quoteError && (
-          <div className="error-panel" role="alert">
-            <span>{quoteError}</span>
-            <button className="inline-action" type="button" disabled={!online}
-              onClick={() => setQuoteRefresh((value) => value + 1)}>Retry pricing</button>
-          </div>
+          <Banner
+            status="error"
+            title="Pricing failed"
+            description={quoteError}
+            endContent={(
+              <Button
+                label="Retry pricing"
+                variant="secondary"
+                size="sm"
+                isDisabled={!online}
+                onClick={() => setQuoteRefresh((value) => value + 1)}
+              />
+            )}
+          />
         )}
 
         {!draft && !quoteLoading && !quoteError && (
@@ -1018,6 +1153,18 @@ export function RoutedSwapPage() {
               headingLevel={3}
               isCompact
             />
+            {quoteProviderNotes.length > 0 && (
+              <VStack gap={1}>
+                {quoteProviderNotes.map((note) => (
+                  <HStack key={note.providerId} gap={2} vAlign="center">
+                    <StatusDot variant="warning" label={`${note.providerId} failed`} />
+                    <Text type="supporting" color="secondary">
+                      {`${note.providerId}: ${note.reason}`}
+                    </Text>
+                  </HStack>
+                ))}
+              </VStack>
+            )}
             <Button
               label="Retry pricing"
               variant="secondary"
@@ -1029,13 +1176,45 @@ export function RoutedSwapPage() {
 
         {quotesMatchDraft && quotes !== null && quotes.length > 0 && selectedQuote && (
           <>
+            {quoteProviderNotes.length > 0 && (
+              <Banner
+                status="warning"
+                title="Limited provider coverage"
+                description={`${quoteProviderNotes.map((note) => `${note.providerId} ${note.reason}`).join("; ")}. Quotes below are from the remaining providers.`}
+              />
+            )}
+            {routeProviders.length > 1 && (
+              <VStack gap={1}>
+                <Text type="label" weight="semibold">Route provider</Text>
+                <HStack gap={1} wrap="wrap">
+                  <Button
+                    label="All providers"
+                    variant={effectiveRouteProviderFilter === "all" ? "secondary" : "ghost"}
+                    size="sm"
+                    isDisabled={executing}
+                    onClick={() => setRouteProviderFilter("all")}
+                  />
+                  {routeProviders.map((providerId) => (
+                    <Button
+                      key={providerId}
+                      label={providerId}
+                      variant={effectiveRouteProviderFilter === providerId ? "secondary" : "ghost"}
+                      size="sm"
+                      isDisabled={executing}
+                      onClick={() => setRouteProviderFilter(providerId)}
+                    />
+                  ))}
+                </HStack>
+              </VStack>
+            )}
             <List
               header={<Text className="sr-only">Ranked route alternatives, best guaranteed output first</Text>}
               density="spacious"
               hasDividers
             >
-              {quotes.map((quote, index) => {
+              {(visibleQuotes ?? []).map((quote) => {
                 const outputDecimals = destinationDecimals;
+                const isBest = quotes[0]?.quoteId === quote.quoteId;
                 return (
                   <ListItem
                     key={quote.quoteId}
@@ -1043,7 +1222,7 @@ export function RoutedSwapPage() {
                     isSelected={quote.quoteId === selectedQuoteId}
                     isDisabled={executing}
                     onClick={() => chooseQuote(quote.quoteId)}
-                    startContent={index === 0 ? <Badge label="Best" variant="info" /> : undefined}
+                    startContent={isBest ? <Badge label="Best" variant="info" /> : undefined}
                     endContent={(
                       <VStack gap={0} hAlign="end">
                         <Text weight="bold" hasTabularNumbers>
@@ -1090,8 +1269,9 @@ export function RoutedSwapPage() {
             {stage === "review" && selectedQuote && (
               <div className="review-panel routed-review" role="status" aria-label="Routed swap review">
                 <VStack gap={3}>
-                  <HStack gap={2} vAlign="center" className="routed-review-heading">
-                    <Text weight="bold">Review route via {selectedQuote.providerId}</Text>
+                  <HStack gap={2} vAlign="center">
+                    <StatusDot variant="accent" label="In review" />
+                    <Heading level={3}>Review route via {selectedQuote.providerId}</Heading>
                     <Button label="Edit" variant="ghost" size="sm" isDisabled={executing} onClick={() => { resetExecution(); setStage("editing"); }} />
                   </HStack>
                   <MetadataList columns="multi" label={{ position: "top" }}>
@@ -1164,7 +1344,9 @@ export function RoutedSwapPage() {
                         isDisabled={!canReview}
                         onClick={() => void executeRoutedSwap()}
                       />
-                      {reviewBlockedReason && <p className="action-reason">{reviewBlockedReason}</p>}
+                      {reviewBlockedReason && (
+                        <Text type="supporting" color="secondary">{reviewBlockedReason}</Text>
+                      )}
                     </>
                   )}
                 </VStack>
@@ -1177,8 +1359,24 @@ export function RoutedSwapPage() {
                 role={executing ? "status" : "alert"}
                 aria-label="Routed swap execution"
               >
-                <VStack gap={2}>
-                  <Text weight="bold">{executionStageTitle(execution.stage)}</Text>
+                <VStack gap={3}>
+                  <HStack gap={2} vAlign="center">
+                    <StatusDot variant={executionStatusVariant(execution.stage)} label={executionStageTitle(execution.stage)} isPulsing={executing} />
+                    <Heading level={3}>{executionStageTitle(execution.stage)}</Heading>
+                  </HStack>
+                  {executing && (
+                    <ProgressBar label={`Executing routed swap: ${executionStageTitle(execution.stage)}`} isIndeterminate />
+                  )}
+                  {!executing && (execution.stage === "delivered" || execution.stage === "partially-delivered"
+                    || execution.stage === "refunded" || execution.stage === "failed" || execution.stage === "unknown") && (
+                    <ProgressBar
+                      label={`Routed swap ${executionStageTitle(execution.stage)}`}
+                      value={executionProgress(execution.stage)}
+                      max={100}
+                      variant={execution.stage === "delivered" ? "success" : execution.stage === "failed" ? "error" : "warning"}
+                      hasValueLabel
+                    />
+                  )}
                   {executionStageMessage(execution.stage) && (
                     <Text type="supporting" color="secondary">{executionStageMessage(execution.stage)}</Text>
                   )}
@@ -1188,7 +1386,9 @@ export function RoutedSwapPage() {
                       <Skeleton height={12} index={1} />
                     </VStack>
                   )}
-                  {execution.error && <div className="error-panel" role="alert">{execution.error}</div>}
+                  {execution.error && (
+                    <Banner status="error" title="Execution issue" description={execution.error} />
+                  )}
                   {!executing && (() => {
                     const lifecycle = lifecycleForExecutionStage(execution.stage);
                     return lifecycle ? (
@@ -1200,13 +1400,13 @@ export function RoutedSwapPage() {
                       const url = explorerTxUrl(sourceChainId, execution.approvalHash);
                       return url
                         ? <a href={url} target="_blank" rel="noreferrer">Approval {truncateAddress(execution.approvalHash)}</a>
-                        : <span>Approval {truncateAddress(execution.approvalHash)}</span>;
+                        : <Text type="supporting" color="secondary">Approval {truncateAddress(execution.approvalHash)}</Text>;
                     })()}
                     {execution.sourceHash && (() => {
                       const url = explorerTxUrl(sourceChainId, execution.sourceHash);
                       return url
                         ? <a href={url} target="_blank" rel="noreferrer">Source {truncateAddress(execution.sourceHash)}</a>
-                        : <span>Source {truncateAddress(execution.sourceHash)}</span>;
+                        : <Text type="supporting" color="secondary">Source {truncateAddress(execution.sourceHash)}</Text>;
                     })()}
                     {execution.destinationHash && (() => {
                       const destinationChainId = selectedQuote?.intent.destinationAsset.chainId;
@@ -1215,7 +1415,7 @@ export function RoutedSwapPage() {
                         : undefined;
                       return url
                         ? <a href={url} target="_blank" rel="noreferrer">Destination {truncateAddress(execution.destinationHash)}</a>
-                        : <span>Destination {truncateAddress(execution.destinationHash)}</span>;
+                        : <Text type="supporting" color="secondary">Destination {truncateAddress(execution.destinationHash)}</Text>;
                     })()}
                   </HStack>
                   {execution.stage === "tracking" && (
@@ -1256,11 +1456,23 @@ export function RoutedSwapPage() {
             )}
 
             {stage === "review" && selectedQuote && !selectedQuoteIsFresh && execution === null && (
-              <div className="warning-panel" role="alert">
-                <span>The reviewed quote expired. Refresh the estimates and review again.</span>
-                <button className="inline-action" type="button" disabled={!online}
-                  onClick={() => setQuoteRefresh((value) => value + 1)}>Refresh</button>
-              </div>
+              <Banner
+                status="warning"
+                title="The reviewed quote expired"
+                description="Refresh the estimates and review again."
+                endContent={(
+                  <Button
+                    label="Refresh"
+                    variant="secondary"
+                    size="sm"
+                    isDisabled={!online}
+                    onClick={() => {
+                      setStage("editing");
+                      setQuoteRefresh((value) => value + 1);
+                    }}
+                  />
+                )}
+              />
             )}
 
             {stage === "editing" && (
@@ -1272,30 +1484,33 @@ export function RoutedSwapPage() {
               />
             )}
             {stage === "editing" && reviewBlockedReason && (
-              <p className="action-reason">{reviewBlockedReason}</p>
+              <Text type="supporting" color="secondary">{reviewBlockedReason}</Text>
             )}
             {!walletOnSourceChain && (
-              <div className="warning-panel">
-                <span>Your wallet is on {walletChainId ? chainName(walletChainId) : "an unknown network"}; review
-                  requires {chainName(sourceChainId)}.</span>
-                <button
-                  className="inline-action"
-                  type="button"
-                  disabled={switchPending}
-                  onClick={() => switchChain({ chainId: sourceChainId })}
-                >
-                  {switchPending ? "Switching…" : `Switch to ${chainName(sourceChainId)}`}
-                </button>
-              </div>
+              <Banner
+                status="warning"
+                title={`Wallet on ${walletChainId ? chainName(walletChainId) : "an unknown network"}`}
+                description={`Review requires ${chainName(sourceChainId)}. Switch your wallet to continue.`}
+                endContent={(
+                  <Button
+                    label={switchPending ? "Switching…" : `Switch to ${chainName(sourceChainId)}`}
+                    variant="secondary"
+                    size="sm"
+                    isDisabled={switchPending}
+                    onClick={() => switchChain({ chainId: sourceChainId })}
+                  />
+                )}
+              />
             )}
           </>
         )}
 
-        <p className="quote-note">
+        <Text type="supporting" color="secondary">
           Quotes are point-in-time estimates bound to the exact chains and contracts shown. Ranked by guaranteed minimum
           output first.
-        </p>
+        </Text>
+        </VStack>
       </aside>
-    </div>
+    </VStack>
   );
 }

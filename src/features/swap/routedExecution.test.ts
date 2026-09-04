@@ -73,8 +73,22 @@ describe("revalidateReviewedQuote", () => {
     expect(revalidateReviewedQuote({ freshQuotes: [fresh], now, reviewed: sameChainQuote })).toBe(fresh);
   });
 
-  it("blocks when the reviewed quote is no longer offered", () => {
-    const different = { ...sameChainQuote, quoteId: "fxq.other" };
+  it("accepts a rotated quoteId when the router re-issues identical economics", () => {
+    const rotated = {
+      ...sameChainQuote,
+      quoteId: "lfq.rotated-router-id",
+      expiresAt: new Date(now + 120_000).toISOString(),
+    };
+    expect(revalidateReviewedQuote({ freshQuotes: [rotated], now, reviewed: sameChainQuote })).toBe(rotated);
+  });
+
+  it("blocks when the reviewed route is no longer offered", () => {
+    expect(() => revalidateReviewedQuote({ freshQuotes: [], now, reviewed: sameChainQuote }))
+      .toThrow(/no longer offered/i);
+  });
+
+  it("blocks when the only matching route has different economics", () => {
+    const different = { ...sameChainQuote, quoteId: "fxq.other", amountOut: "1" };
     expect(() => revalidateReviewedQuote({ freshQuotes: [different], now, reviewed: sameChainQuote }))
       .toThrow(/no longer offered/i);
   });
@@ -90,6 +104,8 @@ describe("revalidateReviewedQuote", () => {
     ["a different minimum output", { ...sameChainQuote, minAmountOut: "1" }],
     ["a different input amount", { ...sameChainQuote, intent: { ...sameChainIntent, amountIn: "1" } }],
     ["a different recipient", { ...sameChainQuote, intent: { ...sameChainIntent, recipient: otherWallet } }],
+    ["a different sender", { ...sameChainQuote, intent: { ...sameChainIntent, sender: otherWallet } }],
+    ["a different slippage", { ...sameChainQuote, intent: { ...sameChainIntent, slippageBps: 100 } }],
   ] as const)("blocks a mismatched re-issued quote: %s", (_name, fresh) => {
     expect(() => revalidateReviewedQuote({ freshQuotes: [fresh], now, reviewed: sameChainQuote }))
       .toThrow(/changed while revalidating/i);
@@ -109,6 +125,7 @@ describe("buildRoutedSubmission", () => {
       },
       chainId: 56,
       data: sameChainPreparedSwap.transaction.data,
+      gas: 250_000n,
       to: sameChainPreparedSwap.transaction.to,
       value: 0n,
     });

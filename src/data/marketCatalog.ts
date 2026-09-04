@@ -15,9 +15,11 @@ export type RoutedMarketOption = Readonly<{
   address: Address;
   assetProvider: Readonly<{ id: string; name: string }>;
   chainId: RoutedSwapChainId;
+  /** Token logo from the token list when published; absent for text fallback. */
+  logoURI?: string;
   name: string;
   symbol: string;
-  underlying: Readonly<{ name?: string; symbol: string }>;
+  underlying: Readonly<{ logoURI?: string; name?: string; symbol: string }>;
 }>;
 
 export type RoutedMarketCatalog = Readonly<{
@@ -37,9 +39,11 @@ function routedMarketFromToken(token: TokenMetadata): RoutedMarketOption | null 
     address: token.address as Address,
     assetProvider: { id: providerId, name: providerLabel(providerId) },
     chainId: token.chainId,
+    ...(token.logoURI !== undefined ? { logoURI: token.logoURI } : {}),
     name: token.name,
     symbol: token.symbol,
     underlying: {
+      ...(token.underlyingLogoURI !== undefined ? { logoURI: token.underlyingLogoURI } : {}),
       name: token.underlyingSymbol && token.underlyingSymbol !== token.symbol ? token.name : undefined,
       symbol: (token.underlyingSymbol ?? token.symbol).trim().toUpperCase(),
     },
@@ -89,8 +93,15 @@ export function createRoutedMarketCatalog(tokens: readonly TokenMetadata[]): Rou
   };
 }
 
-export class UnavailableRoutedMarketError extends Error {
-  constructor(chainId: number, address: string) {
+/**
+ * Stable identity of a destination market: chain-qualified contract address.
+ * Issuer and underlying metadata are display-only and never part of the key.
+ */
+export function routedMarketKey(market: Pick<RoutedMarketOption, "address" | "chainId">): string {
+  return `${market.chainId}:${market.address.toLowerCase()}`;
+}
+
+export class UnavailableRoutedMarketError extends Error {  constructor(chainId: number, address: string) {
     super(`No routed destination market is available for ${chainId}:${address.toLowerCase()}`);
     this.name = "UnavailableRoutedMarketError";
   }

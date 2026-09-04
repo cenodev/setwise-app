@@ -89,37 +89,54 @@ export function assertRoutedExecutionWindow(input: {
 }
 
 /**
- * Revalidates the selected route immediately before execution. The re-quoted
- * list must still contain the reviewed quote with identical economics; the
- * returned fresh quote (which may carry a newer expiry) becomes the only
- * executable input. Anything else fails closed.
+ * Revalidates the selected route immediately before execution. The router
+ * rotates opaque quoteIds on every /v1/quotes call even for identical
+ * economics (verified against production: same intent returns same amounts
+ * with a fresh id), so the match is by route economics — provider, chains,
+ * chain-qualified assets, exact input, sender/recipient, slippage, and quoted
+ * outputs — not by opaque id. The returned fresh quote (which may carry a
+ * newer id and expiry) becomes the only executable input. Anything else fails
+ * closed.
  */
 export function revalidateReviewedQuote(input: {
   freshQuotes: readonly SwapQuote[];
   now: number;
   reviewed: SwapQuote;
 }): SwapQuote {
-  const stillOffered = input.freshQuotes.find((quote) => quote.quoteId === input.reviewed.quoteId);
-  if (!stillOffered) {
+  const economicsMatch = (quote: SwapQuote): boolean => (
+    quote.providerId === input.reviewed.providerId
+    && quote.intent.sourceAsset.chainId === input.reviewed.intent.sourceAsset.chainId
+    && isAddressEqual(quote.intent.sourceAsset.address, input.reviewed.intent.sourceAsset.address)
+    && quote.intent.destinationAsset.chainId === input.reviewed.intent.destinationAsset.chainId
+    && isAddressEqual(quote.intent.destinationAsset.address, input.reviewed.intent.destinationAsset.address)
+    && BigInt(quote.intent.amountIn) === BigInt(input.reviewed.intent.amountIn)
+    && isAddressEqual(quote.intent.sender, input.reviewed.intent.sender)
+    && isAddressEqual(quote.intent.recipient, input.reviewed.intent.recipient)
+    && quote.intent.slippageBps === input.reviewed.intent.slippageBps
+    && BigInt(quote.amountOut) === BigInt(input.reviewed.amountOut)
+    && BigInt(quote.minAmountOut) === BigInt(input.reviewed.minAmountOut)
+  );
+  const candidates = input.freshQuotes.filter(economicsMatch);
+  if (candidates.length === 0) {
+    const sameId = input.freshQuotes.some((quote) => quote.quoteId === input.reviewed.quoteId);
+    if (sameId) {
+      throw new Error("The reviewed route changed while revalidating. Review the refreshed quotes again.");
+    }
     throw new Error("The reviewed route is no longer offered. Choose a route and review again.");
   }
-  if (!quoteFresh(stillOffered, input.now)) {
+  const freshCandidates = candidates.filter((quote) => quoteFresh(quote, input.now));
+  if (freshCandidates.length === 0) {
     throw new Error("The reviewed quote expired before execution. Refresh the estimates.");
   }
-  if (
-    stillOffered.providerId !== input.reviewed.providerId
-    || stillOffered.intent.sourceAsset.chainId !== input.reviewed.intent.sourceAsset.chainId
-    || !isAddressEqual(stillOffered.intent.sourceAsset.address, input.reviewed.intent.sourceAsset.address)
-    || stillOffered.intent.destinationAsset.chainId !== input.reviewed.intent.destinationAsset.chainId
-    || !isAddressEqual(stillOffered.intent.destinationAsset.address, input.reviewed.intent.destinationAsset.address)
-    || BigInt(stillOffered.intent.amountIn) !== BigInt(input.reviewed.intent.amountIn)
-    || !isAddressEqual(stillOffered.intent.recipient, input.reviewed.intent.recipient)
-    || BigInt(stillOffered.amountOut) !== BigInt(input.reviewed.amountOut)
-    || BigInt(stillOffered.minAmountOut) !== BigInt(input.reviewed.minAmountOut)
-  ) {
-    throw new Error("The reviewed route changed while revalidating. Review the refreshed quotes again.");
+  // Prefer the exact re-issued id when the router kept it; otherwise the
+  // first fresh candidate carries the same economics with a rotated id.
+  const sameId = freshCandidates.find((quote) => quote.quoteId === input.reviewed.quoteId);
+  if (sameId !== undefined) return sameId;
+  const first = freshCandidates[0];
+  if (first === undefined) {
+    throw new Error("The reviewed route is no longer offered. Choose a route and review again.");
   }
-  return stillOffered;
+  return first;
 }
 
 export type RoutedApprovalPlan = {
@@ -134,6 +151,7 @@ export type RoutedSubmission = {
   approval: RoutedApprovalPlan | null;
   chainId: number;
   data: Hex;
+  gas?: bigint;
   to: Address;
   value: bigint;
 };
@@ -174,6 +192,7 @@ export function buildRoutedSubmission(input: { account: Address; prepared: SwapR
       approval: null,
       chainId: transaction.chainId,
       data: transaction.data,
+      ...(transaction.gas !== undefined ? { gas: BigInt(transaction.gas) } : {}),
       to: transaction.to,
       value: BigInt(transaction.value),
     };
@@ -199,6 +218,7 @@ export function buildRoutedSubmission(input: { account: Address; prepared: SwapR
     approval: { amount, owner: approval.owner, spender: approval.spender, token: approval.token },
     chainId: transaction.chainId,
     data: transaction.data,
+    ...(transaction.gas !== undefined ? { gas: BigInt(transaction.gas) } : {}),
     to: transaction.to,
     value: 0n,
   };

@@ -3,6 +3,7 @@ import {
   prepareRoutedSwap,
   requestSwapExecutionStatus,
   requestSwapQuotes,
+  requestSwapQuotesWithDiagnostics,
   routedSwapQueryDefaults,
 } from "./client";
 import { SwapRouterApiError } from "./errors";
@@ -143,6 +144,50 @@ describe("requestSwapQuotes", () => {
 
     await expect(requestSwapQuotes({ intent: intentInput }))
       .rejects.toMatchObject({ code: "RESPONSE_MISMATCH" });
+  });
+});
+
+describe("requestSwapQuotesWithDiagnostics", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("returns quotes alongside per-provider diagnostics", async () => {
+    stubFetch({
+      quotes: [sameChainQuote],
+      diagnostics: [{ providerId: "0x", code: "UPSTREAM_UNAVAILABLE", message: "upstream provider is unavailable" }],
+    });
+
+    const result = await requestSwapQuotesWithDiagnostics({ intent: intentInput });
+
+    expect(result.quotes).toHaveLength(1);
+    expect(result.diagnostics).toEqual([
+      { providerId: "0x", code: "UPSTREAM_UNAVAILABLE", message: "upstream provider is unavailable" },
+    ]);
+  });
+
+  it("defaults diagnostics to an empty list on older router builds", async () => {
+    stubFetch({ quotes: [sameChainQuote] });
+
+    const result = await requestSwapQuotesWithDiagnostics({ intent: intentInput });
+
+    expect(result).toEqual({ diagnostics: [], quotes: [sameChainQuote] });
+  });
+
+  it("carries envelope details on errors for per-provider display", async () => {
+    stubFetch({
+      error: {
+        code: "NO_QUOTES",
+        message: "no provider could quote this swap",
+        details: [{ path: "providers.lifi", message: "NO_LIQUIDITY: no route for this market" }],
+      },
+    }, 422);
+
+    const error = await requestSwapQuotesWithDiagnostics({ intent: intentInput }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(SwapRouterApiError);
+    expect(error).toMatchObject({
+      code: "NO_QUOTES",
+      details: [{ path: "providers.lifi", message: "NO_LIQUIDITY: no route for this market" }],
+    });
   });
 });
 

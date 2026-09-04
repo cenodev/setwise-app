@@ -1,5 +1,6 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
+import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { setwiseTestnetChainId } from "../config/chains";
 import { LegacyRedirect } from "./LegacyRedirect";
 import { AppShell } from "./AppShell";
@@ -15,6 +16,25 @@ import { AssetDetailPage } from "../pages/AssetDetailPage";
 import { AssetsPage } from "../pages/AssetsPage";
 import { PortfolioPage } from "../pages/PortfolioPage";
 import { SetsPage } from "../pages/SetsPage";
+
+export function SwapTabs() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const value = location.pathname.startsWith("/swap/routed") ? "routed" : "set";
+  return (
+    <TabList
+      value={value}
+      onChange={(next) => {
+        if (next === "routed") void navigate("/swap/routed");
+        else void navigate("/swap");
+      }}
+      hasDivider
+    >
+      <Tab value="set" label="Set swap" />
+      <Tab value="routed" label="Market swap" />
+    </TabList>
+  );
+}
 
 export function App() {
   return (
@@ -38,6 +58,7 @@ export function App() {
               <h1>Swap assets</h1>
               <p>Exchange supported Set assets using exact-input or exact-output quotes on BSC Testnet.</p>
             </header>
+            <SwapTabs />
             <WalletGate sourceChainId={setwiseTestnetChainId}><SwapPage /></WalletGate>
             <aside className="disclosure" role="note">
               <strong>Testnet only.</strong> Contracts are unaudited, tokenized assets carry issuer and market risk, and this is not investment advice.
@@ -51,6 +72,7 @@ export function App() {
               <h1>Swap into a market</h1>
               <p>Spend a canonical stablecoin on a supported network and acquire one explicitly selected issuer market. Routes are revalidated immediately before your wallet opens.</p>
             </header>
+            <SwapTabs />
             <RoutedSwapPage />
             <aside className="disclosure" role="note">
               <strong>Non-custodial execution.</strong> Your wallet signs the approval and source transaction; Setwise never custodies keys or broadcasts for you. Tokenized assets carry issuer and market risk, and this is not investment advice.

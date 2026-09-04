@@ -118,6 +118,16 @@ export const swapQuoteSchema = z.object({
 
 export const quoteListSchema = z.object({
   quotes: z.array(swapQuoteSchema),
+  /**
+   * Per-provider notes attached to successful quote responses (for example a
+   * provider that was skipped while others quoted). Absent on older router
+   * builds; never identifies money, display-only.
+   */
+  diagnostics: z.array(z.object({
+    providerId: providerIdSchema,
+    code: z.string().min(1),
+    message: z.string(),
+  })).optional(),
 });
 
 /** ERC-20 approval required before a token swap; null for native asset swaps. */
@@ -252,6 +262,7 @@ export type RouteStepKind = z.infer<typeof routeStepKindSchema>;
 export type RouteStep = z.infer<typeof routeStepSchema>;
 export type SwapQuote = z.infer<typeof swapQuoteSchema>;
 export type QuoteList = z.infer<typeof quoteListSchema>;
+export type QuoteDiagnostic = NonNullable<QuoteList["diagnostics"]>[number];
 export type Approval = z.infer<typeof approvalSchema>;
 export type PreparedTransaction = z.infer<typeof preparedTransactionSchema>;
 export type SwapResponse = z.infer<typeof swapResponseSchema>;

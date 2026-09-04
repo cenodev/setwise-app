@@ -12,6 +12,7 @@ import {
   swapExecutionStatusResponseSchema,
   swapResponseSchema,
   type Capabilities,
+  type QuoteDiagnostic,
   type SwapExecutionStatus,
   type SwapIntent,
   type SwapQuote,
@@ -66,6 +67,7 @@ async function requestJson<T>(
       parsed.success ? parsed.data.error.code : swapRouterClientErrorCodes.httpError,
       parsed.success ? parsed.data.error.message : `Swap router returned ${response.status}`,
       response.status,
+      parsed.success ? (parsed.data.error.details ?? []) : [],
     );
   }
   const parsed = schema.safeParse(json);
@@ -98,14 +100,25 @@ function normalizeIntent(input: SwapIntentInput): SwapIntent {
  * POST /v1/quotes — ranked normalized quotes for an exact-input intent.
  * Quotes that do not preserve the requested identity are rejected, so a
  * partial or confused provider response fails closed instead of surfacing a
- * quote for different money.
+ * quote for different money. Provider diagnostics ride along for display so
+ * the UI can explain partial coverage (for example one provider down while
+ * another quoted).
  */
 export async function requestSwapQuotes(input: {
   intent: SwapIntentInput;
   signal?: AbortSignal;
 }): Promise<SwapQuote[]> {
+  const { quotes } = await requestSwapQuotesWithDiagnostics(input);
+  return quotes;
+}
+
+/** Same as {@link requestSwapQuotes} but also returns per-provider diagnostics. */
+export async function requestSwapQuotesWithDiagnostics(input: {
+  intent: SwapIntentInput;
+  signal?: AbortSignal;
+}): Promise<{ quotes: SwapQuote[]; diagnostics: QuoteDiagnostic[] }> {
   const intent = normalizeIntent(input.intent);
-  const { quotes } = await requestJson("/v1/quotes", quoteListSchema, {
+  const { diagnostics, quotes } = await requestJson("/v1/quotes", quoteListSchema, {
     method: "POST",
     body: JSON.stringify({ intent }),
     signal: input.signal,
@@ -113,7 +126,7 @@ export async function requestSwapQuotes(input: {
   for (const quote of quotes) {
     assertQuotePreservesIntent(quote, intent);
   }
-  return quotes;
+  return { diagnostics: diagnostics ?? [], quotes };
 }
 
 /**

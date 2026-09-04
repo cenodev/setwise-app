@@ -12,6 +12,8 @@ import {
   formatRoutedOutput,
   isNoRouteError,
   isSameChainQuote,
+  providerFailureNotes,
+  quoteErrorProviderNotes,
   quoteFresh,
   quoteSecondsRemaining,
   routedAmountError,
@@ -191,5 +193,35 @@ describe("fixture alignment", () => {
     expect(intent.amountIn).toBe(crossChainIntent.amountIn);
     expect(intent.destinationAsset).toEqual(crossChainIntent.destinationAsset);
     expect(intent.sourceAsset).toEqual(crossChainIntent.sourceAsset);
+  });
+});
+
+describe("provider failure notes", () => {
+  it("humanizes quote diagnostics per provider without duplicating providers", () => {
+    expect(providerFailureNotes([
+      { providerId: "0x", code: "UPSTREAM_UNAVAILABLE", message: "upstream provider is unavailable" },
+      { providerId: "lifi", code: "NO_LIQUIDITY", message: "NO_LIQUIDITY: no route for this market" },
+      { providerId: "lifi", code: "NO_LIQUIDITY", message: "duplicate" },
+    ])).toEqual([
+      { providerId: "0x", reason: "temporarily unavailable" },
+      { providerId: "lifi", reason: "no route for this market right now" },
+    ]);
+  });
+
+  it("extracts per-provider reasons from error envelope details", () => {
+    const error = new SwapRouterApiError("NO_QUOTES", "no provider could quote this swap", 422, [
+      { path: "providers.0x", message: "UPSTREAM_UNAVAILABLE: upstream provider is unavailable" },
+      { path: "providers.lifi", message: "NO_LIQUIDITY: LI.FI found no route" },
+      { path: "intent.amountIn", message: "ignored: not a provider path" },
+    ]);
+    expect(quoteErrorProviderNotes(error)).toEqual([
+      { providerId: "0x", reason: "temporarily unavailable" },
+      { providerId: "lifi", reason: "no route for this market right now" },
+    ]);
+  });
+
+  it("returns no notes for errors without provider detail", () => {
+    expect(quoteErrorProviderNotes(new SwapRouterApiError("NETWORK_ERROR", "down", 0))).toEqual([]);
+    expect(quoteErrorProviderNotes(new Error("boom"))).toEqual([]);
   });
 });
