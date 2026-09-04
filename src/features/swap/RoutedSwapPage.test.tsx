@@ -11,9 +11,9 @@ import { partialProviderCapabilities, swapRouterCapabilities } from "../../data/
 const wallet = "0x2000000000000000000000000000000000000000";
 const ETHEREUM_USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const EXECUTOR = "0x9000000000000000000000000000000000000009" as const;
-const SOURCE_HASH = `0x${"ab".repeat(32)}` as `0x${string}`;
-const APPROVAL_HASH = `0x${"bb".repeat(32)}` as `0x${string}`;
-const DESTINATION_HASH = `0x${"cd".repeat(32)}` as `0x${string}`;
+const SOURCE_HASH: `0x${string}` = `0x${"ab".repeat(32)}`;
+const APPROVAL_HASH: `0x${string}` = `0x${"bb".repeat(32)}`;
+const DESTINATION_HASH: `0x${string}` = `0x${"cd".repeat(32)}`;
 const nvdaBase = "0xAbC0000000000000000000000000000000000001";
 const nvdaOmegaEthereum = "0xAbC0000000000000000000000000000000000002";
 const nvdaBackedEthereum = "0xAbC0000000000000000000000000000000000003";
@@ -133,7 +133,7 @@ function statusFixture(state: SwapExecutionStatus["state"]): SwapExecutionStatus
     intent: {
       amountIn: "25000000",
       destinationAsset: { address: nvdaBackedEthereum, chainId: 1 },
-      recipient: wallet as `0x${string}`,
+      recipient: wallet,
       slippageBps: 50,
       sourceAsset: { address: ETHEREUM_USDC, chainId: 1 },
     },
@@ -186,7 +186,7 @@ beforeEach(() => {
   mocks.getSwapRouterCapabilities.mockResolvedValue(swapRouterCapabilities);
   mocks.requestSwapQuotes.mockResolvedValue([routedQuote()]);
   mocks.requestSwapExecutionStatus.mockResolvedValue(statusFixture("confirmed"));
-  mocks.prepareRoutedSwap.mockImplementation(async ({ quote }: { quote: SwapQuote }) => ({
+  mocks.prepareRoutedSwap.mockImplementation(({ quote }: { quote: SwapQuote }) => Promise.resolve({
     approval: {
       amount: quote.intent.amountIn,
       chainId: quote.intent.sourceAsset.chainId,
@@ -476,7 +476,8 @@ describe("route execution", () => {
   function executedRouteRecord() {
     const [record] = readActivity();
     if (!record || record.operation !== "swap" || !record.routed) throw new Error("no routed record");
-    return record;
+    const routed = record.routed;
+    return { ...record, routed };
   }
 
   async function executeFromReview() {
@@ -493,9 +494,11 @@ describe("route execution", () => {
     await executeFromReview();
     await waitFor(() => expect(mocks.prepareRoutedSwap).toHaveBeenCalledTimes(1), { timeout: 4_000 });
     // The exact reviewed route was revalidated immediately before the wallet opened.
-    expect(mocks.requestSwapQuotes).toHaveBeenLastCalledWith({
-      intent: expect.objectContaining({ amountIn: "25000000", recipient: wallet }),
-    });
+    const revalidationRequest = mocks.requestSwapQuotes.mock.lastCall?.[0];
+    expect(revalidationRequest?.intent).toEqual(expect.objectContaining({
+      amountIn: "25000000",
+      recipient: wallet,
+    }));
     expect(mocks.writeContractAsync).toHaveBeenCalledWith(expect.objectContaining({
       functionName: "approve",
       args: [EXECUTOR, 25_000_000n],
@@ -552,14 +555,15 @@ describe("route execution", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review route" }));
     const confirm = await screen.findByRole("button", { name: "Confirm and execute route" });
     // The wallet drifts mid-execution during the revalidation request.
-    mocks.requestSwapQuotes.mockImplementationOnce(async () => {
+    mocks.requestSwapQuotes.mockImplementationOnce(() => {
       mocks.account = { address: wallet, chainId: 56 };
       view.rerender();
-      return [routedQuote()];
+      return Promise.resolve([routedQuote()]);
     });
-    mocks.switchChainAsync.mockImplementation(async () => {
+    mocks.switchChainAsync.mockImplementation(() => {
       mocks.account = { address: wallet, chainId: 1 };
       view.rerender();
+      return Promise.resolve();
     });
     fireEvent.click(confirm);
     await waitFor(() => expect(mocks.switchChainAsync).toHaveBeenCalledWith({ chainId: 1 }), { timeout: 4_000 });
@@ -592,7 +596,7 @@ describe("route execution", () => {
   });
 
   it("refuses to approve a target that is not the prepared transaction target", async () => {
-    mocks.prepareRoutedSwap.mockImplementation(async ({ quote }: { quote: SwapQuote }) => ({
+    mocks.prepareRoutedSwap.mockImplementation(({ quote }: { quote: SwapQuote }) => Promise.resolve({
       approval: {
         amount: quote.intent.amountIn,
         chainId: quote.intent.sourceAsset.chainId,

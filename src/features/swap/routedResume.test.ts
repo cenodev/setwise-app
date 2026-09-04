@@ -14,8 +14,8 @@ import {
   pollResumableRoutedSwaps,
 } from "./routedResume";
 
-const SOURCE_HASH = `0x${"c".repeat(64)}` as `0x${string}`;
-const DESTINATION_HASH = `0x${"d".repeat(64)}` as `0x${string}`;
+const SOURCE_HASH: `0x${string}` = `0x${"c".repeat(64)}`;
+const DESTINATION_HASH: `0x${string}` = `0x${"d".repeat(64)}`;
 
 function memoryStorage() {
   const values = new Map<string, string>();

@@ -12,8 +12,8 @@ import {
   saveActivity,
 } from "./store";
 
-const SOURCE_HASH = `0x${"c".repeat(64)}` as `0x${string}`;
-const DESTINATION_HASH = `0x${"d".repeat(64)}` as `0x${string}`;
+const SOURCE_HASH: `0x${string}` = `0x${"c".repeat(64)}`;
+const DESTINATION_HASH: `0x${string}` = `0x${"d".repeat(64)}`;
 
 function routedTracking() {
   return {
@@ -181,19 +181,21 @@ describe("local activity store", () => {
     markRoutedSwapLifecycle(routed.id, "destination-pending", {}, storage);
     markRoutedSwapLifecycle(routed.id, "delivered", { destinationHash: DESTINATION_HASH }, storage);
 
-    expect(readActivity(storage)).toEqual([expect.objectContaining({
+    const [stored] = readActivity(storage);
+    expect(stored).toEqual(expect.objectContaining({
       hash: SOURCE_HASH,
-      routed: expect.objectContaining({
-        destinationChainId: 56,
-        destinationHash: DESTINATION_HASH,
-        lifecycle: "delivered",
-        quoteId: sameChainQuote.quoteId,
-        routeProvider: sameChainQuote.providerId,
-        sourceChainId: 56,
-      }),
       status: "success",
       submitted: true,
-    })]);
+    }));
+    if (!stored || stored.operation !== "swap" || !stored.routed) throw new Error("missing routed record");
+    expect(stored.routed).toEqual(expect.objectContaining({
+      destinationChainId: 56,
+      destinationHash: DESTINATION_HASH,
+      lifecycle: "delivered",
+      quoteId: sameChainQuote.quoteId,
+      routeProvider: sameChainQuote.providerId,
+      sourceChainId: 56,
+    }));
   });
 
   it("never marks settled-out routed states as receipt of the output", () => {

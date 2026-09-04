@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAppKit } from "@reown/appkit/react";
@@ -188,6 +188,7 @@ export function RoutedSwapPage() {
   const { sendTransactionAsync } = useSendTransaction();
   const { writeContractAsync } = useWriteContract();
   const online = useOnlineStatus();
+  const queryClient = useQueryClient();
   const tokenCatalogQuery = useTokenCatalog();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -500,8 +501,8 @@ export function RoutedSwapPage() {
 
   // ——— Execution ———————————————————————————————————————————————————
   const refreshAfterSettlement = useCallback(() => {
-    void balanceQuery.refetch();
-  }, [balanceQuery.refetch]);
+    void queryClient.invalidateQueries({ queryKey: ["routed-swap-source-balance", sourceChainId] });
+  }, [queryClient, sourceChainId]);
 
   function waitForWalletChain(target: number): Promise<boolean> {
     return new Promise((resolve) => {
@@ -638,7 +639,7 @@ export function RoutedSwapPage() {
           value: submission.value,
         });
       } catch (simulationError) {
-        throw new Error(routedSimulationErrorMessage(simulationError));
+        throw new Error(routedSimulationErrorMessage(simulationError), { cause: simulationError });
       }
       executionWindowGuard(address, freshQuote);
       if (!quoteFresh(freshQuote, Date.now())) {
