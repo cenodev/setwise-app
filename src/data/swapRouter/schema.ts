@@ -175,10 +175,18 @@ export const capabilitiesSchema = z.object({
 
 /**
  * Provider-neutral execution lifecycle for a submitted swap. Terminal states
- * are `confirmed`, `expired`, `refunded`, and `failed`; any other shape fails
- * closed at this boundary.
+ * are `confirmed`, `partially_delivered`, `expired`, `refunded`, and `failed`;
+ * any other shape fails closed at this boundary. A partial delivery is its own
+ * terminal state so the app never presents a partial fill as full receipt.
  */
-export const swapExecutionStateSchema = z.enum(["pending", "confirmed", "expired", "refunded", "failed"]);
+export const swapExecutionStateSchema = z.enum([
+  "pending",
+  "confirmed",
+  "partially_delivered",
+  "expired",
+  "refunded",
+  "failed",
+]);
 
 export const swapExecutionTransactionSchema = z.object({
   chainId: chainIdSchema,
@@ -191,6 +199,12 @@ export const swapExecutionStatusSchema = z.object({
   intent: swapIntentSchema,
   state: swapExecutionStateSchema,
   transaction: swapExecutionTransactionSchema.nullable(),
+  /**
+   * Optional destination-leg settlement evidence reported by the route
+   * provider once the bridged delivery has its own transaction. Absent while
+   * the leg is in flight or when a provider cannot expose it.
+   */
+  destinationTransaction: swapExecutionTransactionSchema.nullable().optional(),
   detail: z.string().nullable(),
   updatedAt: isoDateTimeSchema,
 });

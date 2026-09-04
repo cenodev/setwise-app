@@ -122,4 +122,8 @@ export function assertStatusPreservesQuote(status: SwapExecutionStatus, quote: S
   if (status.transaction !== null && status.transaction.chainId !== quote.intent.sourceAsset.chainId) {
     throw mismatch("Execution status transaction targets a different chain than the source asset");
   }
+  if (status.destinationTransaction != null
+    && status.destinationTransaction.chainId !== quote.intent.destinationAsset.chainId) {
+    throw mismatch("Execution status destination transaction targets a different chain than the destination asset");
+  }
 }

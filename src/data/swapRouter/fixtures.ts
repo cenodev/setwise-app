@@ -28,6 +28,7 @@ import {
 export const FIXTURE_SENDER = "0x4000000000000000000000000000000000000000";
 export const FIXTURE_EXECUTOR = "0x9000000000000000000000000000000000000009";
 export const FIXTURE_TX_HASH: Hex = `0x${"ab".repeat(32)}`;
+export const FIXTURE_DESTINATION_HASH: Hex = `0x${"cd".repeat(32)}`;
 
 const BSC_USDC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
 const BSC_USDT = "0x55d398326f99059fF775485246999027B3197955";
@@ -205,6 +206,12 @@ const statusBase = {
 
 const submittedTransaction = { chainId: 56, hash: FIXTURE_TX_HASH } as const;
 
+const crossChainStatusBase = {
+  providerId: crossChainQuote.providerId,
+  quoteId: crossChainQuote.quoteId,
+  intent: crossChainIntent,
+} as const;
+
 export const pendingStatus: SwapExecutionStatus = swapExecutionStatusSchema.parse({
   ...statusBase,
   state: "pending",
@@ -219,6 +226,28 @@ export const confirmedStatus: SwapExecutionStatus = swapExecutionStatusSchema.pa
   transaction: submittedTransaction,
   detail: null,
   updatedAt: "2026-07-19T12:02:00.000Z",
+});
+
+/**
+ * Cross-chain delivery with destination-leg evidence: the source transaction
+ * confirmed and the provider reported the bridged delivery transaction on the
+ * destination chain.
+ */
+export const confirmedWithDestinationStatus: SwapExecutionStatus = swapExecutionStatusSchema.parse({
+  ...crossChainStatusBase,
+  state: "confirmed",
+  transaction: { chainId: 1, hash: FIXTURE_TX_HASH },
+  destinationTransaction: { chainId: 56, hash: FIXTURE_DESTINATION_HASH },
+  detail: null,
+  updatedAt: "2026-07-19T12:04:00.000Z",
+});
+
+export const partiallyDeliveredStatus: SwapExecutionStatus = swapExecutionStatusSchema.parse({
+  ...statusBase,
+  state: "partially_delivered",
+  transaction: submittedTransaction,
+  detail: "Route delivered 60% of the guaranteed minimum before the leg closed",
+  updatedAt: "2026-07-19T12:02:40.000Z",
 });
 
 export const expiredStatus: SwapExecutionStatus = swapExecutionStatusSchema.parse({
@@ -244,3 +273,18 @@ export const failedStatus: SwapExecutionStatus = swapExecutionStatusSchema.parse
   detail: "Transaction reverted onchain",
   updatedAt: "2026-07-19T12:02:30.000Z",
 });
+
+/** Destination evidence pointing at the wrong chain must fail closed. */
+export const destinationMismatchedStatus: SwapExecutionStatus = {
+  ...confirmedWithDestinationStatus,
+  destinationTransaction: { chainId: 8453, hash: FIXTURE_DESTINATION_HASH },
+};
+
+/** Provider outage envelope surfaced while settlement tracking is active. */
+export const providerOutageErrorEnvelope = {
+  error: {
+    code: "PROVIDER_UNAVAILABLE",
+    message: "route provider is temporarily unreachable",
+    requestId: "req-fixture-outage",
+  },
+} as const;
