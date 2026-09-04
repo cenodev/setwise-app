@@ -11,7 +11,7 @@ describe("resolveRuntimeConfig", () => {
     expect(config.walletConfigured).toBe(false);
     expect(config.reownProjectId).toBeNull();
     expect(config.rfqApiUrl).toBe("https://setwise-rfq-api.datadex.workers.dev");
-    expect(config.swapRouterApiUrl).toBe("http://localhost:8787");
+    expect(config.swapRouterApiUrl).toBe("https://setwise-swap-router.datadex.workers.dev");
     expect(config.tokenListUrl).toBe("https://raw.githubusercontent.com/cenodev/setwise-token-list/main/data/token-list.json");
   });
 

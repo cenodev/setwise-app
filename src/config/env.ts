@@ -70,7 +70,7 @@ export function resolveRuntimeConfig(
     ),
     swapRouterApiUrl: normalizeUrl(
       env.VITE_SWAP_ROUTER_API_URL,
-      "http://localhost:8787",
+      "https://setwise-swap-router.datadex.workers.dev",
     ),
     tokenListUrl: normalizeUrl(
       env.VITE_TOKEN_LIST_URL,

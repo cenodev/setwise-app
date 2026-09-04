@@ -28,11 +28,12 @@ setwise-swap-router ── normalizes, ranks, policy-checks ──▶ versioned 
   chain, carrying native value only for native inputs. Any mismatch throws `RESPONSE_MISMATCH` — the flow fails
   closed rather than executing against different money than the user reviewed.
 - **Status shape fails closed.** Execution status is provider-neutral: `pending`, plus the terminal
-  `confirmed`, `expired`, `refunded`, and `failed`. Unknown states or a transaction on the wrong chain are
-  rejected before they can reach activity tracking.
+  `confirmed`, `partially_delivered`, `expired`, `refunded`, and `failed`. Unknown states or a transaction on
+  the wrong chain (source or destination evidence) are rejected before they can reach activity tracking.
 - **No credentials in the browser.** The only swap-router environment variable is `VITE_SWAP_ROUTER_API_URL` —
-  a base URL, defaulting to the local `wrangler dev` origin (`http://localhost:8787`). Provider API keys live
-  only in the router service as Worker secrets and must never be added to `VITE_*` variables.
+  a base URL, defaulting to the deployed `setwise-swap-router.datadex.workers.dev` Worker; point it at
+  `http://localhost:8787` when running the router with `wrangler dev`. Provider API keys live only in the
+  router service as Worker secrets and must never be added to `VITE_*` variables.
 
 ## Modules (`src/data/swapRouter`)
 
@@ -69,14 +70,14 @@ consumers pair `swapRouterQueryKeys` with `routedSwapQueryDefaults` (`staleTime:
 ## Fixtures
 
 `fixtures.ts` provides deterministic, import-time-validated fixtures: same-chain and cross-chain quotes, a
-prepared swap, full and partial-provider capabilities, no-route and expired error envelopes, malformed payloads,
-and all five execution statuses. App tests exercise routed swaps entirely against these fixtures; no live
-router or provider credentials are required.
+prepared swap, full and partial-provider capabilities, no-route, expired, and provider-outage error envelopes,
+malformed payloads, and the full execution-status set including partial delivery and destination evidence. App
+tests exercise routed swaps entirely against these fixtures; no live router or provider credentials are required.
 
 ## The routed swap page (`/swap/routed`)
 
-`src/features/swap/RoutedSwapPage.tsx` is the first UI consumer of the router contract. It stops at **route
-review**: quotes are requested, compared, and reviewed — approval and submission arrive in a separate change.
+`src/features/swap/RoutedSwapPage.tsx` is the first UI consumer of the router contract: it quotes, compares,
+reviews, and then executes the route from the user's wallet, tracking cross-chain settlement afterwards.
 
 - **Selection.** The user picks a source chain (any of the four routed networks; chains without an approved
   canonical stablecoin or without router support are visible but disabled), a canonical stablecoin (USDC or
@@ -98,9 +99,32 @@ review**: quotes are requested, compared, and reviewed — approval and submissi
   `getWalletNetworkRequirement` semantics), a known sufficient stablecoin balance, and a fresh,
   draft-matching quote. Editing the amount, wallet, source chain, stablecoin, or destination market
   invalidates the executable state.
+- **Execution (`routedExecution.ts`).** Confirming a review re-requests the route and requires the exact
+  reviewed quote to still be offered with identical economics (`revalidateReviewedQuote`); expired,
+  no-longer-offered, or re-issued-but-different quotes block execution. The prepared swap is then rebuilt into
+  the only wallet-eligible submission (`buildRoutedSubmission`): the wallet account must equal the intent
+  recipient, the transaction must target the source chain, value must match the input mode, and — for token
+  inputs — the normalized approval spender must equal the prepared transaction target, scoped to the reviewed
+  token and sender, for exactly the input amount. No buffer, no unlimited allowance, and the transaction target
+  is never approved by assumption. Immediately before the wallet opens and after every await, an execution-window
+  guard rechecks connectivity, account, chain, and quote freshness; the wallet is switched back to the source
+  chain if it drifted.
+- **Submission and settlement.** The exact approval (only when the on-chain allowance is short) and one
+  source-chain transaction are signed by the user's wallet via wagmi; the app never custodies keys or
+  broadcasts. The prepared transaction is simulated (`eth_call`) after approval, before submission. After
+  source confirmation, `mapExecutionStatus` polls `POST /v1/swaps/status` and maps states onto the local
+  lifecycle — only `confirmed` is receipt; post-submission `expired` is surfaced as unknown with the provider
+  detail. A provider outage keeps the record resumable (`unknown`) and polling.
+- **Activity evidence.** Routed swaps extend the swap activity record with an optional routed payload (route
+  provider, quote identity and verbatim quote, source/destination chains, approval/destination hashes, and the
+  lifecycle). The lifecycle is forward-only, and only `delivered` maps to a success status, so partial,
+  refunded, failed, and unknown outcomes are never presented as receipt of the destination token — the activity
+  page says so explicitly and links approval, source, and destination transactions to their own chain explorers
+  (`src/config/explorers.ts`). Background tracking resumes automatically app-wide
+  (`src/features/swap/routedResume.ts`) so a reload or navigation keeps settlement moving.
 
 ## Relationship to the Setwise RFQ flow
 
-The swap-router integration is additive. The existing Setwise RFQ client (`src/data/rfq`), its BSC Testnet
-execution path, and the `/swap` pool route are unchanged and remain the only executable Setwise flow; routed
-mainnet swaps build on the multi-chain market foundations in `docs/architecture/multi-chain-markets.md`.
+The swap-router integration is additive. The existing Setwise RFQ client (`src/data/rfq`) and its BSC Testnet
+execution path are unchanged; routed mainnet swaps build on the multi-chain market foundations in
+`docs/architecture/multi-chain-markets.md`.

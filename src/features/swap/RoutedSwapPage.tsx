@@ -1,9 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAppKit } from "@reown/appkit/react";
-import { isAddress } from "viem";
-import { useAccount, usePublicClient, useSwitchChain } from "wagmi";
+import { isAddress, type Address, type Hash } from "viem";
+import { useAccount, usePublicClient, useSendTransaction, useSwitchChain, useWriteContract } from "wagmi";
 
 import { Badge } from "@astryxdesign/core/Badge";
 import { Banner } from "@astryxdesign/core/Banner";
@@ -27,6 +27,7 @@ import {
   routedSwapNetworks,
   type RoutedSwapChainId,
 } from "../../config/chains";
+import { explorerTxUrl } from "../../config/explorers";
 import { runtimeConfig } from "../../config/env";
 import { erc20Abi } from "../../data/chain/abis";
 import {
@@ -38,7 +39,14 @@ import {
 } from "../../data/marketCatalog";
 import { getSourceAssets, type SourceAssetDeployment, type SourceAssetSymbol } from "../../config/sourceAssets";
 import {
+  createSwapActivity,
+  markRoutedSwapLifecycle,
+  saveActivity,
+} from "../activity/store";
+import {
   getSwapRouterCapabilities,
+  prepareRoutedSwap,
+  requestSwapExecutionStatus,
   requestSwapQuotes,
   type SwapIntentInput,
 } from "../../data/swapRouter/client";
@@ -65,10 +73,33 @@ import {
   type RoutedAssetResolver,
   type RoutedChainResolver,
 } from "./routedModel";
+import {
+  assertRoutedExecutionWindow,
+  buildRoutedSubmission,
+  isWalletRejection,
+  lifecycleForExecutionStage,
+  mapExecutionStatus,
+  revalidateReviewedQuote,
+  routedExecutionBusy,
+  routedExecutionErrorMessage,
+  routedRecoveryGuidance,
+  routedSimulationErrorMessage,
+  type RoutedExecutionStage,
+} from "./routedExecution";
 
 type RoutedStage = "editing" | "review";
 
+type RoutedExecutionView = {
+  approvalHash?: Hash;
+  destinationHash?: Hash;
+  error?: string;
+  sourceHash?: Hash;
+  stage: RoutedExecutionStage;
+};
+
 const QUOTE_DEBOUNCE_MS = 450;
+const SETTLEMENT_POLL_INTERVAL_MS = 12_000;
+const CHAIN_SWITCH_TIMEOUT_MS = 15_000;
 
 function currentTimestamp() {
   return Date.now();
@@ -84,6 +115,43 @@ function marketLabel(market: RoutedMarketOption): string {
 
 function marketOptionId(market: RoutedMarketOption): string {
   return `${market.chainId}:${market.address.toLowerCase()}`;
+}
+
+function executionStageTitle(stage: RoutedExecutionStage): string {
+  switch (stage) {
+    case "revalidating": return "Revalidating the reviewed route";
+    case "switching": return "Switching your wallet to the source chain";
+    case "checking": return "Rechecking balances and route state";
+    case "approval-wallet": return "Approve the exact input amount in your wallet";
+    case "approval-confirming": return "Confirming the exact approval on chain";
+    case "simulating": return "Simulating the route before wallet submission";
+    case "wallet": return "Confirm the source transaction in your wallet";
+    case "confirming": return "Confirming the source transaction on chain";
+    case "tracking": return "Tracking destination settlement";
+    case "delivered": return "Route delivered";
+    case "partially-delivered": return "Route partially delivered";
+    case "refunded": return "Route refunded";
+    case "failed": return "Route failed";
+    case "unknown": return "Settlement status unknown";
+    case "rejected": return "Rejected in wallet";
+    case "approval-failed": return "Approval failed";
+    case "expired": return "The reviewed quote expired";
+    case "stale": return "The reviewed route changed";
+    case "error": return "Execution failed";
+  }
+}
+
+function executionStageMessage(stage: RoutedExecutionStage): string | null {
+  switch (stage) {
+    case "revalidating": return "Re-requesting the reviewed route and verifying the exact quote before any wallet request opens.";
+    case "approval-wallet": return "The exact input amount is approved to the verified route spender. Nothing else is approved.";
+    case "approval-confirming": return "Waiting for the exact approval to confirm on chain.";
+    case "wallet": return "One transaction on the source chain, signed only by your wallet. Setwise never custodies keys or broadcasts for you.";
+    case "confirming": return "Waiting for the source transaction to confirm before settlement tracking starts.";
+    case "tracking": return "The source transaction confirmed. Polling the route provider for destination settlement.";
+    case "delivered": return "Both legs are complete. Verify the evidence below in the chain explorers.";
+    default: return null;
+  }
 }
 
 function WalletConnectCard() {
@@ -116,10 +184,18 @@ function WalletConfigCard() {
 
 export function RoutedSwapPage() {
   const { address, chainId: walletChainId } = useAccount();
-  const { switchChain, isPending: switchPending } = useSwitchChain();
+  const { switchChain, switchChainAsync, isPending: switchPending } = useSwitchChain();
+  const { sendTransactionAsync } = useSendTransaction();
+  const { writeContractAsync } = useWriteContract();
   const online = useOnlineStatus();
+  const queryClient = useQueryClient();
   const tokenCatalogQuery = useTokenCatalog();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const connectionRef = useRef({ address, chainId: walletChainId, online });
+  useLayoutEffect(() => {
+    connectionRef.current = { address, chainId: walletChainId, online };
+  }, [address, online, walletChainId]);
 
   const marketCatalog = useMemo<RoutedMarketCatalog>(
     () => createRoutedMarketCatalog(tokenCatalogQuery.data ?? []),
@@ -150,8 +226,15 @@ export function RoutedSwapPage() {
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quoteRefresh, setQuoteRefresh] = useState(0);
   const [stage, setStage] = useState<RoutedStage>("editing");
+  const [execution, setExecution] = useState<RoutedExecutionView | null>(null);
   const [now, setNow] = useState(currentTimestamp);
   const quoteSequence = useRef(0);
+  const tracking = useRef<{ activityId: string | null; quote: SwapQuote | null; sourceHash: Hash | null }>({
+    activityId: null,
+    quote: null,
+    sourceHash: null,
+  });
+  const executing = execution !== null && routedExecutionBusy(execution.stage);
 
   // ——— Capability gates ——————————————————————————————————————————
   const chainEnabledByRouter = useCallback((candidate: number) => {
@@ -260,6 +343,7 @@ export function RoutedSwapPage() {
       ? {
           amountAtomic,
           destinationMarket: selectedMarket,
+          sender: address as `0x${string}`,
           recipient: address as `0x${string}`,
           sourceAsset,
         }
@@ -273,6 +357,8 @@ export function RoutedSwapPage() {
 
   useEffect(() => {
     const sequence = ++quoteSequence.current;
+    // Execution owns the route identity; freeze quote refresh until it ends.
+    if (executing) return;
     if (!online || !draft) {
       const reset = window.setTimeout(() => {
         setQuoteLoading(false);
@@ -316,7 +402,7 @@ export function RoutedSwapPage() {
       window.clearTimeout(loadingTimer);
       window.clearTimeout(requestTimer);
     };
-  }, [currentRequestKey, draft, online, quoteRefresh]);
+  }, [currentRequestKey, draft, executing, online, quoteRefresh]);
 
   useEffect(() => {
     if (!quotes || quotes.length === 0) return;
@@ -327,10 +413,15 @@ export function RoutedSwapPage() {
   const clearExecutable = useCallback(() => {
     if (stage !== "review") return;
     setStage("editing");
-  }, [stage]);
+    if (!executing) {
+      tracking.current = { activityId: null, quote: null, sourceHash: null };
+      setExecution(null);
+    }
+  }, [executing, stage]);
 
-  // ——— Draft editing ————————————————————————————————————————————
+  // ——— Draft editing (frozen while an execution is in flight) ——————————
   function chooseSourceChain(next: string) {
+    if (executing) return;
     const nextChainId = Number(next);
     if (!isRoutedSwapChainId(nextChainId)) return;
     setChosenSourceChainId(nextChainId);
@@ -338,12 +429,14 @@ export function RoutedSwapPage() {
   }
 
   function chooseSourceSymbol(next: string) {
+    if (executing) return;
     if (next !== "USDC" && next !== "USDT") return;
     setSourceSymbolChoice(next);
     clearExecutable();
   }
 
   function chooseUnderlying(next: string) {
+    if (executing) return;
     const firstMarket = eligibleMarkets.find((market) => market.underlying.symbol === next) ?? null;
     setUnderlyingChoice(next);
     if (firstMarket) {
@@ -355,17 +448,20 @@ export function RoutedSwapPage() {
   }
 
   function chooseMarket(market: RoutedMarketOption) {
+    if (executing) return;
     setUnderlyingChoice(market.underlying.symbol);
     setSearchParams({ chain: String(market.chainId), token: market.address }, { replace: true });
     clearExecutable();
   }
 
   function chooseQuote(quoteId: string) {
+    if (executing) return;
     setSelectedQuoteId(quoteId);
     clearExecutable();
   }
 
   function editAmount(next: string) {
+    if (executing) return;
     if (!/^\d*\.?\d*$/.test(next)) return;
     setAmount(next);
     clearExecutable();
@@ -403,6 +499,285 @@ export function RoutedSwapPage() {
             : selectedQuote && !selectedQuoteIsFresh
               ? "The selected estimate expired and is refreshing"
               : amountError ?? null;
+
+  // ——— Execution ———————————————————————————————————————————————————
+  const refreshAfterSettlement = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["routed-swap-source-balance", sourceChainId] });
+  }, [queryClient, sourceChainId]);
+
+  function waitForWalletChain(target: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const startedAt = Date.now();
+      const tick = () => {
+        if (connectionRef.current.chainId === target) {
+          resolve(true);
+          return;
+        }
+        if (Date.now() - startedAt > CHAIN_SWITCH_TIMEOUT_MS) {
+          resolve(false);
+          return;
+        }
+        window.setTimeout(tick, 250);
+      };
+      tick();
+    });
+  }
+
+  function executionWindowGuard(account: Address, quote: SwapQuote) {
+    assertRoutedExecutionWindow({
+      expectedAccount: account,
+      expectedChainId: sourceChainId,
+      now: Date.now(),
+      quote,
+      snapshot: {
+        account: connectionRef.current.address,
+        chainId: connectionRef.current.chainId,
+        online: online && connectionRef.current.online,
+      },
+    });
+  }
+
+  function stageForExecutionError(error: unknown, approving: boolean, submitted: boolean): RoutedExecutionStage {
+    if (approving && !submitted) return "approval-failed";
+    if (isWalletRejection(error)) return "rejected";
+    const message = routedExecutionErrorMessage(error);
+    if (/expired/i.test(message)) return "expired";
+    if (/no longer offered|changed while revalidating|does not preserve|does not match|mismatch/i.test(message)) {
+      return "stale";
+    }
+    return "error";
+  }
+
+  async function executeRoutedSwap() {
+    if (!canReview || !selectedQuote || !address || !sourceAsset || !selectedMarket || !sourceClient) return;
+    const reviewed = selectedQuote;
+    let activityId: string | undefined;
+    let approving = false;
+    let submitted = false;
+    try {
+      setExecution({ stage: "revalidating" });
+
+      // 1. Revalidate the exact reviewed route immediately before any wallet
+      // request opens; expired or mismatched quotes are blocked here.
+      const freshQuotes = await requestSwapQuotes({ intent: reviewed.intent });
+      const freshQuote = revalidateReviewedQuote({ freshQuotes, now: Date.now(), reviewed });
+
+      // 2. Prepare through the router; the client already validates that the
+      // response preserves the exact quote identity.
+      const prepared = await prepareRoutedSwap({ quote: freshQuote });
+      const submission = buildRoutedSubmission({ account: address, prepared });
+      const intent = freshQuote.intent;
+      const requiredAmount = BigInt(intent.amountIn);
+
+      // 3. Align the wallet with the route source chain, then recheck the
+      // execution window, balances, and allowance.
+      if (connectionRef.current.chainId !== sourceChainId) {
+        setExecution({ stage: "switching" });
+        await switchChainAsync({ chainId: sourceChainId });
+        // Re-render so the connection ref observes the wallet's new chain.
+        setExecution({ stage: "switching" });
+        const switched = await waitForWalletChain(sourceChainId);
+        if (!switched) {
+          throw new Error(`The wallet did not switch to ${chainName(sourceChainId)}. Review the route and try again.`);
+        }
+      }
+      executionWindowGuard(address, freshQuote);
+
+      setExecution({ stage: "checking" });
+      const [latestBalance, latestNativeBalance] = await Promise.all([
+        sourceClient.readContract({
+          address: sourceAsset.address,
+          abi: erc20Abi,
+          functionName: "balanceOf",
+          args: [address],
+        }),
+        sourceClient.getBalance({ address }),
+      ]);
+      if (latestBalance < requiredAmount) {
+        throw new Error(`Insufficient ${sourceAsset.symbol} balance at execution time.`);
+      }
+      if (latestNativeBalance <= 0n) {
+        throw new Error("Insufficient native gas balance to submit the route transaction.");
+      }
+
+      // 4. Exact approval only, to the verified route spender, only when the
+      // current allowance is short.
+      let approvalHash: Hash | undefined;
+      if (submission.approval) {
+        const allowance = await sourceClient.readContract({
+          address: submission.approval.token,
+          abi: erc20Abi,
+          functionName: "allowance",
+          args: [address, submission.approval.spender],
+        });
+        if (allowance < requiredAmount) {
+          approving = true;
+          executionWindowGuard(address, freshQuote);
+          setExecution({ stage: "approval-wallet" });
+          approvalHash = await writeContractAsync({
+            account: address,
+            address: submission.approval.token,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [submission.approval.spender, submission.approval.amount],
+          });
+          setExecution({ stage: "approval-confirming", approvalHash });
+          const approvalReceipt = await sourceClient.waitForTransactionReceipt({ hash: approvalHash });
+          if (approvalReceipt.status !== "success") {
+            throw new Error("The exact approval reverted on chain. No funds moved; retry the route to approve again.");
+          }
+          approving = false;
+        }
+      }
+
+      // 5. Simulate the prepared transaction before opening the wallet.
+      setExecution({ stage: "simulating", approvalHash });
+      try {
+        await sourceClient.call({
+          account: address,
+          data: submission.data,
+          to: submission.to,
+          value: submission.value,
+        });
+      } catch (simulationError) {
+        throw new Error(routedSimulationErrorMessage(simulationError), { cause: simulationError });
+      }
+      executionWindowGuard(address, freshQuote);
+      if (!quoteFresh(freshQuote, Date.now())) {
+        throw new Error("The reviewed quote expired while preparing execution. Refresh the estimates.");
+      }
+
+      // 6. Record the route, then submit only from the user wallet.
+      const activity = createSwapActivity({
+        chainId: intent.sourceAsset.chainId,
+        input: { amount: atomicToDecimal(requiredAmount, sourceAsset.decimals), symbol: sourceAsset.symbol },
+        output: {
+          amount: marketDecimalsQuery.data !== undefined
+            ? formatRoutedOutput(freshQuote.amountOut, marketDecimalsQuery.data)
+            : freshQuote.amountOut,
+          symbol: selectedMarket.symbol,
+        },
+        routed: {
+          ...(approvalHash !== undefined ? { approvalHash } : {}),
+          destinationChainId: intent.destinationAsset.chainId,
+          lifecycle: "prepared",
+          quote: freshQuote,
+          quoteId: freshQuote.quoteId,
+          routeProvider: freshQuote.providerId,
+          sourceChainId: intent.sourceAsset.chainId,
+        },
+        status: "pending",
+      });
+      activityId = activity.id;
+      saveActivity(activity);
+      tracking.current = { activityId: activity.id, quote: freshQuote, sourceHash: null };
+
+      executionWindowGuard(address, freshQuote);
+      setExecution({ stage: "wallet", approvalHash });
+      const sourceHash = await sendTransactionAsync({
+        account: address,
+        chainId: submission.chainId,
+        data: submission.data,
+        to: submission.to,
+        value: submission.value,
+      });
+      submitted = true;
+      tracking.current.sourceHash = sourceHash;
+      markRoutedSwapLifecycle(activity.id, "source-submitted", { sourceHash });
+      setExecution({ stage: "confirming", approvalHash, sourceHash });
+
+      const receipt = await sourceClient.waitForTransactionReceipt({ hash: sourceHash });
+      if (receipt.status !== "success") {
+        const message = "The source transaction reverted on chain. The route cannot deliver; review the explorer before retrying.";
+        markRoutedSwapLifecycle(activity.id, "failed", { error: message, sourceHash });
+        tracking.current.activityId = null;
+        setExecution({ stage: "failed", error: message, sourceHash });
+        refreshAfterSettlement();
+        return;
+      }
+      markRoutedSwapLifecycle(activity.id, "destination-pending", { sourceHash });
+      setExecution({ stage: "tracking", approvalHash, sourceHash });
+    } catch (error) {
+      const message = routedExecutionErrorMessage(error);
+      tracking.current.activityId = null;
+      if (activityId !== undefined) {
+        if (!submitted) {
+          markRoutedSwapLifecycle(activityId, "failed", { error: message });
+        }
+        // Already-submitted routes stay resumable; background tracking owns them.
+      }
+      setExecution({
+        error: message,
+        sourceHash: tracking.current.sourceHash ?? undefined,
+        stage: stageForExecutionError(error, approving, submitted),
+      });
+    }
+  }
+
+  // ——— Destination settlement tracking ————————————————————————————
+  useEffect(() => {
+    if (execution?.stage !== "tracking") return;
+    const activityId = tracking.current.activityId;
+    const quote = tracking.current.quote;
+    const sourceHash = tracking.current.sourceHash ?? undefined;
+    if (!activityId || !quote) return;
+    let cancelled = false;
+    let inFlight = false;
+    const settle = async () => {
+      if (inFlight || cancelled) return;
+      inFlight = true;
+      try {
+        const status = await requestSwapExecutionStatus({ quote, transactionHash: sourceHash ?? undefined });
+        if (cancelled) return;
+        const settlement = mapExecutionStatus(status);
+        const detail = settlement.detail ?? undefined;
+        if (settlement.kind === "pending") {
+          markRoutedSwapLifecycle(activityId, settlement.lifecycle, {
+            destinationHash: settlement.destinationHash,
+            providerDetail: detail,
+          });
+          if (settlement.destinationHash !== undefined) {
+            setExecution({ destinationHash: settlement.destinationHash, sourceHash, stage: "tracking" });
+          }
+          return;
+        }
+        markRoutedSwapLifecycle(activityId, settlement.lifecycle, {
+          destinationHash: settlement.destinationHash,
+          error: settlement.lifecycle === "delivered" ? undefined : detail,
+          providerDetail: detail,
+        });
+        tracking.current.activityId = null;
+        cancelled = true;
+        setExecution({ destinationHash: settlement.destinationHash, sourceHash, stage: settlement.lifecycle });
+        refreshAfterSettlement();
+      } catch (trackingError) {
+        if (cancelled) return;
+        // Provider outage: surface the unknown state but keep polling; the
+        // record stays resumable across reloads.
+        markRoutedSwapLifecycle(activityId, "unknown", {
+          providerDetail: routedSwapErrorMessage(trackingError),
+        });
+        setExecution({
+          error: `The route provider could not report settlement yet. Tracking continues. ${routedSwapErrorMessage(trackingError)}`,
+          sourceHash,
+          stage: "tracking",
+        });
+      } finally {
+        inFlight = false;
+      }
+    };
+    void settle();
+    const timer = window.setInterval(() => void settle(), SETTLEMENT_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [execution?.stage, refreshAfterSettlement]);
+
+  function resetExecution() {
+    tracking.current = { activityId: null, quote: null, sourceHash: null };
+    setExecution(null);
+  }
 
   // ——— Quote display resolvers ——————————————————————————————————
   const resolveAsset = useCallback<RoutedAssetResolver>((asset) => {
@@ -481,7 +856,7 @@ export function RoutedSwapPage() {
                 key={network.id}
                 value={String(network.id)}
                 label={network.name}
-                isDisabled={!hasSourceAssets || !enabled}
+                isDisabled={!hasSourceAssets || !enabled || executing}
               />
             ))}
           </SegmentedControl>
@@ -500,7 +875,7 @@ export function RoutedSwapPage() {
               layout="fill"
             >
               {getSourceAssets(sourceChainId).map((asset) => (
-                <SegmentedControlItem key={asset.symbol} value={asset.symbol} label={asset.symbol} />
+                <SegmentedControlItem key={asset.symbol} value={asset.symbol} label={asset.symbol} isDisabled={executing} />
               ))}
             </SegmentedControl>
           </div>
@@ -523,11 +898,12 @@ export function RoutedSwapPage() {
                 inputMode="decimal"
                 placeholder="0.0"
                 value={amount}
+                disabled={executing}
                 onChange={(event) => editAmount(event.target.value)}
               />
               <button
                 type="button"
-                disabled={!balanceKnown || balance === 0n}
+                disabled={executing || !balanceKnown || balance === 0n}
                 onClick={() => editAmount(atomicToDecimal(balance ?? 0n, sourceAsset.decimals))}
               >
                 Max
@@ -550,6 +926,7 @@ export function RoutedSwapPage() {
             value={underlying}
             onChange={chooseUnderlying}
             placeholder="Choose a stock"
+            isDisabled={executing}
           />
           <Selector
             label="Issuer market"
@@ -564,6 +941,7 @@ export function RoutedSwapPage() {
               if (market) chooseMarket(market);
             }}
             placeholder="Choose an issuer market"
+            isDisabled={executing}
           />
           {selectedMarket && (
             <Text type="supporting" color="secondary" className="routed-market-address">
@@ -663,6 +1041,7 @@ export function RoutedSwapPage() {
                     key={quote.quoteId}
                     label={`${quote.providerId}`}
                     isSelected={quote.quoteId === selectedQuoteId}
+                    isDisabled={executing}
                     onClick={() => chooseQuote(quote.quoteId)}
                     startContent={index === 0 ? <Badge label="Best" variant="info" /> : undefined}
                     endContent={(
@@ -713,7 +1092,7 @@ export function RoutedSwapPage() {
                 <VStack gap={3}>
                   <HStack gap={2} vAlign="center" className="routed-review-heading">
                     <Text weight="bold">Review route via {selectedQuote.providerId}</Text>
-                    <Button label="Edit" variant="ghost" size="sm" onClick={() => setStage("editing")} />
+                    <Button label="Edit" variant="ghost" size="sm" isDisabled={executing} onClick={() => { resetExecution(); setStage("editing"); }} />
                   </HStack>
                   <MetadataList columns="multi" label={{ position: "top" }}>
                     <MetadataListItem label="You pay">
@@ -772,15 +1151,111 @@ export function RoutedSwapPage() {
                       {chainName(selectedQuote.intent.destinationAsset.chainId)} is handled by the route.
                     </Text>
                   )}
-                  <Text type="supporting" color="secondary">
-                    Approving the route spender and submitting the swap arrive in a follow-up release. This review is
-                    not executable yet.
-                  </Text>
+                  {execution === null && (
+                    <>
+                      <Text type="supporting" color="secondary">
+                        Executing revalidates this exact route, switches your wallet to the source chain if needed,
+                        approves at most the exact input amount to the verified route spender, and asks your wallet for
+                        one source-chain transaction. Setwise never custodies keys and never broadcasts for you.
+                      </Text>
+                      <Button
+                        label="Confirm and execute route"
+                        variant="primary"
+                        isDisabled={!canReview}
+                        onClick={() => void executeRoutedSwap()}
+                      />
+                      {reviewBlockedReason && <p className="action-reason">{reviewBlockedReason}</p>}
+                    </>
+                  )}
                 </VStack>
               </div>
             )}
 
-            {stage === "review" && selectedQuote && !selectedQuoteIsFresh && (
+            {execution !== null && (
+              <div
+                className={`review-panel routed-execution${executing ? " is-busy" : ""}`}
+                role={executing ? "status" : "alert"}
+                aria-label="Routed swap execution"
+              >
+                <VStack gap={2}>
+                  <Text weight="bold">{executionStageTitle(execution.stage)}</Text>
+                  {executionStageMessage(execution.stage) && (
+                    <Text type="supporting" color="secondary">{executionStageMessage(execution.stage)}</Text>
+                  )}
+                  {(execution.stage === "tracking" || executing) && (
+                    <VStack gap={1}>
+                      <Skeleton height={12} index={0} />
+                      <Skeleton height={12} index={1} />
+                    </VStack>
+                  )}
+                  {execution.error && <div className="error-panel" role="alert">{execution.error}</div>}
+                  {!executing && (() => {
+                    const lifecycle = lifecycleForExecutionStage(execution.stage);
+                    return lifecycle ? (
+                      <Text type="supporting" color="secondary">{routedRecoveryGuidance(lifecycle)}</Text>
+                    ) : null;
+                  })()}
+                  <HStack gap={3} wrap="wrap">
+                    {execution.approvalHash && (() => {
+                      const url = explorerTxUrl(sourceChainId, execution.approvalHash);
+                      return url
+                        ? <a href={url} target="_blank" rel="noreferrer">Approval {truncateAddress(execution.approvalHash)}</a>
+                        : <span>Approval {truncateAddress(execution.approvalHash)}</span>;
+                    })()}
+                    {execution.sourceHash && (() => {
+                      const url = explorerTxUrl(sourceChainId, execution.sourceHash);
+                      return url
+                        ? <a href={url} target="_blank" rel="noreferrer">Source {truncateAddress(execution.sourceHash)}</a>
+                        : <span>Source {truncateAddress(execution.sourceHash)}</span>;
+                    })()}
+                    {execution.destinationHash && (() => {
+                      const destinationChainId = selectedQuote?.intent.destinationAsset.chainId;
+                      const url = destinationChainId !== undefined
+                        ? explorerTxUrl(destinationChainId, execution.destinationHash)
+                        : undefined;
+                      return url
+                        ? <a href={url} target="_blank" rel="noreferrer">Destination {truncateAddress(execution.destinationHash)}</a>
+                        : <span>Destination {truncateAddress(execution.destinationHash)}</span>;
+                    })()}
+                  </HStack>
+                  {execution.stage === "tracking" && (
+                    <Text type="supporting" color="secondary">
+                      Settlement usually completes within the estimated duration. You can leave this page; the history
+                      keeps tracking this route.
+                    </Text>
+                  )}
+                  {!executing && (
+                    <HStack gap={2}>
+                      {(execution.stage === "expired" || execution.stage === "stale") && (
+                        <Button
+                          label="Refresh estimates"
+                          variant="secondary"
+                          onClick={() => {
+                            resetExecution();
+                            setStage("editing");
+                            setQuoteRefresh((value) => value + 1);
+                          }}
+                        />
+                      )}
+                      {execution.stage !== "expired" && execution.stage !== "stale" && (
+                        <Button
+                          label="Start a new route"
+                          variant="secondary"
+                          onClick={() => {
+                            resetExecution();
+                            setStage("editing");
+                            setAmount("");
+                            setQuoteRefresh((value) => value + 1);
+                          }}
+                        />
+                      )}
+                    </HStack>
+                  )}
+                </VStack>
+              </div>
+            )}
+
+            {stage === "review" && selectedQuote && !selectedQuoteIsFresh && execution === null && (
               <div className="warning-panel" role="alert">
                 <span>The reviewed quote expired. Refresh the estimates and review again.</span>
                 <button className="inline-action" type="button" disabled={!online}

@@ -36,6 +36,9 @@ function assertIntentEcho(echoed: SwapIntent, requested: SwapIntent, subject: st
   if (BigInt(echoed.amountIn) !== BigInt(requested.amountIn)) {
     throw mismatch(`${subject} does not preserve the exact input amount`);
   }
+  if (!isAddressEqual(echoed.sender, requested.sender)) {
+    throw mismatch(`${subject} does not preserve the requested sender`);
+  }
   if (!isAddressEqual(echoed.recipient, requested.recipient)) {
     throw mismatch(`${subject} does not preserve the requested recipient`);
   }
@@ -102,7 +105,7 @@ export function assertPreparedSwapPreservesQuote(response: SwapResponse, quote: 
   if (!isAddressEqual(approval.token, intent.sourceAsset.address)) {
     throw mismatch("Approval does not cover the requested source token");
   }
-  if (!isAddressEqual(approval.owner, intent.recipient)) {
+  if (!isAddressEqual(approval.owner, intent.sender)) {
     throw mismatch("Approval owner does not match the swap sender");
   }
   if (BigInt(approval.amount) < BigInt(intent.amountIn)) {
@@ -121,5 +124,9 @@ export function assertStatusPreservesQuote(status: SwapExecutionStatus, quote: S
   assertIntentEcho(status.intent, quote.intent, "Execution status");
   if (status.transaction !== null && status.transaction.chainId !== quote.intent.sourceAsset.chainId) {
     throw mismatch("Execution status transaction targets a different chain than the source asset");
+  }
+  if (status.destinationTransaction != null
+    && status.destinationTransaction.chainId !== quote.intent.destinationAsset.chainId) {
+    throw mismatch("Execution status destination transaction targets a different chain than the destination asset");
   }
 }

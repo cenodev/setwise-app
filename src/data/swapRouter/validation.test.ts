@@ -7,12 +7,16 @@ import {
   assertStatusPreservesQuote,
 } from "./validation";
 import {
+  FIXTURE_DESTINATION_HASH,
   FIXTURE_TX_HASH,
   confirmedStatus,
+  confirmedWithDestinationStatus,
   crossChainIntent,
   crossChainQuote,
+  destinationMismatchedStatus,
   expiredStatus,
   failedStatus,
+  partiallyDeliveredStatus,
   pendingStatus,
   refundedStatus,
   sameChainIntent,
@@ -40,6 +44,7 @@ describe("assertQuotePreservesIntent", () => {
     ["a different destination chain", echoIntent(sameChainQuote, { destinationAsset: { ...sameChainIntent.destinationAsset, chainId: 8453 } })],
     ["a different destination token", echoIntent(sameChainQuote, { destinationAsset: { chainId: 56, address: sameChainIntent.sourceAsset.address } })],
     ["a different input amount", echoIntent(sameChainQuote, { amountIn: "1" })],
+    ["a different sender", echoIntent(sameChainQuote, { sender: otherWallet })],
     ["a different recipient", echoIntent(sameChainQuote, { recipient: otherWallet })],
     ["a different slippage", echoIntent(sameChainQuote, { slippageBps: 100 })],
     ["an inverted route", { ...sameChainQuote, steps: [{ ...sameChainQuote.steps[0], fromAsset: sameChainIntent.destinationAsset, toAsset: sameChainIntent.sourceAsset }] }],
@@ -102,13 +107,26 @@ describe("assertPreparedSwapPreservesQuote", () => {
 
 describe("assertStatusPreservesQuote", () => {
   it.each([
-    ["pending", pendingStatus],
-    ["confirmed", confirmedStatus],
-    ["expired", expiredStatus],
-    ["refunded", refundedStatus],
-    ["failed", failedStatus],
-  ])("accepts the %s status fixture", (_name, status) => {
-    expect(() => assertStatusPreservesQuote(status, sameChainQuote)).not.toThrow();
+    ["pending", pendingStatus, sameChainQuote],
+    ["confirmed", confirmedStatus, sameChainQuote],
+    ["confirmed with destination evidence", confirmedWithDestinationStatus, crossChainQuote],
+    ["partially delivered", partiallyDeliveredStatus, sameChainQuote],
+    ["expired", expiredStatus, sameChainQuote],
+    ["refunded", refundedStatus, sameChainQuote],
+    ["failed", failedStatus, sameChainQuote],
+  ])("accepts the %s status fixture", (_name, status, quote) => {
+    expect(() => assertStatusPreservesQuote(status, quote)).not.toThrow();
+  });
+
+  it("accepts destination evidence only for the exact destination chain", () => {
+    expect(() => assertStatusPreservesQuote({
+      ...confirmedWithDestinationStatus,
+      destinationTransaction: null,
+    }, crossChainQuote)).not.toThrow();
+    expect(() => assertStatusPreservesQuote({
+      ...confirmedWithDestinationStatus,
+      destinationTransaction: undefined,
+    }, crossChainQuote)).not.toThrow();
   });
 
   it.each([
@@ -117,7 +135,24 @@ describe("assertStatusPreservesQuote", () => {
     ["a different recipient", { ...pendingStatus, intent: { ...pendingStatus.intent, recipient: otherWallet } }],
     ["a different input amount", { ...pendingStatus, intent: { ...pendingStatus.intent, amountIn: "1" } }],
     ["a transaction on another chain", { ...pendingStatus, transaction: { chainId: 1, hash: FIXTURE_TX_HASH } }],
+    ["destination evidence on another chain", destinationMismatchedStatus],
+    ["destination evidence for the wrong asset", {
+      ...confirmedWithDestinationStatus,
+      destinationTransaction: { chainId: 1, hash: FIXTURE_DESTINATION_HASH },
+    }],
   ])("rejects %s", (_name, status) => {
     expect(() => assertStatusPreservesQuote(status, sameChainQuote)).toThrowError(expect.objectContaining(mismatched));
+  });
+
+  it("accepts destination evidence matching the cross-chain destination", () => {
+    expect(() => assertStatusPreservesQuote(confirmedWithDestinationStatus, crossChainQuote)).not.toThrow();
+    expect(() => assertStatusPreservesQuote({
+      ...confirmedWithDestinationStatus,
+      destinationTransaction: null,
+    }, crossChainQuote)).not.toThrow();
+    expect(() => assertStatusPreservesQuote({
+      ...confirmedWithDestinationStatus,
+      destinationTransaction: undefined,
+    }, crossChainQuote)).not.toThrow();
   });
 });

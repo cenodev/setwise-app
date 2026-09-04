@@ -16,6 +16,9 @@ import { truncateAddress } from "../../lib/format";
 export type RoutedSwapDraft = Readonly<{
   amountAtomic: bigint;
   destinationMarket: RoutedMarketOption;
+  /** The connected wallet: holds the input funds and signs on the source chain. */
+  sender: string;
+  /** Where the destination asset is delivered; the app always delivers to the sender. */
   recipient: string;
   sourceAsset: SourceAssetDeployment;
 }>;
@@ -25,6 +28,9 @@ export function buildRoutedSwapIntent(
   draft: RoutedSwapDraft,
   slippageBps: number = DEFAULT_SLIPPAGE_BPS,
 ): SwapIntentInput {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(draft.sender)) {
+    throw new Error("Routed swap requires a valid sender address");
+  }
   if (!/^0x[0-9a-fA-F]{40}$/.test(draft.recipient)) {
     throw new Error("Routed swap requires a valid recipient address");
   }
@@ -34,6 +40,7 @@ export function buildRoutedSwapIntent(
       address: draft.destinationMarket.address,
       chainId: draft.destinationMarket.chainId,
     },
+    sender: draft.sender as `0x${string}`,
     recipient: draft.recipient as `0x${string}`,
     slippageBps,
     sourceAsset: {
@@ -54,6 +61,7 @@ export function routedQuoteRequestKey(draft: RoutedSwapDraft): string {
     draft.amountAtomic.toString(),
     draft.destinationMarket.chainId,
     draft.destinationMarket.address.toLowerCase(),
+    draft.sender.toLowerCase(),
     draft.recipient.toLowerCase(),
   ].join(":");
 }

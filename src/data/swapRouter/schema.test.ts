@@ -29,6 +29,7 @@ const intent = {
   sourceAsset: asset,
   destinationAsset: otherAsset,
   amountIn: "25000000000000000000",
+  sender: recipient,
   recipient,
   slippageBps: 50,
 };
@@ -47,6 +48,8 @@ describe("swap intent schema", () => {
     ["a non-positive chain id", { ...intent, sourceAsset: { chainId: 0, address: asset.address } }],
     ["a fractional chain id", { ...intent, sourceAsset: { chainId: 56.5, address: asset.address } }],
     ["a malformed recipient", { ...intent, recipient: "not-an-address" }],
+    ["a malformed sender", { ...intent, sender: "not-an-address" }],
+    ["a missing sender", { ...intent, sender: undefined }],
     ["negative slippage", { ...intent, slippageBps: -1 }],
     ["slippage above the contract bound", { ...intent, slippageBps: 5001 }],
     ["fractional slippage", { ...intent, slippageBps: 12.5 }],
