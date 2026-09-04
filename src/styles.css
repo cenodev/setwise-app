@@ -433,6 +433,8 @@ code {
 .activity-status { padding: .25rem .5rem; border-radius: 999px; background: var(--bg-surface-raised); color: var(--text-secondary); font-size: .7rem; font-weight: 800; text-transform: capitalize; }
 .activity-status--success { background: color-mix(in srgb, var(--success) 12%, transparent); color: var(--success); }
 .activity-status--failed { background: color-mix(in srgb, var(--critical) 12%, transparent); color: var(--critical); }
+.activity-status--partial { background: color-mix(in srgb, var(--warning) 12%, transparent); color: var(--warning); }
+.activity-status--refunded { background: color-mix(in srgb, var(--warning) 12%, transparent); color: var(--warning); }
 
 .swap-layout { display: grid; gap: 1rem; }
 .swap-card {
@@ -502,6 +504,9 @@ code {
 .routed-market-swap-link:hover { color: var(--accent-hover); }
 .routed-review { display: block; }
 .routed-review-heading { justify-content: space-between; }
+.routed-execution { display: block; }
+.routed-execution a { color: var(--info); font-size: .78rem; }
+.routed-execution.is-busy { opacity: .92; }
 .routed-quote-card ul { border: 1px solid var(--border-subtle); border-radius: var(--radius-element); }
 .routed-quote-card li[aria-current="true"] { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 
