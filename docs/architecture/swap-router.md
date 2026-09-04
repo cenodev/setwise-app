@@ -31,8 +31,9 @@ setwise-swap-router ── normalizes, ranks, policy-checks ──▶ versioned 
   `confirmed`, `partially_delivered`, `expired`, `refunded`, and `failed`. Unknown states or a transaction on
   the wrong chain (source or destination evidence) are rejected before they can reach activity tracking.
 - **No credentials in the browser.** The only swap-router environment variable is `VITE_SWAP_ROUTER_API_URL` —
-  a base URL, defaulting to the local `wrangler dev` origin (`http://localhost:8787`). Provider API keys live
-  only in the router service as Worker secrets and must never be added to `VITE_*` variables.
+  a base URL, defaulting to the deployed `setwise-swap-router.datadex.workers.dev` Worker; point it at
+  `http://localhost:8787` when running the router with `wrangler dev`. Provider API keys live only in the
+  router service as Worker secrets and must never be added to `VITE_*` variables.
 
 ## Modules (`src/data/swapRouter`)
 
