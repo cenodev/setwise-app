@@ -1,3 +1,4 @@
+import { sameChainQuote } from "../../data/swapRouter/fixtures";
 import {
   createDepositActivity,
   createSwapActivity,
@@ -5,9 +6,25 @@ import {
   markActivityFailed,
   markActivityPending,
   markActivitySuccessful,
+  markRoutedSwapLifecycle,
   readActivity,
+  readResumableRoutedSwaps,
   saveActivity,
 } from "./store";
+
+const SOURCE_HASH = `0x${"c".repeat(64)}` as `0x${string}`;
+const DESTINATION_HASH = `0x${"d".repeat(64)}` as `0x${string}`;
+
+function routedTracking() {
+  return {
+    destinationChainId: 56,
+    lifecycle: "prepared" as const,
+    quote: sameChainQuote,
+    quoteId: sameChainQuote.quoteId,
+    routeProvider: sameChainQuote.providerId,
+    sourceChainId: 56,
+  };
+}
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -147,5 +164,112 @@ describe("local activity store", () => {
     expect(records).toHaveLength(100);
     expect(records[0]?.timestamp).toBe(104);
     expect(records.at(-1)?.timestamp).toBe(5);
+  });
+
+  it("persists routed swap evidence and advances the lifecycle without losing it", () => {
+    const storage = memoryStorage();
+    const routed = createSwapActivity({
+      chainId: 56,
+      input: { amount: "25", symbol: "USDC" },
+      output: { amount: "24.9125", symbol: "USDT" },
+      routed: routedTracking(),
+      status: "pending",
+    });
+    saveActivity(routed, storage);
+
+    markRoutedSwapLifecycle(routed.id, "source-submitted", { sourceHash: SOURCE_HASH }, storage);
+    markRoutedSwapLifecycle(routed.id, "destination-pending", {}, storage);
+    markRoutedSwapLifecycle(routed.id, "delivered", { destinationHash: DESTINATION_HASH }, storage);
+
+    expect(readActivity(storage)).toEqual([expect.objectContaining({
+      hash: SOURCE_HASH,
+      routed: expect.objectContaining({
+        destinationChainId: 56,
+        destinationHash: DESTINATION_HASH,
+        lifecycle: "delivered",
+        quoteId: sameChainQuote.quoteId,
+        routeProvider: sameChainQuote.providerId,
+        sourceChainId: 56,
+      }),
+      status: "success",
+      submitted: true,
+    })]);
+  });
+
+  it("never marks settled-out routed states as receipt of the output", () => {
+    const storage = memoryStorage();
+    const routed = createSwapActivity({
+      chainId: 56,
+      input: { amount: "25", symbol: "USDC" },
+      output: { amount: "24.9125", symbol: "USDT" },
+      routed: routedTracking(),
+      status: "pending",
+    });
+    saveActivity(routed, storage);
+    markRoutedSwapLifecycle(routed.id, "source-submitted", { sourceHash: SOURCE_HASH }, storage);
+
+    markRoutedSwapLifecycle(routed.id, "refunded", { providerDetail: "input refunded" }, storage);
+    expect(readActivity(storage)[0]).toEqual(expect.objectContaining({ status: "refunded" }));
+
+    markRoutedSwapLifecycle(routed.id, "failed", { providerDetail: "reverted" }, storage);
+    expect(readActivity(storage)[0]).toEqual(expect.objectContaining({ status: "failed" }));
+
+    markRoutedSwapLifecycle(routed.id, "partially-delivered", {}, storage);
+    expect(readActivity(storage)[0]).toEqual(expect.objectContaining({ status: "partial" }));
+  });
+
+  it("treats unknown lifecycle states as resumable and drops malformed routed records", () => {
+    const storage = memoryStorage();
+    const resumable = createSwapActivity({
+      chainId: 56,
+      input: { amount: "25", symbol: "USDC" },
+      output: { amount: "24.9125", symbol: "USDT" },
+      routed: { ...routedTracking(), lifecycle: "destination-pending" as const },
+      status: "pending",
+    });
+    saveActivity(resumable, storage);
+    const settled = createSwapActivity({
+      chainId: 56,
+      id: "settled",
+      input: { amount: "25", symbol: "USDC" },
+      operation: "swap",
+      output: { amount: "24.9125", symbol: "USDT" },
+      routed: { ...routedTracking(), lifecycle: "delivered" as const },
+      status: "success",
+      timestamp: Date.now(),
+    });
+    saveActivity(settled, storage);
+    const broken = createSwapActivity({
+      chainId: 56,
+      id: "broken",
+      input: { amount: "25", symbol: "USDC" },
+      operation: "swap",
+      output: { amount: "24.9125", symbol: "USDT" },
+      routed: { ...routedTracking(), lifecycle: "unknown" as const, quote: { nope: true } as typeof sameChainQuote },
+      status: "pending",
+      timestamp: Date.now(),
+    });
+    saveActivity(broken, storage);
+
+    // The malformed routed payload fails closed: the record is dropped rather
+    // than displayed as a legacy swap that received its output.
+    expect(readActivity(storage).map((record) => record.id).sort()).toEqual([resumable.id, settled.id].sort());
+    expect(readResumableRoutedSwaps(storage)).toEqual([expect.objectContaining({ id: resumable.id })]);
+  });
+
+  it("keeps legacy swap records readable when the routed payload is absent", () => {
+    const storage = memoryStorage();
+    const record = {
+      chainId: 97,
+      id: "legacy-swap",
+      input: { amount: "10", symbol: "USDT" },
+      operation: "swap" as const,
+      output: { amount: "2", symbol: "TOKEN" },
+      status: "pending" as const,
+      timestamp: 1,
+    };
+    saveActivity(record, storage);
+    markRoutedSwapLifecycle("legacy-swap", "delivered", {}, storage);
+    expect(readActivity(storage)[0]).toEqual(expect.objectContaining({ id: "legacy-swap", status: "pending" }));
   });
 });
