@@ -49,11 +49,11 @@ export function App() {
             <header className="screen-header">
               <p className="eyebrow">Trade</p>
               <h1>Swap into a market</h1>
-              <p>Spend a canonical stablecoin on a supported network and acquire one explicitly selected issuer market. Routes stop at review.</p>
+              <p>Spend a canonical stablecoin on a supported network and acquire one explicitly selected issuer market. Routes are revalidated immediately before your wallet opens.</p>
             </header>
             <RoutedSwapPage />
             <aside className="disclosure" role="note">
-              <strong>Route review only.</strong> Approval and submission are handled separately. Tokenized assets carry issuer and market risk, and this is not investment advice.
+              <strong>Non-custodial execution.</strong> Your wallet signs the approval and source transaction; Setwise never custodies keys or broadcasts for you. Tokenized assets carry issuer and market risk, and this is not investment advice.
             </aside>
           </div>
         } />

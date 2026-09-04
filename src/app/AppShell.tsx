@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 
 import { WalletButton } from "../features/wallet/WalletButton";
 import { PwaStatus } from "../features/pwa/PwaStatus";
+import { useRoutedSwapResumption } from "../features/swap/routedResume";
 import { activityPath, assetsPath, portfolioPath, setsPath, swapPath } from "./routes";
 
 const navigation = [
@@ -14,6 +15,9 @@ const navigation = [
 ];
 
 export function AppShell({ children }: PropsWithChildren) {
+  // Keeps destination settlement tracking for routed swaps running app-wide.
+  useRoutedSwapResumption();
+
   return (
     <div className="app-shell">
       <header className="app-header">
