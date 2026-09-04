@@ -279,13 +279,10 @@ export function markRoutedSwapLifecycle(
 export function readResumableRoutedSwaps(
   storage: Pick<Storage, "getItem"> = localStorage,
 ): SwapActivityRecord[] {
-  return readActivity(storage).filter((record) =>
-    record.operation === "swap"
-    && record.routed !== undefined
-    && record.routed.lifecycle !== undefined
-    && isResumableRoutedLifecycle(record.routed.lifecycle)
-    && swapQuoteSchema.safeParse(record.routed.quote).success
-  );
+  return readActivity(storage).filter((record): record is SwapActivityRecord => {
+    if (record.operation !== "swap" || !record.routed) return false;
+    return isResumableRoutedLifecycle(record.routed.lifecycle);
+  });
 }
 
 export function createSwapActivity(

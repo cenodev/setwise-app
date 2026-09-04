@@ -228,27 +228,31 @@ describe("local activity store", () => {
       status: "pending",
     });
     saveActivity(resumable, storage);
-    const settled = createSwapActivity({
-      chainId: 56,
+    const settled = {
+      ...createSwapActivity({
+        chainId: 56,
+        input: { amount: "25", symbol: "USDC" },
+        output: { amount: "24.9125", symbol: "USDT" },
+        routed: { ...routedTracking(), lifecycle: "delivered" as const },
+        status: "pending",
+      }),
       id: "settled",
-      input: { amount: "25", symbol: "USDC" },
-      operation: "swap",
-      output: { amount: "24.9125", symbol: "USDT" },
-      routed: { ...routedTracking(), lifecycle: "delivered" as const },
-      status: "success",
-      timestamp: Date.now(),
-    });
+    };
     saveActivity(settled, storage);
-    const broken = createSwapActivity({
-      chainId: 56,
+    const broken = {
+      ...createSwapActivity({
+        chainId: 56,
+        input: { amount: "25", symbol: "USDC" },
+        output: { amount: "24.9125", symbol: "USDT" },
+        routed: {
+          ...routedTracking(),
+          lifecycle: "unknown" as const,
+          quote: { nope: true } as unknown as typeof sameChainQuote,
+        },
+        status: "pending",
+      }),
       id: "broken",
-      input: { amount: "25", symbol: "USDC" },
-      operation: "swap",
-      output: { amount: "24.9125", symbol: "USDT" },
-      routed: { ...routedTracking(), lifecycle: "unknown" as const, quote: { nope: true } as typeof sameChainQuote },
-      status: "pending",
-      timestamp: Date.now(),
-    });
+    };
     saveActivity(broken, storage);
 
     // The malformed routed payload fails closed: the record is dropped rather
